@@ -4,7 +4,7 @@ import type { User } from '@/types';
 let supabaseClient: any = null;
 let supabaseModule: any = null;
 
-async function getSupabaseClient() {
+export async function getSupabaseClient() {
   if (supabaseClient) return supabaseClient;
   
   try {
