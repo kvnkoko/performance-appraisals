@@ -1,0 +1,338 @@
+import { openDB, DBSchema, IDBPDatabase } from 'idb';
+import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, PerformanceSummary, ReviewPeriod } from '@/types';
+
+interface AppraisalDB extends DBSchema {
+  templates: {
+    key: string;
+    value: Template;
+  };
+  employees: {
+    key: string;
+    value: Employee;
+  };
+  appraisals: {
+    key: string;
+    value: Appraisal;
+  };
+  links: {
+    key: string;
+    value: AppraisalLink;
+  };
+  settings: {
+    key: string;
+    value: CompanySettings;
+  };
+  summaries: {
+    key: string;
+    value: PerformanceSummary;
+  };
+  reviewPeriods: {
+    key: string;
+    value: ReviewPeriod;
+  };
+}
+
+let db: IDBPDatabase<AppraisalDB> | null = null;
+
+export async function initDB(): Promise<IDBPDatabase<AppraisalDB>> {
+  if (db) return db;
+
+  db = await openDB<AppraisalDB>('appraisal-db', 2, {
+    upgrade(db, oldVersion, newVersion, transaction) {
+      // Create all object stores if they don't exist
+      if (!db.objectStoreNames.contains('templates')) {
+        db.createObjectStore('templates', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('employees')) {
+        db.createObjectStore('employees', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('appraisals')) {
+        db.createObjectStore('appraisals', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('links')) {
+        const linksStore = db.createObjectStore('links', { keyPath: 'id' });
+        linksStore.createIndex('token', 'token', { unique: true });
+      } else {
+        // Add index if it doesn't exist
+        try {
+          const linksStore = transaction.objectStore('links');
+          if (!linksStore.indexNames.contains('token')) {
+            linksStore.createIndex('token', 'token', { unique: true });
+          }
+        } catch (e) {
+          // Index might already exist, ignore
+        }
+      }
+      if (!db.objectStoreNames.contains('settings')) {
+        db.createObjectStore('settings', { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains('summaries')) {
+        db.createObjectStore('summaries', { keyPath: 'employeeId' });
+      }
+      if (!db.objectStoreNames.contains('reviewPeriods')) {
+        const periodsStore = db.createObjectStore('reviewPeriods', { keyPath: 'id' });
+        periodsStore.createIndex('status', 'status');
+        periodsStore.createIndex('year', 'year');
+      } else {
+        // Add indexes if they don't exist
+        try {
+          const periodsStore = transaction.objectStore('reviewPeriods');
+          if (!periodsStore.indexNames.contains('status')) {
+            periodsStore.createIndex('status', 'status');
+          }
+          if (!periodsStore.indexNames.contains('year')) {
+            periodsStore.createIndex('year', 'year');
+          }
+        } catch (e) {
+          // Indexes might already exist, ignore
+        }
+      }
+    },
+  });
+
+  // Initialize default settings if not exists
+  const settings = await db.get('settings', 'company');
+  if (!settings) {
+    await db.put('settings', {
+      key: 'company',
+      name: 'Your Company',
+      adminPin: '1234',
+      accentColor: '#3B82F6',
+      theme: 'system',
+    });
+  }
+
+  return db;
+}
+
+// Templates
+export async function getTemplates(): Promise<Template[]> {
+  const database = await initDB();
+  return database.getAll('templates');
+}
+
+export async function getTemplate(id: string): Promise<Template | undefined> {
+  const database = await initDB();
+  return database.get('templates', id);
+}
+
+export async function saveTemplate(template: Template): Promise<void> {
+  const database = await initDB();
+  await database.put('templates', template);
+}
+
+export async function deleteTemplate(id: string): Promise<void> {
+  const database = await initDB();
+  await database.delete('templates', id);
+}
+
+// Employees
+export async function getEmployees(): Promise<Employee[]> {
+  const database = await initDB();
+  return database.getAll('employees');
+}
+
+export async function getEmployee(id: string): Promise<Employee | undefined> {
+  const database = await initDB();
+  return database.get('employees', id);
+}
+
+export async function saveEmployee(employee: Employee): Promise<void> {
+  const database = await initDB();
+  await database.put('employees', employee);
+}
+
+export async function deleteEmployee(id: string): Promise<void> {
+  const database = await initDB();
+  await database.delete('employees', id);
+}
+
+// Appraisals
+export async function getAppraisals(): Promise<Appraisal[]> {
+  const database = await initDB();
+  return database.getAll('appraisals');
+}
+
+export async function getAppraisal(id: string): Promise<Appraisal | undefined> {
+  const database = await initDB();
+  return database.get('appraisals', id);
+}
+
+export async function saveAppraisal(appraisal: Appraisal): Promise<void> {
+  const database = await initDB();
+  await database.put('appraisals', appraisal);
+}
+
+export async function deleteAppraisal(id: string): Promise<void> {
+  const database = await initDB();
+  await database.delete('appraisals', id);
+}
+
+// Links
+export async function getLinks(): Promise<AppraisalLink[]> {
+  const database = await initDB();
+  return database.getAll('links');
+}
+
+export async function getLinkByToken(token: string): Promise<AppraisalLink | undefined> {
+  const database = await initDB();
+  try {
+    const tx = database.transaction('links', 'readonly');
+    const index = tx.store.index('token');
+    return await index.get(token);
+  } catch (error) {
+    // Fallback if index doesn't exist yet
+    const allLinks = await database.getAll('links');
+    return allLinks.find((link) => link.token === token);
+  }
+}
+
+export async function saveLink(link: AppraisalLink): Promise<void> {
+  const database = await initDB();
+  await database.put('links', link);
+}
+
+export async function deleteLink(id: string): Promise<void> {
+  const database = await initDB();
+  await database.delete('links', id);
+}
+
+// Settings
+export async function getSettings(): Promise<CompanySettings> {
+  const database = await initDB();
+  const settings = await database.get('settings', 'company');
+  return settings || {
+    key: 'company',
+    name: 'Your Company',
+    adminPin: '1234',
+    accentColor: '#3B82F6',
+    theme: 'system',
+  };
+}
+
+export async function saveSettings(settings: CompanySettings): Promise<void> {
+  const database = await initDB();
+  await database.put('settings', settings);
+}
+
+// Summaries
+export async function getSummary(employeeId: string): Promise<PerformanceSummary | undefined> {
+  const database = await initDB();
+  return database.get('summaries', employeeId);
+}
+
+export async function saveSummary(summary: PerformanceSummary): Promise<void> {
+  const database = await initDB();
+  await database.put('summaries', summary);
+}
+
+// Review Periods
+export async function getReviewPeriods(): Promise<ReviewPeriod[]> {
+  const database = await initDB();
+  try {
+    if (!database.objectStoreNames.contains('reviewPeriods')) {
+      return [];
+    }
+    return database.getAll('reviewPeriods');
+  } catch (error) {
+    console.error('Error getting review periods:', error);
+    return [];
+  }
+}
+
+export async function getReviewPeriod(id: string): Promise<ReviewPeriod | undefined> {
+  const database = await initDB();
+  return database.get('reviewPeriods', id);
+}
+
+export async function getActiveReviewPeriods(): Promise<ReviewPeriod[]> {
+  const database = await initDB();
+  try {
+    // Check if the object store exists
+    if (!database.objectStoreNames.contains('reviewPeriods')) {
+      return [];
+    }
+    const tx = database.transaction('reviewPeriods', 'readonly');
+    const store = tx.objectStore('reviewPeriods');
+    
+    // Check if the index exists, otherwise filter manually
+    if (store.indexNames.contains('status')) {
+      const index = store.index('status');
+      return index.getAll('active');
+    } else {
+      // Fallback: get all and filter
+      const allPeriods = await store.getAll();
+      return allPeriods.filter((p) => p.status === 'active');
+    }
+  } catch (error) {
+    console.error('Error getting active review periods:', error);
+    return [];
+  }
+}
+
+export async function saveReviewPeriod(period: ReviewPeriod): Promise<void> {
+  const database = await initDB();
+  await database.put('reviewPeriods', period);
+}
+
+export async function deleteReviewPeriod(id: string): Promise<void> {
+  const database = await initDB();
+  await database.delete('reviewPeriods', id);
+}
+
+// Export/Import
+export async function exportData(): Promise<string> {
+  const [templates, employees, appraisals, links, settings, reviewPeriods] = await Promise.all([
+    getTemplates(),
+    getEmployees(),
+    getAppraisals(),
+    getLinks(),
+    getSettings(),
+    getReviewPeriods(),
+  ]);
+
+  return JSON.stringify({
+    templates,
+    employees,
+    appraisals,
+    links,
+    settings,
+    reviewPeriods,
+    version: '1.0.0',
+    exportedAt: new Date().toISOString(),
+  }, null, 2);
+}
+
+export async function importData(json: string): Promise<void> {
+  const data = JSON.parse(json);
+  const database = await initDB();
+
+  if (data.templates) {
+    for (const template of data.templates) {
+      await database.put('templates', template);
+    }
+  }
+  if (data.employees) {
+    for (const employee of data.employees) {
+      await database.put('employees', employee);
+    }
+  }
+  if (data.appraisals) {
+    for (const appraisal of data.appraisals) {
+      await database.put('appraisals', appraisal);
+    }
+  }
+  if (data.links) {
+    for (const link of data.links) {
+      await database.put('links', link);
+    }
+  }
+  if (data.settings) {
+    await database.put('settings', data.settings);
+  }
+  if (data.reviewPeriods) {
+    for (const period of data.reviewPeriods) {
+      await database.put('reviewPeriods', period);
+    }
+  }
+}

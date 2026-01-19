@@ -1,0 +1,314 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;500;600;700&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,600,700,800,900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 8%;
+    --primary: 240 5.9% 10%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 240 5.9% 10%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    /* Deep black background */
+    --background: 240 15% 2%;
+    --foreground: 0 0% 98%;
+    
+    /* Glassmorphic cards with subtle transparency */
+    --card: 240 12% 6%;
+    --card-foreground: 0 0% 98%;
+    
+    /* Vibrant blue primary */
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 98%;
+    
+    /* Dark secondary for elevated surfaces */
+    --secondary: 240 8% 12%;
+    --secondary-foreground: 0 0% 98%;
+    
+    /* Muted surfaces */
+    --muted: 240 10% 8%;
+    --muted-foreground: 240 5% 64.9%;
+    
+    /* Vibrant accent colors */
+    --accent: 217 91% 60%;
+    --accent-foreground: 0 0% 98%;
+    
+    /* Enhanced destructive (red) */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    
+    /* Subtle borders */
+    --border: 240 8% 16%;
+    --input: 240 8% 16%;
+    --ring: 217 91% 60%;
+    
+    /* Success green */
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 98%;
+    
+    /* Warning amber */
+    --warning: 38 92% 50%;
+    --warning-foreground: 240 15% 2%;
+    
+    /* Info blue */
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 98%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    font-family: 'Satoshi', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  .myanmar-text {
+    font-family: 'Noto Sans Myanmar', 'Satoshi', sans-serif;
+    line-height: 1.75;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+  
+  h1 {
+    font-size: 2.25rem;
+    letter-spacing: -0.03em;
+  }
+  
+  h2 {
+    font-size: 1.875rem;
+    letter-spacing: -0.025em;
+  }
+  
+  h3 {
+    font-size: 1.5rem;
+    letter-spacing: -0.02em;
+  }
+  
+  p {
+    line-height: 1.6;
+  }
+  
+  /* Ensure select options display fully and respect theme */
+  select {
+    background-color: hsl(var(--card) / 0.9) !important;
+    color: hsl(var(--foreground)) !important;
+    line-height: 1.5 !important;
+    padding-top: 0.625rem !important;
+    padding-bottom: 0.625rem !important;
+    box-sizing: border-box;
+    min-height: 2.75rem !important;
+  }
+  
+  /* Override height classes to ensure proper padding */
+  select.h-9,
+  select.h-10,
+  select.h-11,
+  select.h-\[2\.75rem\] {
+    min-height: 2.75rem !important;
+    padding-top: 0.625rem !important;
+    padding-bottom: 0.625rem !important;
+  }
+  
+  select option {
+    padding: 0.5rem 0.75rem;
+    white-space: normal;
+    word-wrap: break-word;
+    background-color: hsl(var(--card));
+    color: hsl(var(--foreground));
+    line-height: 1.5;
+  }
+  
+  /* Dark mode select styling */
+  .dark select {
+    background-color: hsl(var(--card) / 0.9) !important;
+    color: hsl(var(--foreground)) !important;
+  }
+  
+  .dark select option {
+    background-color: hsl(var(--card));
+    color: hsl(var(--foreground));
+  }
+  
+  /* Refined focus states */
+  *:focus-visible {
+    outline: none;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer utilities {
+  .transition-smooth {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .text-truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  .text-truncate-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: hsl(var(--muted));
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+  
+  /* Enhanced Glassmorphism effects */
+  .glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(12px) saturate(180%);
+    -webkit-backdrop-filter: blur(12px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  .dark .glass {
+    background: rgba(20, 22, 28, 0.7);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+  }
+  
+  .glass-card {
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+  }
+  
+  .dark .glass-card {
+    background: linear-gradient(135deg, rgba(30, 33, 42, 0.8) 0%, rgba(20, 22, 28, 0.8) 100%);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 
+      0 8px 32px 0 rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  }
+  
+  .glass-subtle {
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(8px) saturate(150%);
+    -webkit-backdrop-filter: blur(8px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  
+  .dark .glass-subtle {
+    background: rgba(25, 27, 35, 0.6);
+    backdrop-filter: blur(12px) saturate(150%);
+    -webkit-backdrop-filter: blur(12px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  /* Gradient backgrounds */
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(217, 91%, 60%) 0%, hsl(217, 91%, 50%) 100%);
+  }
+  
+  .gradient-success {
+    background: linear-gradient(135deg, hsl(142, 71%, 45%) 0%, hsl(142, 71%, 40%) 100%);
+  }
+  
+  .gradient-danger {
+    background: linear-gradient(135deg, hsl(0, 72%, 51%) 0%, hsl(0, 72%, 45%) 100%);
+  }
+  
+  .gradient-warning {
+    background: linear-gradient(135deg, hsl(38, 92%, 50%) 0%, hsl(38, 92%, 45%) 100%);
+  }
+  
+  .gradient-card {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(147, 51, 234, 0.1) 100%);
+  }
+  
+  .dark .gradient-card {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(147, 51, 234, 0.15) 100%);
+  }
+  
+  /* Glow effects */
+  .glow-blue {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+  }
+  
+  .glow-green {
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.4);
+  }
+  
+  .glow-purple {
+    box-shadow: 0 0 20px rgba(147, 51, 234, 0.4);
+  }
+  
+  /* Refined shadows */
+  .shadow-soft {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+  
+  .dark .shadow-soft {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+  
+  .shadow-glow {
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.08);
+  }
+  
+  .dark .shadow-glow {
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.4);
+  }
+}
