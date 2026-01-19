@@ -55,13 +55,25 @@ export function AuthPage() {
       const isValid = await verifyPassword(password, user.passwordHash);
       
       if (isValid) {
-        // Update last login
-        const { saveUser } = await import('@/lib/storage');
-        const updatedUser: User = {
-          ...user,
-          lastLoginAt: new Date().toISOString(),
-        };
-        await saveUser(updatedUser);
+        // Update last login - ensure user has all required fields
+        try {
+          const { saveUser } = await import('@/lib/storage');
+          const updatedUser: User = {
+            id: user.id,
+            username: user.username,
+            passwordHash: user.passwordHash,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            active: user.active,
+            createdAt: user.createdAt,
+            lastLoginAt: new Date().toISOString(),
+          };
+          await saveUser(updatedUser);
+        } catch (error) {
+          // If saving last login fails, log but don't block login
+          console.warn('Failed to update last login time:', error);
+        }
 
         // Store user session
         localStorage.setItem('authenticated', 'true');

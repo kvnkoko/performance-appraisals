@@ -1,5 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, PerformanceSummary, ReviewPeriod } from '@/types';
+import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, PerformanceSummary, ReviewPeriod, User } from '@/types';
 
 interface AppraisalDB extends DBSchema {
   templates: {
@@ -29,6 +29,11 @@ interface AppraisalDB extends DBSchema {
   reviewPeriods: {
     key: string;
     value: ReviewPeriod;
+  };
+  users: {
+    key: string;
+    value: User;
+    indexes: { 'by-username': string };
   };
 }
 
@@ -124,6 +129,7 @@ export async function initDB(): Promise<IDBPDatabase<AppraisalDB>> {
   const settings = await db.get('settings', 'company');
   if (!settings) {
     await db.put('settings', {
+      key: 'company',
       name: 'Your Company',
       adminPin: '1234',
       accentColor: '#3B82F6',
@@ -385,7 +391,23 @@ export async function getUserByUsername(username: string): Promise<User | undefi
 
 export async function saveUser(user: User): Promise<void> {
   const database = await initDB();
-  await database.put('users', user);
+  // Ensure user has all required fields
+  if (!user.id) {
+    throw new Error('User must have an id field');
+  }
+  // Create a clean user object with all required fields
+  const userToSave: User = {
+    id: user.id,
+    username: user.username,
+    passwordHash: user.passwordHash,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    active: user.active !== undefined ? user.active : true,
+    createdAt: user.createdAt || new Date().toISOString(),
+    lastLoginAt: user.lastLoginAt,
+  };
+  await database.put('users', userToSave);
 }
 
 export async function deleteUser(id: string): Promise<void> {
