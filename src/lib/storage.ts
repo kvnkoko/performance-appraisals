@@ -140,76 +140,248 @@ export async function initDB(): Promise<IDBPDatabase<AppraisalDB>> {
   return db;
 }
 
-// Templates
+// Templates - Hybrid: Supabase (if configured) or IndexedDB (fallback)
 export async function getTemplates(): Promise<Template[]> {
+  // Try Supabase first if configured
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getTemplatesFromSupabase } = await import('./supabase-storage');
+      return await getTemplatesFromSupabase();
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+
+  // Fallback to IndexedDB
   const database = await initDB();
   return database.getAll('templates');
 }
 
 export async function getTemplate(id: string): Promise<Template | undefined> {
+  // Try Supabase first if configured
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getTemplateFromSupabase } = await import('./supabase-storage');
+      return await getTemplateFromSupabase(id);
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+
+  // Fallback to IndexedDB
   const database = await initDB();
   return database.get('templates', id);
 }
 
 export async function saveTemplate(template: Template): Promise<void> {
+  // Try Supabase first if configured
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { saveTemplateToSupabase } = await import('./supabase-storage');
+      await saveTemplateToSupabase(template);
+      // Also save to IndexedDB as backup/cache
+      const database = await initDB();
+      await database.put('templates', template);
+      return;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+
+  // Fallback to IndexedDB
   const database = await initDB();
   await database.put('templates', template);
 }
 
 export async function deleteTemplate(id: string): Promise<void> {
+  // Try Supabase first if configured
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { deleteTemplateFromSupabase } = await import('./supabase-storage');
+      await deleteTemplateFromSupabase(id);
+      // Also delete from IndexedDB
+      const database = await initDB();
+      await database.delete('templates', id);
+      return;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+
+  // Fallback to IndexedDB
   const database = await initDB();
   await database.delete('templates', id);
 }
 
-// Employees
+// Employees - Hybrid: Supabase (if configured) or IndexedDB (fallback)
 export async function getEmployees(): Promise<Employee[]> {
+  // Try Supabase first if configured
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getEmployeesFromSupabase } = await import('./supabase-storage');
+      return await getEmployeesFromSupabase();
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+
+  // Fallback to IndexedDB
   const database = await initDB();
   return database.getAll('employees');
 }
 
 export async function getEmployee(id: string): Promise<Employee | undefined> {
+  // Try Supabase first if configured
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getEmployeeFromSupabase } = await import('./supabase-storage');
+      return await getEmployeeFromSupabase(id);
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+
+  // Fallback to IndexedDB
   const database = await initDB();
   return database.get('employees', id);
 }
 
 export async function saveEmployee(employee: Employee): Promise<void> {
+  // Try Supabase first if configured
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { saveEmployeeToSupabase } = await import('./supabase-storage');
+      await saveEmployeeToSupabase(employee);
+      // Also save to IndexedDB as backup/cache
+      const database = await initDB();
+      await database.put('employees', employee);
+      return;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+
+  // Fallback to IndexedDB
   const database = await initDB();
   await database.put('employees', employee);
 }
 
 export async function deleteEmployee(id: string): Promise<void> {
+  // Try Supabase first if configured
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { deleteEmployeeFromSupabase } = await import('./supabase-storage');
+      await deleteEmployeeFromSupabase(id);
+      // Also delete from IndexedDB
+      const database = await initDB();
+      await database.delete('employees', id);
+      return;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+
+  // Fallback to IndexedDB
   const database = await initDB();
   await database.delete('employees', id);
 }
 
-// Appraisals
+// Appraisals - Hybrid: Supabase (if configured) or IndexedDB (fallback)
 export async function getAppraisals(): Promise<Appraisal[]> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getAppraisalsFromSupabase } = await import('./supabase-storage');
+      return await getAppraisalsFromSupabase();
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
   const database = await initDB();
   return database.getAll('appraisals');
 }
 
 export async function getAppraisal(id: string): Promise<Appraisal | undefined> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getAppraisalFromSupabase } = await import('./supabase-storage');
+      return await getAppraisalFromSupabase(id);
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
   const database = await initDB();
   return database.get('appraisals', id);
 }
 
 export async function saveAppraisal(appraisal: Appraisal): Promise<void> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { saveAppraisalToSupabase } = await import('./supabase-storage');
+      await saveAppraisalToSupabase(appraisal);
+      const database = await initDB();
+      await database.put('appraisals', appraisal);
+      return;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
   const database = await initDB();
   await database.put('appraisals', appraisal);
 }
 
 export async function deleteAppraisal(id: string): Promise<void> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { deleteAppraisalFromSupabase } = await import('./supabase-storage');
+      await deleteAppraisalFromSupabase(id);
+      const database = await initDB();
+      await database.delete('appraisals', id);
+      return;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
   const database = await initDB();
   await database.delete('appraisals', id);
 }
 
-// Links
+// Links - Hybrid: Supabase (if configured) or IndexedDB (fallback)
 export async function getLinks(): Promise<AppraisalLink[]> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getLinksFromSupabase } = await import('./supabase-storage');
+      return await getLinksFromSupabase();
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
   const database = await initDB();
   return database.getAll('links');
 }
 
 export async function getLinkByToken(token: string): Promise<AppraisalLink | undefined> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getLinkByTokenFromSupabase } = await import('./supabase-storage');
+      return await getLinkByTokenFromSupabase(token);
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
   const database = await initDB();
   try {
     const tx = database.transaction('links', 'readonly');
@@ -225,17 +397,51 @@ export async function getLinkByToken(token: string): Promise<AppraisalLink | und
 }
 
 export async function saveLink(link: AppraisalLink): Promise<void> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { saveLinkToSupabase } = await import('./supabase-storage');
+      await saveLinkToSupabase(link);
+      const database = await initDB();
+      await database.put('links', link);
+      return;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
   const database = await initDB();
   await database.put('links', link);
 }
 
 export async function deleteLink(id: string): Promise<void> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { deleteLinkFromSupabase } = await import('./supabase-storage');
+      await deleteLinkFromSupabase(id);
+      const database = await initDB();
+      await database.delete('links', id);
+      return;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
   const database = await initDB();
   await database.delete('links', id);
 }
 
-// Settings
+// Settings - Hybrid: Supabase (if configured) or IndexedDB (fallback)
 export async function getSettings(): Promise<CompanySettings> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getSettingsFromSupabase } = await import('./supabase-storage');
+      const settings = await getSettingsFromSupabase();
+      if (settings) return settings;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
   const database = await initDB();
   const settings = await database.get('settings', 'company');
   return settings || {
@@ -247,17 +453,50 @@ export async function getSettings(): Promise<CompanySettings> {
 }
 
 export async function saveSettings(settings: CompanySettings): Promise<void> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { saveSettingsToSupabase } = await import('./supabase-storage');
+      await saveSettingsToSupabase(settings);
+      const database = await initDB();
+      await database.put('settings', { ...settings, key: 'company' } as any);
+      return;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
   const database = await initDB();
   await database.put('settings', { ...settings, key: 'company' } as any);
 }
 
-// Summaries
+// Summaries - Hybrid: Supabase (if configured) or IndexedDB (fallback)
 export async function getSummary(employeeId: string): Promise<PerformanceSummary | undefined> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getSummaryFromSupabase } = await import('./supabase-storage');
+      return await getSummaryFromSupabase(employeeId);
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
   const database = await initDB();
   return database.get('summaries', employeeId);
 }
 
 export async function saveSummary(summary: PerformanceSummary): Promise<void> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { saveSummaryToSupabase } = await import('./supabase-storage');
+      await saveSummaryToSupabase(summary);
+      const database = await initDB();
+      await database.put('summaries', summary);
+      return;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
   const database = await initDB();
   await database.put('summaries', summary);
 }
@@ -311,11 +550,35 @@ export async function getActiveReviewPeriods(): Promise<ReviewPeriod[]> {
 }
 
 export async function saveReviewPeriod(period: ReviewPeriod): Promise<void> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { saveReviewPeriodToSupabase } = await import('./supabase-storage');
+      await saveReviewPeriodToSupabase(period);
+      const database = await initDB();
+      await database.put('reviewPeriods', period);
+      return;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
   const database = await initDB();
   await database.put('reviewPeriods', period);
 }
 
 export async function deleteReviewPeriod(id: string): Promise<void> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { deleteReviewPeriodFromSupabase } = await import('./supabase-storage');
+      await deleteReviewPeriodFromSupabase(id);
+      const database = await initDB();
+      await database.delete('reviewPeriods', id);
+      return;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
   const database = await initDB();
   await database.delete('reviewPeriods', id);
 }
