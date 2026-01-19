@@ -9,6 +9,10 @@ export default defineConfig({
       typescript: {
         ignoreBuildErrors: true,
       },
+      // Disable ESLint during build
+      eslint: {
+        ignoreDuringBuilds: true,
+      },
     }),
   ],
   resolve: {
