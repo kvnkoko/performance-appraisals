@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { Plus, Pencil, Trash, User, Shield, UserCircle } from 'phosphor-react';
+import { Plus, Pencil, Trash, User, Shield, UserCircle, Users } from 'phosphor-react';
 import { deleteUser, getUsers, saveUser, getUserByUsername } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { formatDate } from '@/lib/utils';
@@ -126,102 +126,145 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">
-        <CardHeader>
-          <CardTitle>{isEditing ? 'Edit User' : 'Add User'}</CardTitle>
-          <CardDescription>
-            {isEditing ? 'Update user information' : 'Create a new user account'}
-          </CardDescription>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl border-2">
+        <CardHeader className="border-b bg-gradient-to-r from-purple-500/10 to-pink-500/10">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-purple-500/20">
+              {isEditing ? (
+                <Pencil size={24} weight="duotone" className="text-purple-500" />
+              ) : (
+                <User size={24} weight="duotone" className="text-purple-500" />
+              )}
+            </div>
+            <div>
+              <CardTitle className="text-2xl">{isEditing ? 'Edit User' : 'Add New User'}</CardTitle>
+              <CardDescription className="mt-1">
+                {isEditing ? 'Update user information and permissions' : 'Create a new user account for portal access'}
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Username *</Label>
-              <Input
-                id="username"
-                {...register('username')}
-                placeholder="Enter username"
-                disabled={isEditing} // Don't allow username changes
-              />
-              {errors.username && (
-                <p className="text-xs text-destructive">{errors.username.message}</p>
-              )}
+        <CardContent className="pt-6">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            <div className="grid gap-5 md:grid-cols-2">
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="username" className="text-sm font-semibold">Username *</Label>
+                <Input
+                  id="username"
+                  {...register('username')}
+                  placeholder="e.g., john.doe"
+                  disabled={isEditing}
+                  className="h-11"
+                />
+                {errors.username && (
+                  <p className="text-xs text-destructive mt-1">{errors.username.message}</p>
+                )}
+                {!isEditing && (
+                  <p className="text-xs text-muted-foreground">Username cannot be changed after creation</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-sm font-semibold">Full Name *</Label>
+                <Input
+                  id="name"
+                  {...register('name')}
+                  placeholder="e.g., John Doe"
+                  className="h-11"
+                />
+                {errors.name && (
+                  <p className="text-xs text-destructive mt-1">{errors.name.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-sm font-semibold">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  {...register('email')}
+                  placeholder="e.g., john@company.com"
+                  className="h-11"
+                />
+                {errors.email && (
+                  <p className="text-xs text-destructive mt-1">{errors.email.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-sm font-semibold">
+                  Password {isEditing ? '(optional)' : '*'}
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  {...register('password')}
+                  placeholder={isEditing ? 'Leave blank to keep current' : 'Min. 6 characters'}
+                  className="h-11"
+                />
+                {errors.password && (
+                  <p className="text-xs text-destructive mt-1">{errors.password.message}</p>
+                )}
+                {!isEditing && (
+                  <p className="text-xs text-muted-foreground">Minimum 6 characters required</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="role" className="text-sm font-semibold">Role *</Label>
+                <select
+                  id="role"
+                  {...register('role')}
+                  className="flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 transition-colors"
+                >
+                  <option value="staff">Staff</option>
+                  <option value="admin">Admin</option>
+                </select>
+                {errors.role && (
+                  <p className="text-xs text-destructive mt-1">{errors.role.message}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Admin users have full access to all features
+                </p>
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <div className="flex items-center space-x-3 p-4 rounded-lg border bg-muted/30">
+                  <input
+                    type="checkbox"
+                    id="active"
+                    {...register('active')}
+                    className="h-5 w-5 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
+                  />
+                  <div className="flex-1">
+                    <Label htmlFor="active" className="text-sm font-semibold cursor-pointer">
+                      Active Account
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {user?.active ? 'User can log in and access the portal' : 'User account is disabled'}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">
-                Password {isEditing ? '(leave blank to keep current)' : '*'}
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                {...register('password')}
-                placeholder={isEditing ? 'Enter new password (optional)' : 'Enter password'}
-              />
-              {errors.password && (
-                <p className="text-xs text-destructive">{errors.password.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name *</Label>
-              <Input
-                id="name"
-                {...register('name')}
-                placeholder="Enter full name"
-              />
-              {errors.name && (
-                <p className="text-xs text-destructive">{errors.name.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                {...register('email')}
-                placeholder="Enter email (optional)"
-              />
-              {errors.email && (
-                <p className="text-xs text-destructive">{errors.email.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="role">Role *</Label>
-              <select
-                id="role"
-                {...register('role')}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              >
-                <option value="staff">Staff</option>
-                <option value="admin">Admin</option>
-              </select>
-              {errors.role && (
-                <p className="text-xs text-destructive">{errors.role.message}</p>
-              )}
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="active"
-                {...register('active')}
-                className="h-4 w-4 rounded border-gray-300"
-              />
-              <Label htmlFor="active" className="text-sm font-normal cursor-pointer">
-                Active (user can log in)
-              </Label>
-            </div>
-
-            <div className="flex gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+            <div className="flex gap-3 pt-6 border-t">
+              <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-11">
                 Cancel
               </Button>
-              <Button type="submit" className="flex-1">
-                {isEditing ? 'Update' : 'Create'}
+              <Button type="submit" className="flex-1 h-11 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600">
+                {isEditing ? (
+                  <>
+                    <Pencil size={18} className="mr-2" />
+                    Update User
+                  </>
+                ) : (
+                  <>
+                    <Plus size={18} className="mr-2" />
+                    Create User
+                  </>
+                )}
               </Button>
             </div>
           </form>
@@ -283,26 +326,91 @@ export function UsersPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      {/* Header Section */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Users</h1>
-          <p className="text-muted-foreground mt-2">Manage user accounts and access</p>
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+            User Management
+          </h1>
+          <p className="text-muted-foreground mt-2">Manage user accounts and portal access</p>
         </div>
-        <Button type="button" onClick={() => { setEditingUser(null); setDialogOpen(true); }}>
-          <Plus size={18} weight="duotone" className="mr-2" />
-          Add User
+        <Button 
+          type="button" 
+          onClick={() => { setEditingUser(null); setDialogOpen(true); }}
+          className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all"
+          size="lg"
+        >
+          <Plus size={20} weight="duotone" className="mr-2" />
+          Add New User
         </Button>
       </div>
 
-      <div className="flex gap-4">
-        <div className="flex-1">
-          <Input
-            placeholder="Search users..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card className="border-2">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total Users</p>
+                <p className="text-2xl font-bold mt-1">{users.length}</p>
+              </div>
+              <div className="p-3 rounded-full bg-purple-500/10">
+                <UserCircle size={24} weight="duotone" className="text-purple-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-2">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Active Users</p>
+                <p className="text-2xl font-bold mt-1">{users.filter(u => u.active).length}</p>
+              </div>
+              <div className="p-3 rounded-full bg-green-500/10">
+                <User size={24} weight="duotone" className="text-green-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-2">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Admins</p>
+                <p className="text-2xl font-bold mt-1">{users.filter(u => u.role === 'admin').length}</p>
+              </div>
+              <div className="p-3 rounded-full bg-pink-500/10">
+                <Shield size={24} weight="duotone" className="text-pink-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-2">
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Staff</p>
+                <p className="text-2xl font-bold mt-1">{users.filter(u => u.role === 'staff').length}</p>
+              </div>
+              <div className="p-3 rounded-full bg-blue-500/10">
+                <Users size={24} weight="duotone" className="text-blue-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Search Bar */}
+      <div className="relative">
+        <Input
+          placeholder="Search by name, username, or email..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="h-12 pl-10 text-base"
+        />
+        <User size={20} weight="duotone" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
       </div>
 
       {filteredUsers.length === 0 ? (
@@ -328,64 +436,82 @@ export function UsersPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredUsers.map((user) => (
-            <Card key={user.id} className="hover:shadow-lg transition-all">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">{user.name}</CardTitle>
-                  {user.role === 'admin' && (
-                    <Shield size={20} weight="duotone" className="text-purple-500" />
-                  )}
+            <Card 
+              key={user.id} 
+              className="hover:shadow-xl transition-all duration-300 border-2 hover:border-purple-500/50 group"
+            >
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className={`p-2.5 rounded-lg ${
+                      user.role === 'admin' 
+                        ? 'bg-gradient-to-br from-purple-500/20 to-pink-500/20' 
+                        : 'bg-blue-500/10'
+                    }`}>
+                      {user.role === 'admin' ? (
+                        <Shield size={24} weight="duotone" className="text-purple-500" />
+                      ) : (
+                        <User size={24} weight="duotone" className="text-blue-500" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-lg truncate">{user.name}</CardTitle>
+                      <CardDescription className="truncate">@{user.username}</CardDescription>
+                    </div>
+                  </div>
+                  <div className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                    user.active 
+                      ? 'bg-green-500/20 text-green-600' 
+                      : 'bg-red-500/20 text-red-600'
+                  }`}>
+                    {user.active ? 'Active' : 'Inactive'}
+                  </div>
                 </div>
-                <CardDescription>@{user.username}</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {user.email && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Email</p>
-                      <p className="text-sm">{user.email}</p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-sm text-muted-foreground">Role</p>
-                    <p className="font-medium capitalize">{user.role}</p>
+              <CardContent className="space-y-3">
+                {user.email && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground min-w-[60px]">Email:</span>
+                    <span className="truncate">{user.email}</span>
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Status</p>
-                    <p className={`text-sm font-medium ${user.active ? 'text-green-600' : 'text-red-600'}`}>
-                      {user.active ? 'Active' : 'Inactive'}
-                    </p>
+                )}
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground min-w-[60px]">Role:</span>
+                  <span className={`font-semibold capitalize ${
+                    user.role === 'admin' ? 'text-purple-600' : 'text-blue-600'
+                  }`}>
+                    {user.role}
+                  </span>
+                </div>
+                {user.lastLoginAt && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground min-w-[60px]">Last Login:</span>
+                    <span>{formatDate(user.lastLoginAt)}</span>
                   </div>
-                  {user.lastLoginAt && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Last Login</p>
-                      <p className="text-sm">{formatDate(user.lastLoginAt)}</p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-sm text-muted-foreground">Created</p>
-                    <p className="text-sm">{formatDate(user.createdAt)}</p>
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => { setEditingUser(user); setDialogOpen(true); }}
-                      className="flex-1"
-                    >
-                      <Pencil size={16} className="mr-1" />
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDelete(user.id)}
-                      className="flex-1 text-destructive hover:text-destructive"
-                    >
-                      <Trash size={16} className="mr-1" />
-                      Delete
-                    </Button>
-                  </div>
+                )}
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground min-w-[60px]">Created:</span>
+                  <span>{formatDate(user.createdAt)}</span>
+                </div>
+                <div className="flex gap-2 pt-3 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setEditingUser(user); setDialogOpen(true); }}
+                    className="flex-1 hover:bg-purple-500 hover:text-white hover:border-purple-500 transition-colors"
+                  >
+                    <Pencil size={16} className="mr-1.5" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDelete(user.id)}
+                    className="flex-1 text-destructive hover:bg-destructive hover:text-white transition-colors"
+                  >
+                    <Trash size={16} className="mr-1.5" />
+                    Delete
+                  </Button>
                 </div>
               </CardContent>
             </Card>
