@@ -26,12 +26,19 @@ const TABLES = {
 // TEMPLATES
 // ============================================
 export async function getTemplatesFromSupabase(): Promise<Template[]> {
-  if (!isSupabaseConfigured()) return [];
+  if (!isSupabaseConfigured()) {
+    console.log('Supabase not configured, returning empty array');
+    return [];
+  }
   
   try {
     const supabase = await getSupabaseClient();
-    if (!supabase) return [];
+    if (!supabase) {
+      console.log('Supabase client not available');
+      return [];
+    }
     
+    console.log('Fetching templates from Supabase...');
     const { data, error } = await supabase
       .from(TABLES.TEMPLATES)
       .select('*')
@@ -39,20 +46,27 @@ export async function getTemplatesFromSupabase(): Promise<Template[]> {
     
     if (error) {
       console.error('Error fetching templates from Supabase:', error);
+      // If table doesn't exist, return empty array (user needs to run SQL script)
+      if (error.code === '42P01' || error.message?.includes('does not exist')) {
+        console.warn('Templates table does not exist. Please run supabase-setup-complete.sql');
+      }
       return [];
     }
     
-    return (data || []).map((t: any) => ({
+    const templates = (data || []).map((t: any) => ({
       id: t.id,
       name: t.name,
-      subtitle: t.subtitle,
+      subtitle: t.subtitle || undefined,
       type: t.type,
       categories: t.categories || [],
-      questions: t.questions || [],
+      questions: t.questions || undefined,
       createdAt: t.created_at,
       updatedAt: t.updated_at,
       version: t.version || 1,
     }));
+    
+    console.log(`Loaded ${templates.length} templates from Supabase`);
+    return templates;
   } catch (error) {
     console.error('Error in getTemplatesFromSupabase:', error);
     return [];
@@ -92,27 +106,40 @@ export async function getTemplateFromSupabase(id: string): Promise<Template | un
 }
 
 export async function saveTemplateToSupabase(template: Template): Promise<void> {
-  if (!isSupabaseConfigured()) throw new Error('Supabase not configured');
+  if (!isSupabaseConfigured()) {
+    throw new Error('Supabase not configured');
+  }
   
   try {
     const supabase = await getSupabaseClient();
-    if (!supabase) throw new Error('Supabase client not available');
+    if (!supabase) {
+      throw new Error('Supabase client not available');
+    }
     
-    const { error } = await supabase
+    const templateData = {
+      id: template.id,
+      name: template.name,
+      subtitle: template.subtitle || null,
+      type: template.type,
+      categories: template.categories || [],
+      questions: template.questions || null,
+      created_at: template.createdAt || new Date().toISOString(),
+      updated_at: template.updatedAt || new Date().toISOString(),
+      version: template.version || 1,
+    };
+    
+    console.log('Saving template to Supabase:', templateData.id, templateData.name);
+    
+    const { data, error } = await supabase
       .from(TABLES.TEMPLATES)
-      .upsert({
-        id: template.id,
-        name: template.name,
-        subtitle: template.subtitle || null,
-        type: template.type,
-        categories: template.categories,
-        questions: template.questions || null,
-        created_at: template.createdAt,
-        updated_at: template.updatedAt || new Date().toISOString(),
-        version: template.version || 1,
-      }, { onConflict: 'id' });
+      .upsert(templateData, { onConflict: 'id' });
     
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase upsert error:', error);
+      throw error;
+    }
+    
+    console.log('Template saved successfully to Supabase:', template.id);
   } catch (error) {
     console.error('Error in saveTemplateToSupabase:', error);
     throw error;

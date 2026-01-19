@@ -147,15 +147,24 @@ export async function getTemplates(): Promise<Template[]> {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { getTemplatesFromSupabase } = await import('./supabase-storage');
-      return await getTemplatesFromSupabase();
+      const templates = await getTemplatesFromSupabase();
+      console.log('Templates loaded from Supabase:', templates.length);
+      if (templates.length > 0) {
+        return templates;
+      }
+      // If Supabase returns empty but is configured, still return empty (don't fallback to IndexedDB)
+      // This ensures we're using Supabase as the source of truth
+      return [];
     }
   } catch (error) {
-    console.log('Supabase not available, using IndexedDB fallback');
+    console.log('Supabase not available, using IndexedDB fallback:', error);
   }
 
   // Fallback to IndexedDB
   const database = await initDB();
-  return database.getAll('templates');
+  const templates = await database.getAll('templates');
+  console.log('Templates loaded from IndexedDB:', templates.length);
+  return templates;
 }
 
 export async function getTemplate(id: string): Promise<Template | undefined> {
@@ -181,19 +190,26 @@ export async function saveTemplate(template: Template): Promise<void> {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { saveTemplateToSupabase } = await import('./supabase-storage');
-      await saveTemplateToSupabase(template);
+      try {
+        await saveTemplateToSupabase(template);
+        console.log('Template saved to Supabase:', template.id);
+      } catch (supabaseError) {
+        console.error('Error saving template to Supabase:', supabaseError);
+        // Continue to IndexedDB fallback even if Supabase fails
+      }
       // Also save to IndexedDB as backup/cache
       const database = await initDB();
       await database.put('templates', template);
       return;
     }
   } catch (error) {
-    console.log('Supabase not available, using IndexedDB fallback');
+    console.log('Supabase not available, using IndexedDB fallback:', error);
   }
 
   // Fallback to IndexedDB
   const database = await initDB();
   await database.put('templates', template);
+  console.log('Template saved to IndexedDB:', template.id);
 }
 
 export async function deleteTemplate(id: string): Promise<void> {
