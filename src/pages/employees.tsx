@@ -3,8 +3,8 @@ import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Plus, Pencil, Trash, Users } from 'phosphor-react';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Plus, Pencil, Trash, Users, MagnifyingGlass } from 'phosphor-react';
 import { EmployeeDialog } from '@/components/employees/employee-dialog';
 import { HIERARCHY_LABELS } from '@/types';
 import { deleteEmployee } from '@/lib/storage';
@@ -16,17 +16,32 @@ export function EmployeesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string | null; name: string }>({
+    open: false,
+    id: null,
+    name: '',
+  });
+  const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this employee? This action cannot be undone.')) {
-      try {
-        await deleteEmployee(id);
-        await refresh();
-        toast({ title: 'Employee deleted', variant: 'success' });
-      } catch (error) {
-        toast({ title: 'Error', description: 'Failed to delete employee.', variant: 'error' });
-      }
+  const handleDeleteClick = (id: string, name: string) => {
+    setDeleteConfirm({ open: true, id, name });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm.id) return;
+    
+    setDeleting(true);
+    try {
+      await deleteEmployee(deleteConfirm.id);
+      await refresh();
+      toast({ title: 'Success', description: 'Employee deleted successfully', variant: 'success' });
+      setDeleteConfirm({ open: false, id: null, name: '' });
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast({ title: 'Error', description: 'Failed to delete employee. Please try again.', variant: 'error' });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -36,26 +51,35 @@ export function EmployeesPage() {
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Employees</h1>
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+            Employees
+          </h1>
           <p className="text-muted-foreground mt-2">Manage your employee database</p>
         </div>
-        <Button type="button" onClick={() => { setEditingEmployee(null); setDialogOpen(true); }}>
-          <Plus size={18} weight="duotone" className="mr-2" />
+        <Button 
+          type="button" 
+          onClick={() => { setEditingEmployee(null); setDialogOpen(true); }}
+          className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all"
+          size="lg"
+        >
+          <Plus size={20} weight="duotone" className="mr-2" />
           Add Employee
         </Button>
       </div>
 
-      <div className="flex gap-4">
-        <div className="flex-1">
-          <Input
-            placeholder="Search employees..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
+      {/* Search */}
+      <div className="relative">
+        <Input
+          placeholder="Search employees by name or role..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="h-12 pl-10 text-base"
+        />
+        <MagnifyingGlass size={20} weight="duotone" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
       </div>
 
       {filteredEmployees.length === 0 ? (
@@ -81,56 +105,77 @@ export function EmployeesPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredEmployees.map((employee) => (
-            <Card key={employee.id} className="hover:shadow-lg transition-all">
-              <CardHeader>
-                <CardTitle className="text-lg">{employee.name}</CardTitle>
-                <CardDescription>{employee.role}</CardDescription>
+            <Card 
+              key={employee.id} 
+              className="hover:shadow-xl transition-all duration-300 border-2 hover:border-purple-500/50 group"
+            >
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg group-hover:text-purple-600 transition-colors">
+                  {employee.name}
+                </CardTitle>
+                <CardDescription className="text-base">{employee.role}</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Hierarchy</p>
-                    <p className="font-medium">{HIERARCHY_LABELS[employee.hierarchy]}</p>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground min-w-[80px]">Hierarchy:</span>
+                  <span className="font-semibold">{HIERARCHY_LABELS[employee.hierarchy]}</span>
+                </div>
+                {employee.email && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground min-w-[80px]">Email:</span>
+                    <span className="truncate">{employee.email}</span>
                   </div>
-                  {employee.email && (
-                    <div>
-                      <p className="text-sm text-muted-foreground">Email</p>
-                      <p className="text-sm">{employee.email}</p>
-                    </div>
-                  )}
-                  <div className="text-xs text-muted-foreground">
-                    Added {formatDate(employee.createdAt)}
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => {
-                        setEditingEmployee(employee.id);
-                        setDialogOpen(true);
-                      }}
-                    >
-                      <Pencil size={16} weight="duotone" className="mr-2" />
-                      Edit
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(employee.id)}
-                      title="Delete employee"
-                    >
-                      <Trash size={16} weight="duotone" />
-                    </Button>
-                  </div>
+                )}
+                <div className="text-xs text-muted-foreground pt-2 border-t">
+                  Added {formatDate(employee.createdAt)}
+                </div>
+                <div className="flex gap-2 pt-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 hover:bg-purple-500 hover:text-white hover:border-purple-500 transition-all"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingEmployee(employee.id);
+                      setDialogOpen(true);
+                    }}
+                  >
+                    <Pencil size={16} weight="duotone" className="mr-1.5" />
+                    Edit
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteClick(employee.id, employee.name);
+                    }}
+                  >
+                    <Trash size={16} weight="duotone" className="mr-1.5" />
+                    Delete
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        onClose={() => setDeleteConfirm({ open: false, id: null, name: '' })}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Employee"
+        description={`Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone and will remove all associated data.`}
+        confirmText="Delete Employee"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
+      />
 
       <EmployeeDialog
         open={dialogOpen}

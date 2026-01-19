@@ -4,6 +4,7 @@ import { PeriodSelector } from '@/components/periods/period-selector';
 import { getReviewPeriod } from '@/lib/storage';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
@@ -22,6 +23,11 @@ export function LinksPage() {
   const [selectedTemplate, setSelectedTemplate] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
   const [expirationDays, setExpirationDays] = useState<number | ''>(30);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string | null }>({
+    open: false,
+    id: null,
+  });
+  const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -80,15 +86,24 @@ export function LinksPage() {
     toast({ title: 'Copied!', description: 'Link copied to clipboard.', variant: 'success' });
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this link?')) {
-      try {
-        await deleteLink(id);
-        await refresh();
-        toast({ title: 'Link deleted', variant: 'success' });
-      } catch (error) {
-        toast({ title: 'Error', description: 'Failed to delete link.', variant: 'error' });
-      }
+  const handleDeleteClick = (id: string) => {
+    setDeleteConfirm({ open: true, id });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm.id) return;
+    
+    setDeleting(true);
+    try {
+      await deleteLink(deleteConfirm.id);
+      await refresh();
+      toast({ title: 'Success', description: 'Link deleted successfully', variant: 'success' });
+      setDeleteConfirm({ open: false, id: null });
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast({ title: 'Error', description: 'Failed to delete link. Please try again.', variant: 'error' });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -278,9 +293,13 @@ export function LinksPage() {
                       </div>
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        onClick={() => handleDelete(link.id)}
+                        className="text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteClick(link.id);
+                        }}
                         title="Delete link"
                       >
                         <Trash size={16} weight="duotone" />
@@ -330,9 +349,13 @@ export function LinksPage() {
                       </div>
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        onClick={() => handleDelete(link.id)}
+                        className="text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteClick(link.id);
+                        }}
                         title="Delete link"
                       >
                         <Trash size={16} weight="duotone" />
@@ -357,6 +380,18 @@ export function LinksPage() {
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        onClose={() => setDeleteConfirm({ open: false, id: null })}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Link"
+        description="Are you sure you want to delete this appraisal link? This action cannot be undone."
+        confirmText="Delete Link"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
+      />
     </div>
   );
 }

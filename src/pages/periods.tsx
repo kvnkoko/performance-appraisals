@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Plus, Pencil, Trash, Calendar } from 'phosphor-react';
@@ -20,6 +21,12 @@ export function PeriodsPage() {
   const [editingPeriod, setEditingPeriod] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterYear, setFilterYear] = useState<string>('all');
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string | null; name: string }>({
+    open: false,
+    id: null,
+    name: '',
+  });
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadPeriods();
@@ -38,16 +45,25 @@ export function PeriodsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this period? This action cannot be undone.')) {
-      try {
-        await deleteReviewPeriod(id);
-        await loadPeriods();
-        await refresh();
-        toast({ title: 'Period deleted', variant: 'success' });
-      } catch (error) {
-        toast({ title: 'Error', description: 'Failed to delete period.', variant: 'error' });
-      }
+  const handleDeleteClick = (id: string, name: string) => {
+    setDeleteConfirm({ open: true, id, name });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm.id) return;
+    
+    setDeleting(true);
+    try {
+      await deleteReviewPeriod(deleteConfirm.id);
+      await loadPeriods();
+      await refresh();
+      toast({ title: 'Success', description: 'Review period deleted successfully', variant: 'success' });
+      setDeleteConfirm({ open: false, id: null, name: '' });
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast({ title: 'Error', description: 'Failed to delete review period. Please try again.', variant: 'error' });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -177,9 +193,13 @@ export function PeriodsPage() {
                       </Button>
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        onClick={() => handleDelete(period.id)}
+                        className="text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteClick(period.id, period.name);
+                        }}
                         title="Delete period"
                       >
                         <Trash size={16} weight="duotone" />
@@ -201,6 +221,18 @@ export function PeriodsPage() {
           loadPeriods();
           refresh();
         }}
+      />
+
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        onClose={() => setDeleteConfirm({ open: false, id: null, name: '' })}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Review Period"
+        description={`Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone and will remove all associated data.`}
+        confirmText="Delete Period"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
       />
     </div>
   );

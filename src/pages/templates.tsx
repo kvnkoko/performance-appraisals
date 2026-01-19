@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Plus, Pencil, Trash, Copy, FileText } from 'phosphor-react';
 import { TemplateDialog } from '@/components/templates/template-dialog';
 import { APPRAISAL_TYPE_LABELS } from '@/types';
@@ -14,17 +15,32 @@ export function TemplatesPage() {
   const { templates, refresh } = useApp();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string | null; name: string }>({
+    open: false,
+    id: null,
+    name: '',
+  });
+  const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this template? This action cannot be undone.')) {
-      try {
-        await deleteTemplate(id);
-        await refresh();
-        toast({ title: 'Template deleted', variant: 'success' });
-      } catch (error) {
-        toast({ title: 'Error', description: 'Failed to delete template.', variant: 'error' });
-      }
+  const handleDeleteClick = (id: string, name: string) => {
+    setDeleteConfirm({ open: true, id, name });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm.id) return;
+    
+    setDeleting(true);
+    try {
+      await deleteTemplate(deleteConfirm.id);
+      await refresh();
+      toast({ title: 'Success', description: 'Template deleted successfully', variant: 'success' });
+      setDeleteConfirm({ open: false, id: null, name: '' });
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast({ title: 'Error', description: 'Failed to delete template. Please try again.', variant: 'error' });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -177,31 +193,40 @@ export function TemplatesPage() {
                     <div className="flex gap-2 pt-2">
                       <Button
                         type="button"
-                        variant="secondary"
+                        variant="outline"
                         size="sm"
-                        className="flex-1"
-                        onClick={() => {
+                        className="flex-1 hover:bg-purple-500 hover:text-white hover:border-purple-500 transition-all"
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setEditingTemplate(template.id);
                           setDialogOpen(true);
                         }}
                       >
-                        <Pencil size={16} weight="duotone" className="mr-2" />
+                        <Pencil size={16} weight="duotone" className="mr-1.5" />
                         Edit
                       </Button>
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        onClick={() => handleDuplicate(template.id)}
+                        className="hover:bg-blue-500 hover:text-white hover:border-blue-500 transition-all"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDuplicate(template.id);
+                        }}
                         title="Duplicate template"
                       >
                         <Copy size={16} weight="duotone" />
                       </Button>
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        onClick={() => handleDelete(template.id)}
+                        className="text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteClick(template.id, template.name);
+                        }}
                         title="Delete template"
                       >
                         <Trash size={16} weight="duotone" />
@@ -220,6 +245,18 @@ export function TemplatesPage() {
         onOpenChange={setDialogOpen}
         templateId={editingTemplate}
         onSuccess={refresh}
+      />
+
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        onClose={() => setDeleteConfirm({ open: false, id: null, name: '' })}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Template"
+        description={`Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone and will remove all associated data.`}
+        confirmText="Delete Template"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
       />
     </div>
   );

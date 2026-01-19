@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Plus, Pencil, Trash, User, Shield, UserCircle, Users } from 'phosphor-react';
 import { deleteUser, getUsers, saveUser, getUserByUsername } from '@/lib/storage';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useToast } from '@/contexts/toast-context';
 import { formatDate } from '@/lib/utils';
 import { generateId, hashPassword } from '@/lib/utils';
@@ -280,6 +281,12 @@ export function UsersPage() {
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string | null; name: string }>({
+    open: false,
+    id: null,
+    name: '',
+  });
+  const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
 
   const loadUsers = async () => {
@@ -299,15 +306,24 @@ export function UsersPage() {
     loadUsers();
   }, []);
 
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-      try {
-        await deleteUser(id);
-        await loadUsers();
-        toast({ title: 'User deleted', variant: 'success' });
-      } catch (error) {
-        toast({ title: 'Error', description: 'Failed to delete user.', variant: 'error' });
-      }
+  const handleDeleteClick = (id: string, name: string) => {
+    setDeleteConfirm({ open: true, id, name });
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteConfirm.id) return;
+    
+    setDeleting(true);
+    try {
+      await deleteUser(deleteConfirm.id);
+      await loadUsers();
+      toast({ title: 'Success', description: 'User deleted successfully', variant: 'success' });
+      setDeleteConfirm({ open: false, id: null, name: '' });
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast({ title: 'Error', description: 'Failed to delete user. Please try again.', variant: 'error' });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -506,8 +522,11 @@ export function UsersPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleDelete(user.id)}
-                    className="flex-1 text-destructive hover:bg-destructive hover:text-white transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteClick(user.id, user.name);
+                    }}
+                    className="flex-1 text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all"
                   >
                     <Trash size={16} className="mr-1.5" />
                     Delete
@@ -524,6 +543,18 @@ export function UsersPage() {
         onClose={() => { setDialogOpen(false); setEditingUser(null); }}
         user={editingUser}
         onSave={loadUsers}
+      />
+
+      <ConfirmDialog
+        open={deleteConfirm.open}
+        onClose={() => setDeleteConfirm({ open: false, id: null, name: '' })}
+        onConfirm={handleDeleteConfirm}
+        title="Delete User"
+        description={`Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone and will remove all associated data.`}
+        confirmText="Delete User"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
       />
     </div>
   );
