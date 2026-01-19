@@ -82,7 +82,13 @@ export function SettingsPage() {
   };
 
   const handleLogout = () => {
+    // Clear all auth data
     localStorage.removeItem('authenticated');
+    localStorage.removeItem('userId');
+    localStorage.removeItem('username');
+    localStorage.removeItem('userName');
+    localStorage.removeItem('userEmail');
+    localStorage.removeItem('userRole');
     window.location.href = '/auth';
   };
 

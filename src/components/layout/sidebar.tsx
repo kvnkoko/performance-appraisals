@@ -3,6 +3,7 @@ import {
   SquaresFour,
   FileText,
   Users,
+  UserCircle,
   Link as LinkIcon,
   ChartBar,
   Gear,
@@ -17,11 +18,13 @@ import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/contexts/app-context';
+import { useUser } from '@/contexts/user-context';
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: SquaresFour },
   { path: '/templates', label: 'Templates', icon: FileText },
   { path: '/employees', label: 'Employees', icon: Users },
+  { path: '/users', label: 'Users', icon: UserCircle, adminOnly: true },
   { path: '/links', label: 'Appraisal Links', icon: LinkIcon },
   { path: '/periods', label: 'Review Periods', icon: Calendar },
   { path: '/reviews', label: 'Reviews', icon: ChartBar },
@@ -34,9 +37,12 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { resolvedTheme, setTheme } = useTheme();
   const { settings } = useApp();
+  const { user } = useUser();
   
-  // Get user email from localStorage or use default
-  const userEmail = localStorage.getItem('userEmail') || 'admin@example.com';
+  // Get user info from context or localStorage
+  const userName = user?.name || localStorage.getItem('userName') || 'Admin';
+  const userEmail = user?.email || localStorage.getItem('userEmail') || user?.username || 'admin@example.com';
+  const userRole = user?.role || localStorage.getItem('userRole') || 'admin';
 
   const toggleTheme = () => {
     setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
@@ -90,9 +96,13 @@ export function Sidebar() {
                 )}
               </button>
             </div>
-            {/* User email */}
-            <div className="text-sm text-muted-foreground">
-              {userEmail}
+            {/* User info */}
+            <div className="space-y-1">
+              <div className="text-sm font-medium text-foreground">{userName}</div>
+              <div className="text-xs text-muted-foreground">{userEmail}</div>
+              {userRole === 'admin' && (
+                <div className="text-xs text-purple-500 font-medium">Administrator</div>
+              )}
             </div>
           </div>
 
@@ -101,6 +111,10 @@ export function Sidebar() {
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
+              // Hide admin-only items for non-admin users
+              if (item.adminOnly && userRole !== 'admin') {
+                return null;
+              }
               return (
                 <Link
                   key={item.path}

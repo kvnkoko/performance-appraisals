@@ -37,7 +37,7 @@ let db: IDBPDatabase<AppraisalDB> | null = null;
 export async function initDB(): Promise<IDBPDatabase<AppraisalDB>> {
   if (db) return db;
 
-  db = await openDB<AppraisalDB>('appraisal-db', 2, {
+  db = await openDB<AppraisalDB>('appraisal-db', 3, {
     upgrade(db, _oldVersion, _newVersion, transaction) {
       // Create all object stores if they don't exist
       if (!db.objectStoreNames.contains('templates')) {
@@ -97,6 +97,24 @@ export async function initDB(): Promise<IDBPDatabase<AppraisalDB>> {
           }
         } catch (e) {
           // Indexes might already exist, ignore
+        }
+      }
+      // Create users store
+      if (!db.objectStoreNames.contains('users')) {
+        const usersStore = db.createObjectStore('users', { keyPath: 'id' });
+        // @ts-ignore - idb library type issue
+        usersStore.createIndex('by-username', 'username', { unique: true });
+      } else {
+        // Add index if it doesn't exist
+        try {
+          const usersStore = transaction.objectStore('users');
+          // @ts-ignore - idb library type issue
+          if (!usersStore.indexNames.contains('by-username')) {
+            // @ts-ignore - idb library type issue
+            usersStore.createIndex('by-username', 'username', { unique: true });
+          }
+        } catch (e) {
+          // Index might already exist, ignore
         }
       }
     },
@@ -298,13 +316,14 @@ export async function deleteReviewPeriod(id: string): Promise<void> {
 
 // Export/Import
 export async function exportData(): Promise<string> {
-  const [templates, employees, appraisals, links, settings, reviewPeriods] = await Promise.all([
+  const [templates, employees, appraisals, links, settings, reviewPeriods, users] = await Promise.all([
     getTemplates(),
     getEmployees(),
     getAppraisals(),
     getLinks(),
     getSettings(),
     getReviewPeriods(),
+    getUsers(),
   ]);
 
   return JSON.stringify({
@@ -314,9 +333,64 @@ export async function exportData(): Promise<string> {
     links,
     settings,
     reviewPeriods,
+    users,
     version: '1.0.0',
     exportedAt: new Date().toISOString(),
   }, null, 2);
+}
+
+// Users
+export async function getUsers(): Promise<User[]> {
+  const database = await initDB();
+  try {
+    if (!database.objectStoreNames.contains('users')) {
+      return [];
+    }
+    return database.getAll('users');
+  } catch (error) {
+    console.error('Error getting users:', error);
+    return [];
+  }
+}
+
+export async function getUser(id: string): Promise<User | undefined> {
+  const database = await initDB();
+  return database.get('users', id);
+}
+
+export async function getUserByUsername(username: string): Promise<User | undefined> {
+  const database = await initDB();
+  try {
+    if (!database.objectStoreNames.contains('users')) {
+      return undefined;
+    }
+    const tx = database.transaction('users', 'readonly');
+    const store = tx.objectStore('users');
+    // @ts-ignore - idb library type issue
+    if (store.indexNames.contains('by-username')) {
+      // @ts-ignore - idb library type issue
+      const index = store.index('by-username');
+      // @ts-ignore - idb library type issue
+      return index.get(username);
+    } else {
+      // Fallback: get all and find
+      const allUsers = await store.getAll();
+      return allUsers.find((u) => u.username === username);
+    }
+  } catch (error) {
+    console.error('Error getting user by username:', error);
+    return undefined;
+  }
+}
+
+export async function saveUser(user: User): Promise<void> {
+  const database = await initDB();
+  await database.put('users', user);
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  const database = await initDB();
+  await database.delete('users', id);
 }
 
 export async function importData(json: string): Promise<void> {
@@ -349,6 +423,11 @@ export async function importData(json: string): Promise<void> {
   if (data.reviewPeriods) {
     for (const period of data.reviewPeriods) {
       await database.put('reviewPeriods', period);
+    }
+  }
+  if (data.users) {
+    for (const user of data.users) {
+      await database.put('users', user);
     }
   }
 }

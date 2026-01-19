@@ -149,3 +149,15 @@ export const HIERARCHY_LABELS: Record<Employee['hierarchy'], string> = {
   leader: 'Leader',
   member: 'Member',
 };
+
+export interface User {
+  id: string;
+  username: string;
+  passwordHash: string; // Hashed password
+  name: string;
+  email?: string;
+  role: 'admin' | 'staff';
+  active: boolean;
+  createdAt: string;
+  lastLoginAt?: string;
+}

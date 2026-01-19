@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from '@/contexts/app-context';
+import { UserProvider } from '@/contexts/user-context';
 import { ToastProvider } from '@/contexts/toast-context';
 import { ThemeProvider } from '@/components/theme-provider';
 import { MainLayout } from '@/components/layout/main-layout';
@@ -13,24 +14,24 @@ import { getEmployees, getTemplates, saveEmployee, saveTemplate } from '@/lib/st
 // Import pages directly for now (can be lazy loaded later if needed)
 import { TemplatesPage } from '@/pages/templates';
 import { EmployeesPage } from '@/pages/employees';
+import { UsersPage } from '@/pages/users';
 import { LinksPage } from '@/pages/links';
 import { PeriodsPage } from '@/pages/periods';
 import { ReviewsPage } from '@/pages/reviews';
 import { HistoricalReviewsPage } from '@/pages/historical-reviews';
 import { SettingsPage } from '@/pages/settings';
 import { AppraisalFormPage } from '@/pages/appraisal-form';
+import { useUser } from '@/contexts/user-context';
 
 function PrivateRoute({ children }: { children: React.ReactElement }) {
-  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const { user, loading } = useUser();
 
-  useEffect(() => {
-    setAuthenticated(localStorage.getItem('authenticated') === 'true');
-  }, []);
-
-  if (authenticated === null) {
+  if (loading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
   }
 
+  const authenticated = localStorage.getItem('authenticated') === 'true';
+  
   return authenticated ? children : <Navigate to="/auth" replace />;
 }
 
@@ -74,8 +75,9 @@ function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <AppProvider>
-          <Routes>
+        <UserProvider>
+          <AppProvider>
+            <Routes>
         <Route path="/auth" element={<AuthPage />} />
         <Route
           path="/appraisal/:token"
@@ -90,6 +92,7 @@ function App() {
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/templates" element={<TemplatesPage />} />
                   <Route path="/employees" element={<EmployeesPage />} />
+                  <Route path="/users" element={<UsersPage />} />
                   <Route path="/links" element={<LinksPage />} />
                   <Route path="/periods" element={<PeriodsPage />} />
                   <Route path="/reviews" element={<ReviewsPage />} />
@@ -101,8 +104,9 @@ function App() {
             </PrivateRoute>
           }
         />
-          </Routes>
-        </AppProvider>
+            </Routes>
+          </AppProvider>
+        </UserProvider>
       </ToastProvider>
     </ThemeProvider>
   );
