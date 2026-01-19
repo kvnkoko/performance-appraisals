@@ -101,19 +101,25 @@ export function AuthPage() {
         
         // Update last login - ensure user has all required fields (non-blocking)
         try {
-          const { saveUser } = await import('@/lib/storage');
-          const updatedUser: User = {
-            id: user.id,
-            username: user.username,
-            passwordHash: user.passwordHash,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            active: user.active,
-            createdAt: user.createdAt,
-            lastLoginAt: new Date().toISOString(),
-          };
-          await saveUser(updatedUser);
+          const { isSupabaseConfigured, updateUserLastLogin } = await import('@/lib/supabase');
+          if (isSupabaseConfigured()) {
+            await updateUserLastLogin(user.id);
+          } else {
+            // Fallback to IndexedDB
+            const { saveUser } = await import('@/lib/storage');
+            const updatedUser: User = {
+              id: user.id,
+              username: user.username,
+              passwordHash: user.passwordHash,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+              active: user.active,
+              createdAt: user.createdAt,
+              lastLoginAt: new Date().toISOString(),
+            };
+            await saveUser(updatedUser);
+          }
           console.log('Last login updated');
         } catch (error) {
           // If saving last login fails, log but don't block login

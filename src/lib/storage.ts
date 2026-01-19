@@ -345,8 +345,22 @@ export async function exportData(): Promise<string> {
   }, null, 2);
 }
 
-// Users
+// Users - Hybrid: Supabase (if configured) or IndexedDB (fallback)
 export async function getUsers(): Promise<User[]> {
+  // Try Supabase first if configured
+  try {
+    const { isSupabaseConfigured, getUsersFromSupabase } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const users = await getUsersFromSupabase();
+      if (users.length > 0 || isSupabaseConfigured()) {
+        return users;
+      }
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+
+  // Fallback to IndexedDB
   const database = await initDB();
   try {
     if (!database.objectStoreNames.contains('users')) {
@@ -368,6 +382,22 @@ export async function getUser(id: string): Promise<User | undefined> {
 }
 
 export async function getUserByUsername(username: string): Promise<User | undefined> {
+  // Try Supabase first if configured
+  try {
+    const { isSupabaseConfigured, getUserByUsernameFromSupabase } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const user = await getUserByUsernameFromSupabase(username);
+      if (user) {
+        return user;
+      }
+      // If Supabase is configured but user not found, return undefined (don't fallback)
+      return undefined;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+
+  // Fallback to IndexedDB
   const database = await initDB();
   try {
     if (!database.objectStoreNames.contains('users')) {
@@ -437,15 +467,15 @@ export async function getUserByUsername(username: string): Promise<User | undefi
 }
 
 export async function saveUser(user: User): Promise<void> {
-  const database = await initDB();
   // Ensure user has all required fields
   if (!user.id) {
     throw new Error('User must have an id field');
   }
+  
   // Create a clean user object with all required fields
   const userToSave: User = {
     id: user.id,
-    username: user.username,
+    username: user.username.toLowerCase(), // Store username as lowercase for consistent lookup
     passwordHash: user.passwordHash,
     name: user.name,
     email: user.email,
@@ -454,10 +484,42 @@ export async function saveUser(user: User): Promise<void> {
     createdAt: user.createdAt || new Date().toISOString(),
     lastLoginAt: user.lastLoginAt,
   };
+
+  // Try Supabase first if configured
+  try {
+    const { isSupabaseConfigured, saveUserToSupabase } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      await saveUserToSupabase(userToSave);
+      // Also save to IndexedDB as backup/cache
+      const database = await initDB();
+      await database.put('users', userToSave);
+      return;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+
+  // Fallback to IndexedDB
+  const database = await initDB();
   await database.put('users', userToSave);
 }
 
 export async function deleteUser(id: string): Promise<void> {
+  // Try Supabase first if configured
+  try {
+    const { isSupabaseConfigured, deleteUserFromSupabase } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      await deleteUserFromSupabase(id);
+      // Also delete from IndexedDB
+      const database = await initDB();
+      await database.delete('users', id);
+      return;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+
+  // Fallback to IndexedDB
   const database = await initDB();
   await database.delete('users', id);
 }
