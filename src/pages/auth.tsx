@@ -32,27 +32,45 @@ export function AuthPage() {
 
   const handleUserSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (initializing) return;
+    e.stopPropagation();
+    
+    if (initializing || loading) {
+      console.log('Form submission blocked: initializing=', initializing, 'loading=', loading);
+      return;
+    }
+    
+    if (!username.trim() || !password.trim()) {
+      toast({ title: 'Error', description: 'Please enter both username and password.', variant: 'error' });
+      return;
+    }
     
     setLoading(true);
+    console.log('Starting authentication for user:', username);
 
     try {
       await initDB();
-      const user = await getUserByUsername(username);
+      console.log('Database initialized');
+      
+      const user = await getUserByUsername(username.trim());
+      console.log('User found:', user ? 'yes' : 'no');
       
       if (!user) {
         toast({ title: 'Invalid credentials', description: 'Username or password is incorrect.', variant: 'error' });
         setPassword('');
+        setLoading(false);
         return;
       }
 
       if (!user.active) {
         toast({ title: 'Account disabled', description: 'Your account has been disabled. Please contact an administrator.', variant: 'error' });
         setPassword('');
+        setLoading(false);
         return;
       }
 
+      console.log('Verifying password...');
       const isValid = await verifyPassword(password, user.passwordHash);
+      console.log('Password valid:', isValid);
       
       if (isValid) {
         // Update last login - ensure user has all required fields
@@ -70,6 +88,7 @@ export function AuthPage() {
             lastLoginAt: new Date().toISOString(),
           };
           await saveUser(updatedUser);
+          console.log('Last login updated');
         } catch (error) {
           // If saving last login fails, log but don't block login
           console.warn('Failed to update last login time:', error);
@@ -83,16 +102,25 @@ export function AuthPage() {
         localStorage.setItem('userEmail', user.email || user.username);
         localStorage.setItem('userRole', user.role);
         
+        console.log('Session stored, navigating to dashboard...');
         toast({ title: 'Welcome!', description: `Successfully logged in as ${user.name}`, variant: 'success' });
-        navigate('/dashboard');
+        
+        // Small delay to ensure toast is shown
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 100);
       } else {
         toast({ title: 'Invalid credentials', description: 'Username or password is incorrect.', variant: 'error' });
         setPassword('');
+        setLoading(false);
       }
     } catch (error) {
       console.error('Auth error:', error);
-      toast({ title: 'Error', description: 'Failed to authenticate. Please try again.', variant: 'error' });
-    } finally {
+      toast({ 
+        title: 'Error', 
+        description: error instanceof Error ? error.message : 'Failed to authenticate. Please try again.', 
+        variant: 'error' 
+      });
       setLoading(false);
     }
   };
@@ -166,9 +194,24 @@ export function AuthPage() {
                   placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !loading && !initializing && username.trim() && password.trim()) {
+                      handleUserSubmit(e as any);
+                    }
+                  }}
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={loading || !username || !password || initializing}>
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={loading || !username.trim() || !password.trim() || initializing}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (!loading && !initializing && username.trim() && password.trim()) {
+                    handleUserSubmit(e as any);
+                  }
+                }}
+              >
                 {initializing ? 'Initializing...' : loading ? 'Signing in...' : 'Sign In'}
               </Button>
               <div className="text-center">
