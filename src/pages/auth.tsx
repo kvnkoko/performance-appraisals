@@ -69,8 +69,8 @@ export function AuthPage() {
       
       if (!user) {
         toast({ 
-          title: 'User not found', 
-          description: 'User account not found in this browser. Use PIN login (1234) to access admin, then create users.', 
+          title: 'Invalid credentials', 
+          description: 'Username or password is incorrect.', 
           variant: 'error' 
         });
         setPassword('');
