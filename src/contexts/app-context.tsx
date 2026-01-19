@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, ReviewPeriod } from '@/types';
 import { getTemplates, getEmployees, getAppraisals, getLinks, getSettings, getReviewPeriods, getActiveReviewPeriods } from '@/lib/storage';
 

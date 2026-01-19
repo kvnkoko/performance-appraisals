@@ -1,17 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { PeriodBadge } from '@/components/periods/period-badge';
-import { getReviewPeriods, getAppraisals } from '@/lib/storage';
+import { getReviewPeriods } from '@/lib/storage';
 import { formatDateRange, getDaysRemaining } from '@/lib/period-utils';
-import { formatDate } from '@/lib/utils';
 import type { ReviewPeriod } from '@/types';
-import { TrendUp, TrendDown, Trophy, Users } from 'phosphor-react';
+import { Trophy } from 'phosphor-react';
 
 export function HistoricalReviewsPage() {
-  const { appraisals, employees, refresh } = useApp();
+  const { appraisals, employees } = useApp();
   const [periods, setPeriods] = useState<ReviewPeriod[]>([]);
   const [filterYear, setFilterYear] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');

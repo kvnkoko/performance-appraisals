@@ -2,18 +2,15 @@ import { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { Plus, Pencil, Trash, Archive, CheckCircle, Calendar } from 'phosphor-react';
+import { Plus, Pencil, Trash, Calendar } from 'phosphor-react';
 import { PeriodDialog } from '@/components/periods/period-dialog';
 import { PeriodBadge } from '@/components/periods/period-badge';
 import { getReviewPeriods, deleteReviewPeriod, saveReviewPeriod } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { formatDateRange, getDaysRemaining } from '@/lib/period-utils';
 import type { ReviewPeriod } from '@/types';
-import { formatDate } from '@/lib/utils';
 
 export function PeriodsPage() {
   const { refresh } = useApp();

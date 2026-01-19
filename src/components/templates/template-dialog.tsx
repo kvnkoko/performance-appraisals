@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm, useFieldArray, Control, UseFormRegister, FieldErrors, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -7,13 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { RichTextarea } from '@/components/ui/rich-textarea';
 import { Card } from '@/components/ui/card';
 import { useApp } from '@/contexts/app-context';
 import { getTemplate, saveTemplate } from '@/lib/storage';
 import { generateId } from '@/lib/utils';
-import type { Template, Category, CategoryItem, AppraisalType } from '@/types';
+import type { Template, Category, QuestionType } from '@/types';
 import { APPRAISAL_TYPE_LABELS } from '@/types';
 import { useToast } from '@/contexts/toast-context';
 
@@ -32,8 +31,6 @@ interface CategoryEditorProps {
 
 function CategoryEditor({
   categoryIndex,
-  categoryField,
-  category,
   isExpanded,
   onToggle,
   onRemove,
@@ -84,9 +81,9 @@ function CategoryEditor({
             <Trash size={16} weight="duotone" />
           </Button>
         </div>
-        {errors.categories?.[categoryIndex]?.categoryName && (
+        {(errors as any).categories?.[categoryIndex]?.categoryName && (
           <p className="text-xs text-destructive ml-7">
-            {errors.categories[categoryIndex]?.categoryName?.message}
+            {(errors as any).categories?.[categoryIndex]?.categoryName?.message || ''}
           </p>
         )}
 
@@ -153,9 +150,9 @@ function CategoryEditor({
                         setValue(`categories.${categoryIndex}.items.${itemIndex}.text`, value, { shouldValidate: true });
                       }}
                     />
-                    {errors.categories?.[categoryIndex]?.items?.[itemIndex]?.text && (
+                    {(errors as any).categories?.[categoryIndex]?.items?.[itemIndex]?.text && (
                       <p className="text-xs text-destructive">
-                        {errors.categories[categoryIndex]?.items?.[itemIndex]?.text?.message}
+                        {(errors as any).categories?.[categoryIndex]?.items?.[itemIndex]?.text?.message || ''}
                       </p>
                     )}
                   </div>
@@ -366,7 +363,7 @@ export function TemplateDialog({ open, onOpenChange, templateId, onSuccess }: Te
               id: q.id,
               categoryName: '',
               text: q.text,
-              type: q.type === 'rating-1-10' ? 'rating-1-5' : q.type,
+              type: ((q.type as string) === 'rating-1-10' ? 'rating-1-5' : q.type) as QuestionType,
               weight: q.weight,
               required: q.required,
               options: q.options || [],
@@ -445,7 +442,7 @@ export function TemplateDialog({ open, onOpenChange, templateId, onSuccess }: Te
   const distributeWeightsEqually = () => {
     const allItems: Array<{ categoryIndex: number; itemIndex: number }> = [];
     categories.forEach((cat, catIndex) => {
-      cat.items.forEach((item, itemIndex) => {
+      cat.items.forEach((_item, itemIndex) => {
         allItems.push({ categoryIndex: catIndex, itemIndex: itemIndex });
       });
     });
@@ -529,12 +526,12 @@ export function TemplateDialog({ open, onOpenChange, templateId, onSuccess }: Te
                   errorMessages.push(`Category ${catIndex + 1} name: ${catError.categoryName.message}`);
                 }
                 if (catError?.items && Array.isArray(catError.items)) {
-                  catError.items.forEach((itemError, itemIndex) => {
+                  catError.items.forEach((itemError: any, itemIndex: number) => {
                     if (itemError?.text) {
-                      errorMessages.push(`Category ${catIndex + 1}, Item ${itemIndex + 1} description: ${itemError.text.message}`);
+                      errorMessages.push(`Category ${catIndex + 1}, Item ${itemIndex + 1} description: ${itemError.text.message || ''}`);
                     }
                     if (itemError?.weight) {
-                      errorMessages.push(`Category ${catIndex + 1}, Item ${itemIndex + 1} weight: ${itemError.weight.message}`);
+                      errorMessages.push(`Category ${catIndex + 1}, Item ${itemIndex + 1} weight: ${itemError.weight.message || ''}`);
                     }
                   });
                 }
@@ -618,9 +615,9 @@ export function TemplateDialog({ open, onOpenChange, templateId, onSuccess }: Te
                     }
                     if (catErrors?.items) {
                       return cat.items.map((item, itemIndex) => {
-                        const itemErrors = catErrors.items?.[itemIndex];
+                        const itemErrors = (catErrors.items as any)?.[itemIndex];
                         if (itemErrors?.text) {
-                          return <p key={`${catIndex}-${itemIndex}`}>• Category {catIndex + 1}, Item {itemIndex + 1}: {itemErrors.text.message}</p>;
+                          return <p key={`${catIndex}-${itemIndex}`}>• Category {catIndex + 1}, Item {itemIndex + 1}: {itemErrors.text.message || ''}</p>;
                         }
                         return null;
                       });

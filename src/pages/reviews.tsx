@@ -1,22 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
-import { TrendUp, Trophy, Download, Target, Lightning, TrendDown, Users, ChartBar } from 'phosphor-react';
+import { TrendUp, Trophy, Target, Lightning, TrendDown, Users, ChartBar } from 'phosphor-react';
 import { generatePerformanceSummary } from '@/lib/ai-summary';
 import { getAppraisals } from '@/lib/storage';
 import { getPeriod } from '@/lib/utils';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line, Area, AreaChart } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import type { PerformanceInsight } from '@/lib/ai-summary';
 
 export function ReviewsPage() {
-  const { employees, appraisals, refresh } = useApp();
+  const { employees, appraisals } = useApp();
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [summary, setSummary] = useState<PerformanceInsight | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState(getPeriod());
+  const [period] = useState(getPeriod());
 
   useEffect(() => {
     if (selectedEmployee) {
@@ -85,8 +84,6 @@ export function ReviewsPage() {
     { name: 'Needs Improvement', range: '<60%', value: sortedScores.filter((e) => e.percentage < 60).length, color: '#ef4444' },
   ].filter((item) => item.value > 0);
 
-  const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
-  
   // Calculate additional stats
   const avgScore = sortedScores.length > 0
     ? sortedScores.reduce((sum, e) => sum + e.percentage, 0) / sortedScores.length

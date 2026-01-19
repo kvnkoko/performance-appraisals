@@ -4,8 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
-import { Download, Upload, Moon, Sun, Monitor, SignOut } from 'phosphor-react';
+import { Download, Moon, Sun, Monitor, SignOut } from 'phosphor-react';
 import { saveSettings, exportData, importData } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { useTheme } from '@/hooks/use-theme';

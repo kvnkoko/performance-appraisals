@@ -8,6 +8,7 @@ import { APPRAISAL_TYPE_LABELS } from '@/types';
 import { deleteTemplate, saveTemplate } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { formatDate, generateId } from '@/lib/utils';
+import type { QuestionType } from '@/types';
 
 export function TemplatesPage() {
   const { templates, refresh } = useApp();
@@ -65,10 +66,14 @@ export function TemplatesPage() {
               });
             }
             const cat = categoryMap.get(catName);
+            // Convert legacy rating-1-10 to rating-1-5, or use the type as-is
+            const itemType: QuestionType = ((q.type as string) === 'rating-1-10') 
+              ? 'rating-1-5' 
+              : (q.type as QuestionType);
             cat.items.push({
               id: generateId(),
               text: q.text,
-              type: q.type === 'rating-1-10' ? 'rating-1-5' : q.type,
+              type: itemType,
               weight: q.weight,
               required: q.required,
               options: q.options,

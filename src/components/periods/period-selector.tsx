@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Calendar, Plus, Check } from 'phosphor-react';
+import { Calendar } from 'phosphor-react';
 import { Select } from '@/components/ui/select';
-import { Button } from '@/components/ui/button';
 import { getReviewPeriods, getActiveReviewPeriods } from '@/lib/storage';
 import type { ReviewPeriod } from '@/types';
 import { PeriodBadge } from './period-badge';

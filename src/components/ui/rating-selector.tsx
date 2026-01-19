@@ -11,7 +11,7 @@ interface RatingSelectorProps {
 export function RatingSelector({ value, onChange, disabled, required }: RatingSelectorProps) {
   const ratings = [1, 2, 3, 4, 5] as const;
 
-  const getColorClasses = (rating: number, isSelected: boolean) => {
+  const getColorClasses = (_rating: number, isSelected: boolean) => {
     if (isSelected) {
       return 'bg-primary text-primary-foreground border-primary shadow-md ring-1 ring-primary/20';
     }

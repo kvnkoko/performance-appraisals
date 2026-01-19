@@ -1,4 +1,4 @@
-import type { Appraisal, Template, Employee, Question } from '@/types';
+import type { Appraisal } from '@/types';
 import { getTemplates, getEmployees } from './storage';
 
 export interface PerformanceInsight {
@@ -86,7 +86,7 @@ export async function generatePerformanceSummary(
           let score = 0;
           if (item.type === 'rating-1-5') {
             score = (Number(response.value) / 5) * item.weight;
-          } else if (item.type === 'rating-1-10') {
+          } else if ((item.type as string) === 'rating-1-10') {
             score = (Number(response.value) / 10) * item.weight;
           } else if (response.value && String(response.value).trim()) {
             score = item.weight;
@@ -111,7 +111,7 @@ export async function generatePerformanceSummary(
         let score = 0;
         if (question.type === 'rating-1-5') {
           score = (Number(response.value) / 5) * question.weight;
-        } else if (question.type === 'rating-1-10') {
+        } else if ((question.type as string) === 'rating-1-10') {
           score = (Number(response.value) / 10) * question.weight;
         } else if (response.value && String(response.value).trim()) {
           score = question.weight;

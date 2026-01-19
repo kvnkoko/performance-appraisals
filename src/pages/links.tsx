@@ -11,7 +11,7 @@ import { Plus, Copy, Trash, LinkSimple, CheckCircle, Clock } from 'phosphor-reac
 import { generateToken, generateId } from '@/lib/utils';
 import { saveLink, deleteLink } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
-import { formatDate, formatDateTime } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 import type { AppraisalLink } from '@/types';
 
 export function LinksPage() {
@@ -93,7 +93,7 @@ export function LinksPage() {
   };
 
   const activeLinks = links.filter((l) => !l.used && (!l.expiresAt || new Date(l.expiresAt) > new Date()));
-  const expiredLinks = links.filter((l) => l.expiresAt && new Date(l.expiresAt) <= new Date() && !l.used);
+  // const expiredLinks = links.filter((l) => l.expiresAt && new Date(l.expiresAt) <= new Date() && !l.used);
   const usedLinks = links.filter((l) => l.used);
 
   return (
