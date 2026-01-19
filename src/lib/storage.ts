@@ -501,8 +501,17 @@ export async function saveSummary(summary: PerformanceSummary): Promise<void> {
   await database.put('summaries', summary);
 }
 
-// Review Periods
+// Review Periods - Hybrid: Supabase (if configured) or IndexedDB (fallback)
 export async function getReviewPeriods(): Promise<ReviewPeriod[]> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getReviewPeriodsFromSupabase } = await import('./supabase-storage');
+      return await getReviewPeriodsFromSupabase();
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
   const database = await initDB();
   try {
     if (!database.objectStoreNames.contains('reviewPeriods')) {
@@ -516,6 +525,15 @@ export async function getReviewPeriods(): Promise<ReviewPeriod[]> {
 }
 
 export async function getReviewPeriod(id: string): Promise<ReviewPeriod | undefined> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getReviewPeriodFromSupabase } = await import('./supabase-storage');
+      return await getReviewPeriodFromSupabase(id);
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
   const database = await initDB();
   return database.get('reviewPeriods', id);
 }
