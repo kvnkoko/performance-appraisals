@@ -350,9 +350,12 @@ export async function getUsers(): Promise<User[]> {
   const database = await initDB();
   try {
     if (!database.objectStoreNames.contains('users')) {
+      console.log('Users store does not exist in getUsers');
       return [];
     }
-    return database.getAll('users');
+    const users = await database.getAll('users');
+    console.log('getUsers: Found', users.length, 'users');
+    return users;
   } catch (error) {
     console.error('Error getting users:', error);
     return [];
@@ -368,21 +371,65 @@ export async function getUserByUsername(username: string): Promise<User | undefi
   const database = await initDB();
   try {
     if (!database.objectStoreNames.contains('users')) {
+      console.log('Users store does not exist');
       return undefined;
     }
+    
+    const trimmedUsername = username.trim().toLowerCase();
+    console.log('Looking for user with username (normalized):', trimmedUsername);
+    
     const tx = database.transaction('users', 'readonly');
     const store = tx.objectStore('users');
+    
+    // Try using index first
     // @ts-ignore - idb library type issue
     if (store.indexNames.contains('by-username')) {
-      // @ts-ignore - idb library type issue
-      const index = store.index('by-username');
-      // @ts-ignore - idb library type issue
-      return index.get(username);
-    } else {
-      // Fallback: get all and find
-      const allUsers = await store.getAll();
-      return allUsers.find((u) => u.username === username);
+      try {
+        // @ts-ignore - idb library type issue
+        const index = store.index('by-username');
+        // Try exact match first
+        // @ts-ignore - idb library type issue
+        let user = await index.get(username.trim());
+        
+        // If not found, try case-insensitive lookup
+        if (!user) {
+          // @ts-ignore - idb library type issue
+          const allUsers = await store.getAll();
+          console.log('Total users in database:', allUsers.length);
+          console.log('All usernames:', allUsers.map(u => u.username));
+          user = allUsers.find((u) => u.username.trim().toLowerCase() === trimmedUsername);
+        }
+        
+        if (user) {
+          console.log('User found via index:', user.username);
+        } else {
+          console.log('User not found via index');
+        }
+        
+        return user;
+      } catch (indexError) {
+        console.warn('Index lookup failed, falling back to getAll:', indexError);
+      }
     }
+    
+    // Fallback: get all and find (case-insensitive)
+    console.log('Using fallback: getAll and find');
+    const allUsers = await store.getAll();
+    console.log('Total users in database:', allUsers.length);
+    console.log('All usernames:', allUsers.map(u => u.username));
+    
+    const user = allUsers.find((u) => {
+      const userUsername = (u.username || '').trim().toLowerCase();
+      return userUsername === trimmedUsername;
+    });
+    
+    if (user) {
+      console.log('User found via fallback:', user.username);
+    } else {
+      console.log('User not found via fallback');
+    }
+    
+    return user;
   } catch (error) {
     console.error('Error getting user by username:', error);
     return undefined;

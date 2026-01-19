@@ -51,8 +51,21 @@ export function AuthPage() {
       await initDB();
       console.log('Database initialized');
       
+      // Debug: Check if users store exists and list all users
+      try {
+        const { getUsers } = await import('@/lib/storage');
+        const allUsers = await getUsers();
+        console.log('Total users in database:', allUsers.length);
+        console.log('All users:', allUsers.map(u => ({ username: u.username, name: u.name, active: u.active })));
+      } catch (debugError) {
+        console.warn('Could not list users for debugging:', debugError);
+      }
+      
       const user = await getUserByUsername(username.trim());
       console.log('User found:', user ? 'yes' : 'no');
+      if (user) {
+        console.log('User details:', { username: user.username, name: user.name, active: user.active, role: user.role });
+      }
       
       if (!user) {
         toast({ title: 'Invalid credentials', description: 'Username or password is incorrect.', variant: 'error' });
@@ -151,7 +164,8 @@ export function AuthPage() {
       
       const settings = await getSettings();
       console.log('Settings loaded, PIN from settings:', settings.adminPin);
-      console.log('Entered PIN:', pin);
+      console.log('Entered PIN (trimmed):', pin.trim());
+      console.log('PIN match:', pin.trim() === settings.adminPin);
       
       if (pin.trim() === settings.adminPin) {
         console.log('PIN matches, setting authentication...');
