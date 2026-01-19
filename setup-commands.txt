@@ -1,0 +1,14 @@
+# Copy and paste these commands one by one into your terminal:
+
+# 1. Create the .env.local file
+cat > .env.local << 'EOF'
+# Supabase Configuration
+VITE_SUPABASE_URL=https://fvzpkzaualqgeyrulckf.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2enBremF1YWxxZ2V5cnVsY2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4MTI3ODcsImV4cCI6MjA4NDM4ODc4N30.GJ5uLJ8BywB8OKFrUUTSV4iEyd2T6S1SQDBqeUY6zW0
+EOF
+
+# 2. Verify it was created (optional - just to check)
+cat .env.local
+
+# 3. Restart your dev server
+npm run dev

@@ -1,0 +1,13 @@
+═══════════════════════════════════════════════════════════════
+  COPY AND PASTE THIS ENTIRE COMMAND INTO YOUR TERMINAL
+═══════════════════════════════════════════════════════════════
+
+cd "/Users/kevinkoko/appraisals claude" && echo "VITE_SUPABASE_URL=https://fvzpkzaualqgeyrulckf.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2enBremF1YWxxZ2V5cnVsY2tmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4MTI3ODcsImV4cCI6MjA4NDM4ODc4N30.GJ5uLJ8BywB8OKFrUUTSV4iEyd2T6S1SQDBqeUY6zW0" > .env.local && echo "✅ File created! Verifying..." && cat .env.local
+
+═══════════════════════════════════════════════════════════════
+
+After running that, restart your dev server:
+npm run dev
+
+═══════════════════════════════════════════════════════════════
