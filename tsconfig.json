@@ -14,6 +14,8 @@
     "strict": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
+    "skipLibCheck": true,
+    "suppressImplicitAnyIndexErrors": true,
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
     "baseUrl": ".",
