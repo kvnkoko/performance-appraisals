@@ -242,7 +242,7 @@ export async function getSettings(): Promise<CompanySettings> {
 
 export async function saveSettings(settings: CompanySettings): Promise<void> {
   const database = await initDB();
-  await database.put('settings', settings);
+  await database.put('settings', { ...settings, key: 'company' } as any);
 }
 
 // Summaries
@@ -418,7 +418,12 @@ export async function importData(json: string): Promise<void> {
     }
   }
   if (data.settings) {
-    await database.put('settings', data.settings);
+    // Ensure settings have the correct key structure
+    const settingsToSave = {
+      ...data.settings,
+      key: 'company',
+    };
+    await database.put('settings', settingsToSave as any);
   }
   if (data.reviewPeriods) {
     for (const period of data.reviewPeriods) {
