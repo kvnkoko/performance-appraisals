@@ -57,6 +57,7 @@ export async function initDB(): Promise<IDBPDatabase<AppraisalDB>> {
         // Add index if it doesn't exist
         try {
           const linksStore = transaction.objectStore('links');
+          // @ts-ignore - idb library type issue
           if (!linksStore.indexNames.contains('token')) {
             // @ts-ignore - idb library type issue
             // @ts-ignore - idb library type issue
@@ -82,11 +83,13 @@ export async function initDB(): Promise<IDBPDatabase<AppraisalDB>> {
         // Add indexes if they don't exist
         try {
           const periodsStore = transaction.objectStore('reviewPeriods');
+          // @ts-ignore - idb library type issue
           if (!periodsStore.indexNames.contains('status')) {
             // @ts-ignore - idb library type issue
             // @ts-ignore - idb library type issue
             periodsStore.createIndex('status', 'status');
           }
+          // @ts-ignore - idb library type issue
           if (!periodsStore.indexNames.contains('year')) {
             // @ts-ignore - idb library type issue
             // @ts-ignore - idb library type issue
@@ -265,6 +268,7 @@ export async function getActiveReviewPeriods(): Promise<ReviewPeriod[]> {
     const store = tx.objectStore('reviewPeriods');
     
     // Check if the index exists, otherwise filter manually
+    // @ts-ignore - idb library type issue
     if (store.indexNames.contains('status')) {
       // @ts-ignore - idb library type issue
       // @ts-ignore - idb library type issue
