@@ -17,41 +17,87 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const refresh = async () => {
     try {
+      const authenticated = localStorage.getItem('authenticated');
+      if (authenticated !== 'true') {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
       const userId = localStorage.getItem('userId');
-      if (userId) {
-        const userData = await getUser(userId);
-        if (userData) {
-          setUser(userData);
-          // Update localStorage with latest user data
-          localStorage.setItem('username', userData.username);
-          localStorage.setItem('userName', userData.name);
-          localStorage.setItem('userEmail', userData.email || userData.username);
-          localStorage.setItem('userRole', userData.role);
-        } else {
-          // User not found, clear session
-          logout();
-        }
-      } else {
-        // Check if using PIN auth (legacy)
-        const authenticated = localStorage.getItem('authenticated');
-        if (authenticated === 'true') {
-          // PIN-based auth, create a temporary user object
+      if (userId && userId !== 'pin-admin') {
+        try {
+          const userData = await getUser(userId);
+          if (userData) {
+            setUser(userData);
+            // Update localStorage with latest user data
+            localStorage.setItem('username', userData.username);
+            localStorage.setItem('userName', userData.name);
+            localStorage.setItem('userEmail', userData.email || userData.username);
+            localStorage.setItem('userRole', userData.role);
+          } else {
+            // User not found in DB but authenticated - might be a new user or DB issue
+            // Don't logout, just set a temporary user object
+            const username = localStorage.getItem('username') || 'User';
+            const userRole = localStorage.getItem('userRole') || 'staff';
+            setUser({
+              id: userId,
+              username: localStorage.getItem('username') || 'user',
+              passwordHash: '',
+              name: localStorage.getItem('userName') || username,
+              email: localStorage.getItem('userEmail') || undefined,
+              role: userRole as 'admin' | 'staff',
+              active: true,
+              createdAt: new Date().toISOString(),
+            });
+          }
+        } catch (error) {
+          console.error('Error loading user from DB:', error);
+          // Don't logout on error, use localStorage data
+          const username = localStorage.getItem('username') || 'User';
+          const userRole = localStorage.getItem('userRole') || 'staff';
           setUser({
-            id: 'pin-user',
-            username: 'admin',
+            id: userId || 'temp-user',
+            username: localStorage.getItem('username') || 'user',
             passwordHash: '',
-            name: 'Administrator',
-            role: 'admin',
+            name: localStorage.getItem('userName') || username,
+            email: localStorage.getItem('userEmail') || undefined,
+            role: userRole as 'admin' | 'staff',
             active: true,
             createdAt: new Date().toISOString(),
           });
-        } else {
-          setUser(null);
         }
+      } else {
+        // PIN-based auth or no userId
+        setUser({
+          id: userId || 'pin-user',
+          username: localStorage.getItem('username') || 'admin',
+          passwordHash: '',
+          name: localStorage.getItem('userName') || 'Administrator',
+          email: localStorage.getItem('userEmail') || undefined,
+          role: (localStorage.getItem('userRole') || 'admin') as 'admin' | 'staff',
+          active: true,
+          createdAt: new Date().toISOString(),
+        });
       }
     } catch (error) {
-      console.error('Error loading user:', error);
-      setUser(null);
+      console.error('Error in refresh:', error);
+      // On error, check if authenticated and create temp user
+      const authenticated = localStorage.getItem('authenticated');
+      if (authenticated === 'true') {
+        setUser({
+          id: localStorage.getItem('userId') || 'temp-user',
+          username: localStorage.getItem('username') || 'user',
+          passwordHash: '',
+          name: localStorage.getItem('userName') || 'User',
+          email: localStorage.getItem('userEmail') || undefined,
+          role: (localStorage.getItem('userRole') || 'staff') as 'admin' | 'staff',
+          active: true,
+          createdAt: new Date().toISOString(),
+        });
+      } else {
+        setUser(null);
+      }
     } finally {
       setLoading(false);
     }

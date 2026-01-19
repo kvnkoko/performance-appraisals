@@ -73,7 +73,16 @@ export function AuthPage() {
       console.log('Password valid:', isValid);
       
       if (isValid) {
-        // Update last login - ensure user has all required fields
+        // Store user session FIRST (before any async operations)
+        localStorage.setItem('authenticated', 'true');
+        localStorage.setItem('userId', user.id);
+        localStorage.setItem('username', user.username);
+        localStorage.setItem('userName', user.name);
+        localStorage.setItem('userEmail', user.email || user.username);
+        localStorage.setItem('userRole', user.role);
+        console.log('Session stored in localStorage');
+        
+        // Update last login - ensure user has all required fields (non-blocking)
         try {
           const { saveUser } = await import('@/lib/storage');
           const updatedUser: User = {
@@ -94,22 +103,16 @@ export function AuthPage() {
           console.warn('Failed to update last login time:', error);
         }
 
-        // Store user session
-        localStorage.setItem('authenticated', 'true');
-        localStorage.setItem('userId', user.id);
-        localStorage.setItem('username', user.username);
-        localStorage.setItem('userName', user.name);
-        localStorage.setItem('userEmail', user.email || user.username);
-        localStorage.setItem('userRole', user.role);
-        
-        console.log('Session stored, navigating to dashboard...');
+        console.log('Session stored, showing toast and navigating...');
         toast({ title: 'Welcome!', description: `Successfully logged in as ${user.name}`, variant: 'success' });
         
-        // Small delay to ensure toast is shown
+        // Use window.location for more reliable navigation
         setTimeout(() => {
-          navigate('/dashboard');
-        }, 100);
+          console.log('Navigating to dashboard via window.location...');
+          window.location.href = '/dashboard';
+        }, 300);
       } else {
+        console.log('Password invalid');
         toast({ title: 'Invalid credentials', description: 'Username or password is incorrect.', variant: 'error' });
         setPassword('');
         setLoading(false);
@@ -127,27 +130,60 @@ export function AuthPage() {
 
   const handlePinSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (initializing) return;
+    e.stopPropagation();
+    
+    if (initializing || loading) {
+      console.log('PIN submission blocked: initializing=', initializing, 'loading=', loading);
+      return;
+    }
+    
+    if (!pin.trim()) {
+      toast({ title: 'Error', description: 'Please enter a PIN.', variant: 'error' });
+      return;
+    }
     
     setLoading(true);
+    console.log('Starting PIN authentication');
 
     try {
       await initDB();
-      const settings = await getSettings();
+      console.log('Database initialized for PIN');
       
-      if (pin === settings.adminPin) {
+      const settings = await getSettings();
+      console.log('Settings loaded, PIN from settings:', settings.adminPin);
+      console.log('Entered PIN:', pin);
+      
+      if (pin.trim() === settings.adminPin) {
+        console.log('PIN matches, setting authentication...');
         localStorage.setItem('authenticated', 'true');
         localStorage.setItem('userRole', 'admin');
+        localStorage.setItem('userId', 'pin-admin');
+        localStorage.setItem('username', 'admin');
+        localStorage.setItem('userName', 'Administrator');
+        localStorage.setItem('userEmail', 'admin@example.com');
+        console.log('Session stored in localStorage');
+        
+        console.log('Session stored, showing toast and navigating...');
         toast({ title: 'Welcome!', description: 'Successfully authenticated.', variant: 'success' });
-        navigate('/dashboard');
+        
+        // Use window.location for more reliable navigation
+        setTimeout(() => {
+          console.log('Navigating to dashboard via window.location...');
+          window.location.href = '/dashboard';
+        }, 300);
       } else {
+        console.log('PIN does not match');
         toast({ title: 'Invalid PIN', description: 'Please check your PIN and try again.', variant: 'error' });
         setPin('');
+        setLoading(false);
       }
     } catch (error) {
-      console.error('Auth error:', error);
-      toast({ title: 'Error', description: 'Failed to authenticate. Please try again.', variant: 'error' });
-    } finally {
+      console.error('PIN Auth error:', error);
+      toast({ 
+        title: 'Error', 
+        description: error instanceof Error ? error.message : 'Failed to authenticate. Please try again.', 
+        variant: 'error' 
+      });
       setLoading(false);
     }
   };
@@ -238,7 +274,17 @@ export function AuthPage() {
                   maxLength={10}
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={loading || !pin || initializing}>
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={loading || !pin.trim() || initializing}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (!loading && !initializing && pin.trim()) {
+                    handlePinSubmit(e as any);
+                  }
+                }}
+              >
                 {initializing ? 'Initializing...' : loading ? 'Authenticating...' : 'Access Dashboard'}
               </Button>
               <div className="text-center">
