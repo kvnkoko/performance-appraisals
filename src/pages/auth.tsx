@@ -68,7 +68,11 @@ export function AuthPage() {
       }
       
       if (!user) {
-        toast({ title: 'Invalid credentials', description: 'Username or password is incorrect.', variant: 'error' });
+        toast({ 
+          title: 'User not found', 
+          description: 'User account not found in this browser. Use PIN login (1234) to access admin, then create users.', 
+          variant: 'error' 
+        });
         setPassword('');
         setLoading(false);
         return;
@@ -223,6 +227,13 @@ export function AuthPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {authMode === 'user' && (
+            <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                <strong>Note:</strong> User accounts are stored locally in your browser. If this is a new browser or you've cleared cache, use PIN login first, then create users.
+              </p>
+            </div>
+          )}
           {authMode === 'user' ? (
             <form onSubmit={handleUserSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -310,9 +321,16 @@ export function AuthPage() {
                   Use username/password instead
                 </button>
               </div>
-              <p className="text-xs text-center text-muted-foreground">
-                Default PIN: 1234
-              </p>
+              <div className="space-y-2">
+                <p className="text-xs text-center text-muted-foreground">
+                  Default PIN: <strong>1234</strong>
+                </p>
+                <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                  <p className="text-xs text-blue-600 dark:text-blue-400 text-center">
+                    <strong>Admin Access:</strong> PIN login works in any browser. After logging in, create user accounts in the Users page.
+                  </p>
+                </div>
+              </div>
             </form>
           )}
         </CardContent>
