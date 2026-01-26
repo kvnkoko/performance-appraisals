@@ -184,7 +184,10 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
     return password;
   };
 
-  const [createdCredentials, setCreatedCredentials] = useState<{ username: string; password: string } | null>(null);
+  const [createdCredentials, setCreatedCredentials] = useState<{ userId: string; username: string; password: string; employeeId: string } | null>(null);
+  const [editableUsername, setEditableUsername] = useState('');
+  const [editablePassword, setEditablePassword] = useState('');
+  const [savingCredentials, setSavingCredentials] = useState(false);
   const [copiedField, setCopiedField] = useState<'username' | 'password' | null>(null);
 
   const copyToClipboard = async (text: string, field: 'username' | 'password') => {
@@ -286,26 +289,68 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           }
         }
         
+        // Wait a moment to ensure the user is fully saved (especially for Supabase)
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
         // Verify the user was saved correctly by reloading it
-        const savedUser = await getUserByEmployeeId(newEmployeeId);
+        let savedUser = await getUserByEmployeeId(newEmployeeId);
+        let retries = 0;
+        const maxRetries = 5;
+        
+        // Retry loading the user if not found (for Supabase async operations)
+        while (!savedUser && retries < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          savedUser = await getUserByEmployeeId(newEmployeeId);
+          retries++;
+        }
+        
+        // If still not found by employeeId, try loading by user ID
+        if (!savedUser) {
+          const { getUser } = await import('@/lib/storage');
+          savedUser = await getUser(user.id);
+        }
+        
         if (savedUser) {
           setLinkedUser(savedUser);
           // Use the saved username from the database
           username = savedUser.username;
+          
+          console.log('User created successfully:', { userId: savedUser.id, username: savedUser.username, employeeId: newEmployeeId });
+          
+          // Dispatch custom event to notify Users page to refresh
+          window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: savedUser.id, employeeId: newEmployeeId } }));
+          
+          // Show credentials to admin with editable fields
+          setCreatedCredentials({ 
+            userId: savedUser.id, 
+            username: savedUser.username, 
+            password: password,
+            employeeId: newEmployeeId
+          });
+          setEditableUsername(savedUser.username);
+          setEditablePassword(password);
         } else {
-          // If not found, set it anyway (might be a timing issue with Supabase)
+          // Last resort - use the user object we created (shouldn't happen, but handle gracefully)
+          console.warn('User not found after creation, using created user object', { userId: user.id, username: user.username });
           setLinkedUser(user);
+          
+          // Dispatch custom event to notify Users page to refresh
+          window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: user.id, employeeId: newEmployeeId } }));
+          
+          // Show credentials to admin with editable fields
+          setCreatedCredentials({ 
+            userId: user.id, 
+            username: user.username, 
+            password: password,
+            employeeId: newEmployeeId
+          });
+          setEditableUsername(user.username);
+          setEditablePassword(password);
         }
-        
-        // Dispatch custom event to notify Users page to refresh
-        window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: user.id, employeeId: newEmployeeId } }));
-        
-        // Show credentials to admin
-        setCreatedCredentials({ username, password });
         
         toast({ 
           title: 'Employee & Login Created', 
-          description: 'A login account has been created. Please share the credentials with the employee.', 
+          description: 'A login account has been created. You can edit the username and password before saving.', 
           variant: 'success' 
         });
       } else {
@@ -342,10 +387,17 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
   
   const handleClose = () => {
     setCreatedCredentials(null);
+    setEditableUsername('');
+    setEditablePassword('');
     onOpenChange(false);
   };
   
   const handleDone = async () => {
+    // Dispatch final event to ensure Users page refreshes
+    if (createdCredentials) {
+      window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: createdCredentials.userId, employeeId: createdCredentials.employeeId } }));
+    }
+    
     // Refresh employees list
     onSuccess();
     
@@ -353,7 +405,83 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
     await loadAvailableUsers();
     
     setCreatedCredentials(null);
+    setEditableUsername('');
+    setEditablePassword('');
     onOpenChange(false);
+  };
+  
+  const handleSaveCredentials = async () => {
+    if (!createdCredentials) return;
+    
+    setSavingCredentials(true);
+    try {
+      // Get the current user
+      const { getUser } = await import('@/lib/storage');
+      const currentUser = await getUser(createdCredentials.userId);
+      
+      if (!currentUser) {
+        toast({ title: 'Error', description: 'User not found.', variant: 'error' });
+        setSavingCredentials(false);
+        return;
+      }
+      
+      // Check if username changed and if new username is available
+      if (editableUsername.toLowerCase() !== currentUser.username.toLowerCase()) {
+        const { getUserByUsername } = await import('@/lib/storage');
+        const existingUser = await getUserByUsername(editableUsername);
+        if (existingUser && existingUser.id !== currentUser.id) {
+          toast({ title: 'Error', description: 'Username already exists. Please choose a different one.', variant: 'error' });
+          setSavingCredentials(false);
+          return;
+        }
+      }
+      
+      // Update user with new username and/or password
+      const updatedUser: User = {
+        ...currentUser,
+        username: editableUsername.toLowerCase().trim(),
+      };
+      
+      // Update password if changed
+      if (editablePassword.trim() && editablePassword !== createdCredentials.password) {
+        updatedUser.passwordHash = await hashPassword(editablePassword);
+        updatedUser.mustChangePassword = true; // Force password change if password was changed
+      }
+      
+      await saveUser(updatedUser);
+      
+      // Reload the user to get the latest data (reuse getUser from above)
+      const reloadedUser = await getUser(updatedUser.id);
+      
+      if (reloadedUser) {
+        // Update credentials display with saved values
+        const finalPassword = editablePassword.trim() || createdCredentials.password;
+        setCreatedCredentials({
+          ...createdCredentials,
+          username: reloadedUser.username,
+          password: finalPassword,
+        });
+        setEditableUsername(reloadedUser.username);
+        setEditablePassword(finalPassword);
+        setLinkedUser(reloadedUser);
+      }
+      
+      // Dispatch event to refresh Users page
+      window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id } }));
+      
+      // Also dispatch userCreated in case Users page hasn't loaded yet
+      window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: updatedUser.id, employeeId: createdCredentials.employeeId } }));
+      
+      // Refresh employees list to show linked user
+      onSuccess();
+      
+      toast({ title: 'Success', description: 'Credentials updated successfully.', variant: 'success' });
+    } catch (error) {
+      console.error('Error saving credentials:', error);
+      toast({ title: 'Error', description: 'Failed to save credentials.', variant: 'error' });
+    } finally {
+      setSavingCredentials(false);
+    }
   };
 
   if (!open) return null;
@@ -380,48 +508,73 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
             </div>
             
             <div className="space-y-3">
+              {(editableUsername !== createdCredentials.username || editablePassword !== createdCredentials.password) && (
+                <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-600 dark:text-blue-400">
+                  You have unsaved changes. Click "Save Credentials" to apply them.
+                </div>
+              )}
+              
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wide">Username</Label>
                 <div className="flex gap-2">
                   <Input 
-                    value={createdCredentials.username} 
-                    readOnly 
-                    className="font-mono bg-muted"
+                    value={editableUsername} 
+                    onChange={(e) => setEditableUsername(e.target.value)}
+                    className="font-mono"
+                    placeholder="Enter username"
                   />
                   <Button 
                     type="button" 
                     variant="outline" 
                     size="sm"
-                    onClick={() => copyToClipboard(createdCredentials.username, 'username')}
+                    onClick={() => copyToClipboard(editableUsername, 'username')}
+                    title="Copy username"
                   >
                     {copiedField === 'username' ? <Check size={16} /> : <Copy size={16} />}
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground">You can edit the username before saving</p>
               </div>
               
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wide">Temporary Password</Label>
                 <div className="flex gap-2">
                   <Input 
-                    value={createdCredentials.password} 
-                    readOnly 
-                    className="font-mono bg-muted"
+                    type="password"
+                    value={editablePassword} 
+                    onChange={(e) => setEditablePassword(e.target.value)}
+                    className="font-mono"
+                    placeholder="Enter password (min 6 characters)"
                   />
                   <Button 
                     type="button" 
                     variant="outline" 
                     size="sm"
-                    onClick={() => copyToClipboard(createdCredentials.password, 'password')}
+                    onClick={() => copyToClipboard(editablePassword, 'password')}
+                    title="Copy password"
                   >
                     {copiedField === 'password' ? <Check size={16} /> : <Copy size={16} />}
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground">You can edit the password before saving (minimum 6 characters)</p>
               </div>
             </div>
             
             <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button type="button" onClick={handleDone}>
-                Done
+              <Button 
+                type="button" 
+                variant="outline"
+                onClick={handleDone}
+                disabled={savingCredentials}
+              >
+                Skip & Done
+              </Button>
+              <Button 
+                type="button" 
+                onClick={handleSaveCredentials}
+                disabled={savingCredentials || !editableUsername.trim() || editablePassword.trim().length < 6}
+              >
+                {savingCredentials ? 'Saving...' : 'Save Credentials'}
               </Button>
             </div>
           </div>
