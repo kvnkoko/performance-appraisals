@@ -230,32 +230,33 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           console.log('Auto-creating user account for new employee:', { employeeId: newEmployeeId, name: data.name });
           // Generate base username
           const baseUsername = generateUsername(data.name, data.email);
-          let username = baseUsername;
           
           // Get all existing users to check for duplicates (case-insensitive)
-          const { getUsers } = await import('@/lib/storage');
+          const { getUsers, getUserByUsername } = await import('@/lib/storage');
           const allUsers = await getUsers();
           const existingUsernames = new Set(allUsers.map(u => u.username.toLowerCase()));
           
-          // Check if username already exists and make it unique if needed
-          let attempt = 1;
-          const maxAttempts = 1000; // Prevent infinite loops
-          while (existingUsernames.has(username.toLowerCase()) && attempt < maxAttempts) {
-            username = `${baseUsername}${attempt}`;
-            attempt++;
+          // Generate a guaranteed unique username using timestamp + random suffix
+          // This ensures uniqueness even if there are race conditions
+          const timestamp = Date.now().toString().slice(-8);
+          const randomSuffix = Math.random().toString(36).substring(2, 6);
+          let username = `${baseUsername}${timestamp}${randomSuffix}`.toLowerCase();
+          
+          // Verify uniqueness - if it exists, keep trying with new random suffix
+          let uniquenessCheck = await getUserByUsername(username);
+          let uniquenessAttempts = 0;
+          const maxUniquenessAttempts = 10;
+          
+          while (uniquenessCheck && uniquenessAttempts < maxUniquenessAttempts) {
+            const newRandomSuffix = Math.random().toString(36).substring(2, 8);
+            username = `${baseUsername}${Date.now().toString().slice(-8)}${newRandomSuffix}`.toLowerCase();
+            uniquenessCheck = await getUserByUsername(username);
+            uniquenessAttempts++;
           }
           
-          if (attempt >= maxAttempts) {
-            // Fallback: use timestamp to ensure uniqueness
-            username = `${baseUsername}${Date.now().toString().slice(-6)}`;
-          }
-          
-          // Double-check the final username doesn't exist
-          const finalCheck = await getUserByUsername(username);
-          if (finalCheck) {
-            // Last resort: add random suffix
-            const randomSuffix = Math.random().toString(36).substring(2, 6);
-            username = `${baseUsername}${randomSuffix}`;
+          // Final fallback: if still not unique, use UUID-like approach
+          if (uniquenessCheck) {
+            username = `${baseUsername}${Date.now()}${Math.random().toString(36).substring(2, 9)}`.toLowerCase();
           }
           
           const password = generateRandomPassword();
@@ -263,7 +264,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           
           const user: User = {
             id: generateId(),
-            username: username.toLowerCase(), // Ensure lowercase for consistency
+            username: username.toLowerCase().trim(), // Ensure lowercase and trimmed
             passwordHash,
             name: data.name,
             email: data.email || undefined,
@@ -274,26 +275,54 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
             createdAt: new Date().toISOString(),
           };
           
-          try {
-            await saveUser(user);
-          } catch (userError: any) {
-            console.error('Error saving user (first attempt):', userError);
-            // If it's a constraint error, try with a more unique username
-            if (userError?.name === 'ConstraintError' || userError?.message?.includes('unique') || userError?.message?.includes('constraint')) {
-              // Generate a completely unique username with timestamp
-              const uniqueUsername = `${baseUsername}${Date.now().toString().slice(-8)}`;
-              const retryUser: User = {
-                ...user,
-                username: uniqueUsername.toLowerCase(),
-              };
-              await saveUser(retryUser);
-              // Update the username in credentials and user object
-              username = uniqueUsername;
-              user.username = uniqueUsername.toLowerCase();
-            } else {
-              throw userError; // Re-throw if it's a different error
+          // Try saving with retry logic for constraint errors
+          let saveAttempts = 0;
+          const maxSaveAttempts = 5;
+          let saveSuccess = false;
+          let finalUsername = username;
+          
+          while (!saveSuccess && saveAttempts < maxSaveAttempts) {
+            try {
+              await saveUser(user);
+              saveSuccess = true;
+              console.log('User saved successfully:', { userId: user.id, username: user.username });
+            } catch (userError: any) {
+              saveAttempts++;
+              console.error(`Error saving user (attempt ${saveAttempts}/${maxSaveAttempts}):`, userError);
+              
+              // If it's a constraint error, generate a new unique username
+              if (userError?.name === 'ConstraintError' || userError?.message?.includes('unique') || userError?.message?.includes('constraint') || userError?.message?.includes('by-username')) {
+                // Generate a completely new unique username
+                const newTimestamp = Date.now().toString();
+                const newRandom = Math.random().toString(36).substring(2, 10);
+                finalUsername = `${baseUsername}${newTimestamp}${newRandom}`.toLowerCase().trim();
+                user.username = finalUsername;
+                
+                // Verify this new username doesn't exist
+                const verifyCheck = await getUserByUsername(finalUsername);
+                if (verifyCheck) {
+                  // If it still exists, use a more aggressive approach
+                  finalUsername = `${baseUsername}${Date.now()}${Math.random().toString(36).substring(2, 11)}`.toLowerCase().trim();
+                  user.username = finalUsername;
+                }
+                
+                if (saveAttempts < maxSaveAttempts) {
+                  // Wait a bit before retrying to avoid race conditions
+                  await new Promise(resolve => setTimeout(resolve, 100 * saveAttempts));
+                  continue; // Retry with new username
+                } else {
+                  // Max attempts reached, throw error
+                  throw new Error(`Failed to create user after ${maxSaveAttempts} attempts due to username conflicts. Please try again or create user manually.`);
+                }
+              } else {
+                // Different error, throw it
+                throw userError;
+              }
             }
           }
+          
+          // Update username variable for credentials display
+          username = finalUsername;
           
           // Wait a moment to ensure the user is fully saved (especially for Supabase)
           await new Promise(resolve => setTimeout(resolve, 300));
@@ -462,9 +491,9 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
       }
       
       // Check if username changed and if new username is available
-      if (editableUsername.toLowerCase() !== currentUser.username.toLowerCase()) {
+      if (editableUsername.toLowerCase().trim() !== currentUser.username.toLowerCase()) {
         const { getUserByUsername } = await import('@/lib/storage');
-        const existingUser = await getUserByUsername(editableUsername);
+        const existingUser = await getUserByUsername(editableUsername.toLowerCase().trim());
         if (existingUser && existingUser.id !== currentUser.id) {
           toast({ title: 'Error', description: 'Username already exists. Please choose a different one.', variant: 'error' });
           setSavingCredentials(false);
@@ -484,7 +513,51 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         updatedUser.mustChangePassword = true; // Force password change if password was changed
       }
       
-      await saveUser(updatedUser);
+      // Try saving with retry logic for constraint errors
+      let saveAttempts = 0;
+      const maxSaveAttempts = 3;
+      let saveSuccess = false;
+      
+      while (!saveSuccess && saveAttempts < maxSaveAttempts) {
+        try {
+          await saveUser(updatedUser);
+          saveSuccess = true;
+        } catch (saveError: any) {
+          saveAttempts++;
+          console.error(`Error saving credentials (attempt ${saveAttempts}/${maxSaveAttempts}):`, saveError);
+          
+          // If it's a constraint error, check if username was changed
+          if ((saveError?.name === 'ConstraintError' || saveError?.message?.includes('unique') || saveError?.message?.includes('constraint') || saveError?.message?.includes('by-username')) && 
+              editableUsername.toLowerCase().trim() !== currentUser.username.toLowerCase()) {
+            // Username conflict - check again
+            const { getUserByUsername } = await import('@/lib/storage');
+            const conflictCheck = await getUserByUsername(editableUsername.toLowerCase().trim());
+            if (conflictCheck && conflictCheck.id !== currentUser.id) {
+              toast({ 
+                title: 'Error', 
+                description: 'Username already exists. Please choose a different one.', 
+                variant: 'error' 
+              });
+              setSavingCredentials(false);
+              return;
+            }
+            
+            // If no conflict found but still error, try with a timestamp suffix
+            if (saveAttempts < maxSaveAttempts) {
+              const timestampSuffix = Date.now().toString().slice(-6);
+              updatedUser.username = `${editableUsername.toLowerCase().trim()}${timestampSuffix}`;
+              await new Promise(resolve => setTimeout(resolve, 100 * saveAttempts));
+              continue;
+            }
+          }
+          
+          // If max attempts reached or different error, throw
+          if (saveAttempts >= maxSaveAttempts) {
+            throw new Error(`Failed to save credentials after ${maxSaveAttempts} attempts. Please try again.`);
+          }
+          throw saveError;
+        }
+      }
       
       // Reload the user to get the latest data (reuse getUser from above)
       const reloadedUser = await getUser(updatedUser.id);
