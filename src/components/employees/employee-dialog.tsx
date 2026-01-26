@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { X, Info, Copy, Check } from 'phosphor-react';
+import { X, Info, Copy, Check, Eye, EyeSlash } from 'phosphor-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -191,6 +191,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
   const [editableUsername, setEditableUsername] = useState('');
   const [editablePassword, setEditablePassword] = useState('');
   const [savingCredentials, setSavingCredentials] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [copiedField, setCopiedField] = useState<'username' | 'password' | null>(null);
 
   const copyToClipboard = async (text: string, field: 'username' | 'password') => {
@@ -422,6 +423,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
     setCreatedCredentials(null);
     setEditableUsername('');
     setEditablePassword('');
+    setShowPassword(false);
     onOpenChange(false);
   };
   
@@ -440,6 +442,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
     setCreatedCredentials(null);
     setEditableUsername('');
     setEditablePassword('');
+    setShowPassword(false);
     onOpenChange(false);
   };
   
@@ -573,12 +576,21 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
                 <Label className="text-xs text-muted-foreground uppercase tracking-wide">Temporary Password</Label>
                 <div className="flex gap-2">
                   <Input 
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     value={editablePassword} 
                     onChange={(e) => setEditablePassword(e.target.value)}
                     className="font-mono"
                     placeholder="Enter password (min 6 characters)"
                   />
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setShowPassword(!showPassword)}
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeSlash size={16} /> : <Eye size={16} />}
+                  </Button>
                   <Button 
                     type="button" 
                     variant="outline" 
