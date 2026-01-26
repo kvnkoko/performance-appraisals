@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Plus, Pencil, Trash, UsersThree, MagnifyingGlass, User } from 'phosphor-react';
+import { Plus, Pencil, Trash, UsersThree, MagnifyingGlass, User, ArrowClockwise } from 'phosphor-react';
 import { TeamDialog } from '@/components/teams/team-dialog';
 import { deleteTeam } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
@@ -22,6 +22,38 @@ export function TeamsPage() {
   });
   const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Listen for team creation/update events
+    const handleTeamEvent = () => {
+      console.log('Team event received, refreshing teams list...');
+      refresh();
+    };
+    
+    // Listen for window focus to refresh when user returns to the page
+    const handleFocus = () => {
+      console.log('Window focused, refreshing teams list...');
+      refresh();
+    };
+    
+    // Poll for updates every 10 seconds (as a fallback, only when page is visible)
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        refresh();
+      }
+    }, 10000);
+    
+    window.addEventListener('teamCreated', handleTeamEvent);
+    window.addEventListener('teamUpdated', handleTeamEvent);
+    window.addEventListener('focus', handleFocus);
+    
+    return () => {
+      window.removeEventListener('teamCreated', handleTeamEvent);
+      window.removeEventListener('teamUpdated', handleTeamEvent);
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(pollInterval);
+    };
+  }, [refresh]);
 
   const handleDeleteClick = (id: string, name: string) => {
     setDeleteConfirm({ open: true, id, name });
@@ -76,14 +108,26 @@ export function TeamsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Teams</h1>
           <p className="text-muted-foreground mt-2">Organize employees into teams for reviews</p>
         </div>
-        <Button 
-          type="button" 
-          onClick={() => { setEditingTeam(null); setDialogOpen(true); }}
-          size="lg"
-        >
-          <Plus size={20} weight="duotone" className="mr-2" />
-          Create Team
-        </Button>
+        <div className="flex gap-3">
+          <Button 
+            type="button" 
+            onClick={refresh}
+            variant="outline"
+            size="lg"
+            title="Refresh teams list"
+          >
+            <ArrowClockwise size={20} weight="duotone" className="mr-2" />
+            Refresh
+          </Button>
+          <Button 
+            type="button" 
+            onClick={() => { setEditingTeam(null); setDialogOpen(true); }}
+            size="lg"
+          >
+            <Plus size={20} weight="duotone" className="mr-2" />
+            Create Team
+          </Button>
+        </div>
       </div>
 
       {/* Search */}

@@ -81,6 +81,22 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
       };
 
       await saveTeam(team);
+      
+      // Dispatch custom event to notify Teams page to refresh
+      window.dispatchEvent(new CustomEvent('teamCreated', { detail: { teamId: team.id } }));
+      window.dispatchEvent(new CustomEvent('teamUpdated', { detail: { teamId: team.id } }));
+      
+      // Also dispatch after delays to catch Teams page if it wasn't ready
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('teamCreated', { detail: { teamId: team.id } }));
+        window.dispatchEvent(new CustomEvent('teamUpdated', { detail: { teamId: team.id } }));
+      }, 500);
+      
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('teamCreated', { detail: { teamId: team.id } }));
+        window.dispatchEvent(new CustomEvent('teamUpdated', { detail: { teamId: team.id } }));
+      }, 2000);
+      
       onSuccess();
       onOpenChange(false);
       toast({ title: 'Success', description: 'Team saved successfully.', variant: 'success' });

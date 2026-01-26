@@ -634,25 +634,51 @@ export async function deleteReviewPeriod(id: string): Promise<void> {
 
 // Teams - Hybrid: Supabase (if configured) or IndexedDB (fallback)
 export async function getTeams(): Promise<Team[]> {
+  const database = await initDB();
+  let indexedDBTeams: Team[] = [];
+  
+  // Always get teams from IndexedDB as backup/cache
+  try {
+    if (database.objectStoreNames.contains('teams')) {
+      indexedDBTeams = await database.getAll('teams');
+      console.log('getTeams: Found', indexedDBTeams.length, 'teams in IndexedDB');
+    }
+  } catch (error) {
+    console.error('Error getting teams from IndexedDB:', error);
+  }
+  
+  // Try Supabase first if configured
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { getTeamsFromSupabase } = await import('./supabase-storage');
-      return await getTeamsFromSupabase();
+      const supabaseTeams = await getTeamsFromSupabase();
+      console.log('getTeams: Found', supabaseTeams.length, 'teams in Supabase');
+      
+      // Merge Supabase and IndexedDB teams, prioritizing Supabase
+      // Create a map of teams by ID to avoid duplicates
+      const teamsMap = new Map<string, Team>();
+      
+      // Add IndexedDB teams first (as backup)
+      for (const team of indexedDBTeams) {
+        teamsMap.set(team.id, team);
+      }
+      
+      // Add/override with Supabase teams (as source of truth)
+      for (const team of supabaseTeams) {
+        teamsMap.set(team.id, team);
+      }
+      
+      const mergedTeams = Array.from(teamsMap.values());
+      console.log('getTeams: Returning', mergedTeams.length, 'merged teams');
+      return mergedTeams;
     }
   } catch (error) {
-    console.log('Supabase not available, using IndexedDB fallback');
+    console.log('Supabase not available or error occurred, using IndexedDB fallback:', error);
   }
-  const database = await initDB();
-  try {
-    if (!database.objectStoreNames.contains('teams')) {
-      return [];
-    }
-    return database.getAll('teams');
-  } catch (error) {
-    console.error('Error getting teams:', error);
-    return [];
-  }
+
+  // Fallback to IndexedDB only
+  return indexedDBTeams;
 }
 
 export async function getTeam(id: string): Promise<Team | undefined> {
