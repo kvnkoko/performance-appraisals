@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { Plus, Pencil, Trash, User, Shield, UserCircle, Users, LinkSimple, LinkSimpleBreak, UsersThree } from 'phosphor-react';
+import { Plus, Pencil, Trash, User, Shield, UserCircle, Users, LinkSimple, LinkSimpleBreak, UsersThree, ArrowClockwise } from 'phosphor-react';
 import { deleteUser, getUsers, saveUser, getUserByUsername, getEmployees, getEmployee } from '@/lib/storage';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useToast } from '@/contexts/toast-context';
@@ -512,15 +512,24 @@ export function UsersPage() {
     
     // Listen for user creation/update events
     const handleUserEvent = () => {
+      console.log('User event received, refreshing users list...');
+      loadUsers();
+    };
+    
+    // Listen for window focus to refresh when user returns to the page
+    const handleFocus = () => {
+      console.log('Window focused, refreshing users list...');
       loadUsers();
     };
     
     window.addEventListener('userCreated', handleUserEvent);
     window.addEventListener('userUpdated', handleUserEvent);
+    window.addEventListener('focus', handleFocus);
     
     return () => {
       window.removeEventListener('userCreated', handleUserEvent);
       window.removeEventListener('userUpdated', handleUserEvent);
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
@@ -569,15 +578,27 @@ export function UsersPage() {
           </h1>
           <p className="text-muted-foreground mt-2">Manage user accounts and portal access</p>
         </div>
-        <Button 
-          type="button" 
-          onClick={() => { setEditingUser(null); setDialogOpen(true); }}
-          className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all"
-          size="lg"
-        >
-          <Plus size={20} weight="duotone" className="mr-2" />
-          Add New User
-        </Button>
+        <div className="flex gap-3">
+          <Button 
+            type="button" 
+            onClick={loadUsers}
+            variant="outline"
+            size="lg"
+            title="Refresh users list"
+          >
+            <ArrowClockwise size={20} weight="duotone" className="mr-2" />
+            Refresh
+          </Button>
+          <Button 
+            type="button" 
+            onClick={() => { setEditingUser(null); setDialogOpen(true); }}
+            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all"
+            size="lg"
+          >
+            <Plus size={20} weight="duotone" className="mr-2" />
+            Add New User
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}

@@ -352,8 +352,17 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
             
             console.log('User created successfully:', { userId: savedUser.id, username: savedUser.username, employeeId: newEmployeeId });
             
-            // Dispatch custom event to notify Users page to refresh
+            // Dispatch custom event to notify Users page to refresh (multiple times to ensure it's caught)
             window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: savedUser.id, employeeId: newEmployeeId } }));
+            
+            // Also dispatch after a delay to catch Users page if it wasn't ready
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: savedUser.id, employeeId: newEmployeeId } }));
+            }, 1000);
+            
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: savedUser.id, employeeId: newEmployeeId } }));
+            }, 3000);
             
             // Show credentials to admin with editable fields
             setCreatedCredentials({ 
@@ -375,8 +384,17 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
             console.warn('User not found after creation, using created user object', { userId: user.id, username: user.username });
             setLinkedUser(user);
             
-            // Dispatch custom event to notify Users page to refresh
+            // Dispatch custom event to notify Users page to refresh (multiple times to ensure it's caught)
             window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: user.id, employeeId: newEmployeeId } }));
+            
+            // Also dispatch after delays to catch Users page if it wasn't ready
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: user.id, employeeId: newEmployeeId } }));
+            }, 1000);
+            
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: user.id, employeeId: newEmployeeId } }));
+            }, 3000);
             
             // Show credentials to admin with editable fields
             setCreatedCredentials({ 
@@ -457,9 +475,18 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
   };
   
   const handleDone = async () => {
-    // Dispatch final event to ensure Users page refreshes
+    // Dispatch final event to ensure Users page refreshes (multiple times)
     if (createdCredentials) {
       window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: createdCredentials.userId, employeeId: createdCredentials.employeeId } }));
+      
+      // Dispatch again after delays to ensure Users page catches it
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: createdCredentials.userId, employeeId: createdCredentials.employeeId } }));
+      }, 500);
+      
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: createdCredentials.userId, employeeId: createdCredentials.employeeId } }));
+      }, 2000);
     }
     
     // Refresh employees list
@@ -575,11 +602,20 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         setLinkedUser(reloadedUser);
       }
       
-      // Dispatch event to refresh Users page
+      // Dispatch event to refresh Users page (multiple times to ensure it's caught)
       window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id } }));
-      
-      // Also dispatch userCreated in case Users page hasn't loaded yet
       window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: updatedUser.id, employeeId: createdCredentials.employeeId } }));
+      
+      // Also dispatch after delays to catch Users page if it wasn't ready
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id } }));
+        window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: updatedUser.id, employeeId: createdCredentials.employeeId } }));
+      }, 500);
+      
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id } }));
+        window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: updatedUser.id, employeeId: createdCredentials.employeeId } }));
+      }, 2000);
       
       // Refresh employees list to show linked user
       onSuccess();
