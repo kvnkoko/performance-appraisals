@@ -219,15 +219,34 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
       
       // Auto-create user account for new employees
       if (!employeeId) {
-        let username = generateUsername(data.name, data.email);
+        // Generate base username
+        const baseUsername = generateUsername(data.name, data.email);
+        let username = baseUsername;
+        
+        // Get all existing users to check for duplicates (case-insensitive)
+        const { getUsers } = await import('@/lib/storage');
+        const allUsers = await getUsers();
+        const existingUsernames = new Set(allUsers.map(u => u.username.toLowerCase()));
         
         // Check if username already exists and make it unique if needed
-        let existingUser = await getUserByUsername(username);
         let attempt = 1;
-        while (existingUser) {
-          username = `${generateUsername(data.name, data.email)}${attempt}`;
-          existingUser = await getUserByUsername(username);
+        const maxAttempts = 1000; // Prevent infinite loops
+        while (existingUsernames.has(username.toLowerCase()) && attempt < maxAttempts) {
+          username = `${baseUsername}${attempt}`;
           attempt++;
+        }
+        
+        if (attempt >= maxAttempts) {
+          // Fallback: use timestamp to ensure uniqueness
+          username = `${baseUsername}${Date.now().toString().slice(-6)}`;
+        }
+        
+        // Double-check the final username doesn't exist
+        const finalCheck = await getUserByUsername(username);
+        if (finalCheck) {
+          // Last resort: add random suffix
+          const randomSuffix = Math.random().toString(36).substring(2, 6);
+          username = `${baseUsername}${randomSuffix}`;
         }
         
         const password = generateRandomPassword();
@@ -235,7 +254,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         
         const user: User = {
           id: generateId(),
-          username,
+          username: username.toLowerCase(), // Ensure lowercase for consistency
           passwordHash,
           name: data.name,
           email: data.email || undefined,
@@ -246,12 +265,33 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           createdAt: new Date().toISOString(),
         };
         
-        await saveUser(user);
+        try {
+          await saveUser(user);
+        } catch (userError: any) {
+          console.error('Error saving user:', userError);
+          // If it's a constraint error, try with a more unique username
+          if (userError?.name === 'ConstraintError' || userError?.message?.includes('unique') || userError?.message?.includes('constraint')) {
+            // Generate a completely unique username with timestamp
+            const uniqueUsername = `${baseUsername}${Date.now().toString().slice(-8)}`;
+            const retryUser: User = {
+              ...user,
+              username: uniqueUsername.toLowerCase(),
+            };
+            await saveUser(retryUser);
+            // Update the username in credentials and user object
+            username = uniqueUsername;
+            user.username = uniqueUsername.toLowerCase();
+          } else {
+            throw userError; // Re-throw if it's a different error
+          }
+        }
         
         // Verify the user was saved correctly by reloading it
         const savedUser = await getUserByEmployeeId(newEmployeeId);
         if (savedUser) {
           setLinkedUser(savedUser);
+          // Use the saved username from the database
+          username = savedUser.username;
         } else {
           // If not found, set it anyway (might be a timing issue with Supabase)
           setLinkedUser(user);
@@ -281,7 +321,20 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
       }
     } catch (error) {
       console.error('Error saving employee:', error);
-      toast({ title: 'Error', description: 'Failed to save employee.', variant: 'error' });
+      // Provide more specific error messages
+      if (error instanceof Error) {
+        if (error.name === 'ConstraintError' || error.message.includes('unique') || error.message.includes('constraint')) {
+          toast({ 
+            title: 'Error', 
+            description: 'A user with a similar username already exists. Please try again or manually link an existing user.', 
+            variant: 'error' 
+          });
+        } else {
+          toast({ title: 'Error', description: `Failed to save employee: ${error.message}`, variant: 'error' });
+        }
+      } else {
+        toast({ title: 'Error', description: 'Failed to save employee. Please try again.', variant: 'error' });
+      }
     } finally {
       setLoading(false);
     }
