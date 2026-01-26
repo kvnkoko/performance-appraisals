@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Plus, Pencil, Trash, Users, MagnifyingGlass, UsersThree, UserCircle, CheckCircle } from 'phosphor-react';
+import { Plus, Pencil, Trash, Users, MagnifyingGlass, UsersThree, UserCircle, CheckCircle, ArrowClockwise } from 'phosphor-react';
 import { EmployeeDialog } from '@/components/employees/employee-dialog';
 import { HIERARCHY_LABELS } from '@/types';
 import { deleteEmployee, getUserByEmployeeId } from '@/lib/storage';
@@ -36,6 +36,35 @@ export function EmployeesPage() {
   // Load linked users for all employees
   useEffect(() => {
     const loadLinkedUsers = async () => {
+      console.log('Loading linked users for', employees.length, 'employees');
+      const usersMap: Record<string, { name: string; username: string }> = {};
+      for (const employee of employees) {
+        try {
+          const user = await getUserByEmployeeId(employee.id);
+          if (user) {
+            usersMap[employee.id] = { name: user.name, username: user.username };
+            console.log('Found linked user for employee', employee.id, ':', user.username);
+          } else {
+            console.log('No linked user found for employee', employee.id);
+          }
+        } catch (error) {
+          console.error('Error loading linked user for employee', employee.id, ':', error);
+        }
+      }
+      console.log('Loaded', Object.keys(usersMap).length, 'linked users');
+      setLinkedUsers(usersMap);
+    };
+    
+    if (employees.length > 0) {
+      loadLinkedUsers();
+    } else {
+      setLinkedUsers({});
+    }
+  }, [employees]);
+  
+  // Listen for user creation/update events to refresh linked users
+  useEffect(() => {
+    const loadLinkedUsers = async () => {
       const usersMap: Record<string, { name: string; username: string }> = {};
       for (const employee of employees) {
         try {
@@ -50,9 +79,34 @@ export function EmployeesPage() {
       setLinkedUsers(usersMap);
     };
     
-    if (employees.length > 0) {
+    const handleUserEvent = () => {
+      console.log('User event received, refreshing linked users...');
       loadLinkedUsers();
-    }
+    };
+    
+    // Listen for window focus to refresh when user returns to the page
+    const handleFocus = () => {
+      console.log('Window focused, refreshing linked users...');
+      loadLinkedUsers();
+    };
+    
+    // Poll for updates every 10 seconds (as a fallback, only when page is visible)
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadLinkedUsers();
+      }
+    }, 10000);
+    
+    window.addEventListener('userCreated', handleUserEvent);
+    window.addEventListener('userUpdated', handleUserEvent);
+    window.addEventListener('focus', handleFocus);
+    
+    return () => {
+      window.removeEventListener('userCreated', handleUserEvent);
+      window.removeEventListener('userUpdated', handleUserEvent);
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(pollInterval);
+    };
   }, [employees]);
 
   const handleDeleteClick = (id: string, name: string) => {
@@ -91,15 +145,47 @@ export function EmployeesPage() {
           </h1>
           <p className="text-muted-foreground mt-2">Manage your employee database</p>
         </div>
-        <Button 
-          type="button" 
-          onClick={() => { setEditingEmployee(null); setDialogOpen(true); }}
-          className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all"
-          size="lg"
-        >
-          <Plus size={20} weight="duotone" className="mr-2" />
-          Add Employee
-        </Button>
+        <div className="flex gap-3">
+          <Button 
+            type="button" 
+            onClick={async () => {
+              await refresh();
+              // Reload linked users after refresh
+              const loadLinkedUsers = async () => {
+                const usersMap: Record<string, { name: string; username: string }> = {};
+                const { getEmployees } = await import('@/lib/storage');
+                const updatedEmployees = await getEmployees();
+                for (const employee of updatedEmployees) {
+                  try {
+                    const user = await getUserByEmployeeId(employee.id);
+                    if (user) {
+                      usersMap[employee.id] = { name: user.name, username: user.username };
+                    }
+                  } catch (error) {
+                    // Ignore errors
+                  }
+                }
+                setLinkedUsers(usersMap);
+              };
+              loadLinkedUsers();
+            }}
+            variant="outline"
+            size="lg"
+            title="Refresh employees and linked users"
+          >
+            <ArrowClockwise size={20} weight="duotone" className="mr-2" />
+            Refresh
+          </Button>
+          <Button 
+            type="button" 
+            onClick={() => { setEditingEmployee(null); setDialogOpen(true); }}
+            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all"
+            size="lg"
+          >
+            <Plus size={20} weight="duotone" className="mr-2" />
+            Add Employee
+          </Button>
+        </div>
       </div>
 
       {/* Search */}

@@ -867,9 +867,17 @@ export async function getUserByEmployeeIdFromSupabase(employeeId: string): Promi
       .from('users')
       .select('*')
       .eq('employee_id', employeeId)
-      .single();
+      .maybeSingle(); // Use maybeSingle instead of single to handle 0 results gracefully
     
-    if (error || !data) return undefined;
+    if (error) {
+      // If error is "PGRST116" (no rows returned), that's fine - just return undefined
+      if (error.code !== 'PGRST116') {
+        console.error('Error in getUserByEmployeeIdFromSupabase:', error);
+      }
+      return undefined;
+    }
+    
+    if (!data) return undefined;
     
     return {
       id: data.id,

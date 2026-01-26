@@ -731,24 +731,41 @@ export async function deleteTeam(id: string): Promise<void> {
 
 // Get user by employee ID
 export async function getUserByEmployeeId(employeeId: string): Promise<User | undefined> {
+  const database = await initDB();
+  let indexedDBUser: User | undefined;
+  
+  // Always check IndexedDB as backup/cache
+  try {
+    if (database.objectStoreNames.contains('users')) {
+      const allUsers = await database.getAll('users');
+      indexedDBUser = allUsers.find((u) => u.employeeId === employeeId);
+      if (indexedDBUser) {
+        console.log('getUserByEmployeeId: Found user in IndexedDB:', indexedDBUser.id);
+      }
+    }
+  } catch (error) {
+    console.error('Error getting user from IndexedDB:', error);
+  }
+  
+  // Try Supabase first if configured
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { getUserByEmployeeIdFromSupabase } = await import('./supabase-storage');
-      return await getUserByEmployeeIdFromSupabase(employeeId);
+      const supabaseUser = await getUserByEmployeeIdFromSupabase(employeeId);
+      
+      if (supabaseUser) {
+        console.log('getUserByEmployeeId: Found user in Supabase:', supabaseUser.id);
+        // Supabase is source of truth, return it
+        return supabaseUser;
+      }
     }
   } catch (error) {
-    console.log('Supabase not available, using IndexedDB fallback');
+    console.log('Supabase not available or error occurred, using IndexedDB fallback:', error);
   }
-  
-  const database = await initDB();
-  try {
-    const allUsers = await database.getAll('users');
-    return allUsers.find((u) => u.employeeId === employeeId);
-  } catch (error) {
-    console.error('Error getting user by employee ID:', error);
-    return undefined;
-  }
+
+  // Fallback to IndexedDB
+  return indexedDBUser;
 }
 
 // Export/Import
