@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, ReviewPeriod, Team } from '@/types';
 import { getTemplates, getEmployees, getAppraisals, getLinks, getSettings, getReviewPeriods, getActiveReviewPeriods, getTeams } from '@/lib/storage';
 import { applyAccentColor } from '@/lib/utils';
@@ -34,7 +34,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
       // Load data with individual error handling to prevent one failure from breaking everything
       const results = await Promise.allSettled([
@@ -75,11 +75,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     refresh();
-  }, []);
+    
+    // Listen for data change events to refresh context
+    const handleDataChange = () => {
+      console.log('Data change event received, refreshing app context...');
+      refresh();
+    };
+    
+    // Listen for specific entity events
+    window.addEventListener('employeeCreated', handleDataChange);
+    window.addEventListener('employeeUpdated', handleDataChange);
+    window.addEventListener('userCreated', handleDataChange);
+    window.addEventListener('userUpdated', handleDataChange);
+    window.addEventListener('teamCreated', handleDataChange);
+    window.addEventListener('teamUpdated', handleDataChange);
+    
+    return () => {
+      window.removeEventListener('employeeCreated', handleDataChange);
+      window.removeEventListener('employeeUpdated', handleDataChange);
+      window.removeEventListener('userCreated', handleDataChange);
+      window.removeEventListener('userUpdated', handleDataChange);
+      window.removeEventListener('teamCreated', handleDataChange);
+      window.removeEventListener('teamUpdated', handleDataChange);
+    };
+  }, [refresh]);
 
   return (
     <AppContext.Provider value={{ templates, employees, appraisals, links, settings, reviewPeriods, activePeriods, teams, loading, refresh }}>

@@ -146,6 +146,22 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
       setShowEmployeeLink(false);
       setSelectedEmployeeId('');
       await loadAvailableEmployees();
+      
+      // Dispatch events to notify both Users and Employees pages to refresh
+      window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: selectedEmployeeId } }));
+      window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: selectedEmployeeId } }));
+      
+      // Also dispatch after delays to ensure pages catch it
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: selectedEmployeeId } }));
+        window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: selectedEmployeeId } }));
+      }, 500);
+      
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: selectedEmployeeId } }));
+        window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: selectedEmployeeId } }));
+      }, 2000);
+      
       toast({ title: 'Success', description: 'Employee linked to user successfully.', variant: 'success' });
       onSave(); // Refresh the list
     } catch (error) {
@@ -158,6 +174,7 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
     if (!linkedEmployee || !user) return;
     
     try {
+      const employeeId = user.employeeId;
       const updatedUser: UserType = {
         ...user,
         employeeId: undefined,
@@ -166,6 +183,28 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
       await saveUser(updatedUser);
       setLinkedEmployee(null);
       await loadAvailableEmployees();
+      
+      // Dispatch events to notify both Users and Employees pages to refresh
+      window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: undefined } }));
+      if (employeeId) {
+        window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
+      }
+      
+      // Also dispatch after delays to ensure pages catch it
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: undefined } }));
+        if (employeeId) {
+          window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
+        }
+      }, 500);
+      
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: undefined } }));
+        if (employeeId) {
+          window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
+        }
+      }, 2000);
+      
       toast({ title: 'Success', description: 'Employee unlinked from user successfully.', variant: 'success' });
       onSave(); // Refresh the list
     } catch (error) {
@@ -516,6 +555,12 @@ export function UsersPage() {
       loadUsers();
     };
     
+    // Listen for employee updates to refresh linked employees
+    const handleEmployeeEvent = () => {
+      console.log('Employee event received, refreshing users list to update linked employees...');
+      loadUsers();
+    };
+    
     // Listen for window focus to refresh when user returns to the page
     const handleFocus = () => {
       console.log('Window focused, refreshing users list...');
@@ -539,12 +584,16 @@ export function UsersPage() {
     
     window.addEventListener('userCreated', handleUserEvent);
     window.addEventListener('userUpdated', handleUserEvent);
+    window.addEventListener('employeeCreated', handleEmployeeEvent);
+    window.addEventListener('employeeUpdated', handleEmployeeEvent);
     window.addEventListener('focus', handleFocus);
     window.addEventListener('storage', handleStorage);
     
     return () => {
       window.removeEventListener('userCreated', handleUserEvent);
       window.removeEventListener('userUpdated', handleUserEvent);
+      window.removeEventListener('employeeCreated', handleEmployeeEvent);
+      window.removeEventListener('employeeUpdated', handleEmployeeEvent);
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('storage', handleStorage);
       clearInterval(pollInterval);

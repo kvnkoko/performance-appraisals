@@ -134,8 +134,23 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
       setSelectedUserId('');
       await loadAvailableUsers();
       
-      // Dispatch event to notify Users page to refresh
-      window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id } }));
+      // Dispatch events to notify both Users and Employees pages to refresh
+      window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: employeeId } }));
+      window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
+      
+      // Also dispatch after delays to ensure pages catch it
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: employeeId } }));
+        window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
+      }, 500);
+      
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: employeeId } }));
+        window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
+      }, 2000);
+      
+      // Refresh employees list
+      onSuccess();
       
       toast({ title: 'Success', description: 'User linked to employee successfully.', variant: 'success' });
     } catch (error) {
@@ -157,8 +172,23 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
       setLinkedUser(null);
       await loadAvailableUsers();
       
-      // Dispatch event to notify Users page to refresh
-      window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id } }));
+      // Dispatch events to notify both Users and Employees pages to refresh
+      window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: undefined } }));
+      window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
+      
+      // Also dispatch after delays to ensure pages catch it
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: undefined } }));
+        window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
+      }, 500);
+      
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: undefined } }));
+        window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
+      }, 2000);
+      
+      // Refresh employees list
+      onSuccess();
       
       toast({ title: 'Success', description: 'User unlinked from employee successfully.', variant: 'success' });
     } catch (error) {

@@ -84,6 +84,15 @@ export function EmployeesPage() {
       loadLinkedUsers();
     };
     
+    const handleEmployeeEvent = () => {
+      console.log('Employee event received, refreshing employees and linked users...');
+      refresh(); // Refresh employees list from context
+      // Also reload linked users after a short delay to ensure employees are refreshed
+      setTimeout(() => {
+        loadLinkedUsers();
+      }, 300);
+    };
+    
     // Listen for window focus to refresh when user returns to the page
     const handleFocus = () => {
       console.log('Window focused, refreshing linked users...');
@@ -99,15 +108,19 @@ export function EmployeesPage() {
     
     window.addEventListener('userCreated', handleUserEvent);
     window.addEventListener('userUpdated', handleUserEvent);
+    window.addEventListener('employeeCreated', handleEmployeeEvent);
+    window.addEventListener('employeeUpdated', handleEmployeeEvent);
     window.addEventListener('focus', handleFocus);
     
     return () => {
       window.removeEventListener('userCreated', handleUserEvent);
       window.removeEventListener('userUpdated', handleUserEvent);
+      window.removeEventListener('employeeCreated', handleEmployeeEvent);
+      window.removeEventListener('employeeUpdated', handleEmployeeEvent);
       window.removeEventListener('focus', handleFocus);
       clearInterval(pollInterval);
     };
-  }, [employees]);
+  }, [employees, refresh]);
 
   const handleDeleteClick = (id: string, name: string) => {
     setDeleteConfirm({ open: true, id, name });
