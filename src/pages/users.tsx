@@ -142,7 +142,22 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
       };
       
       await saveUser(updatedUser);
-      await loadLinkedEmployee();
+      
+      // Verify the user was saved correctly by reloading it
+      const { getUser } = await import('@/lib/storage');
+      const savedUser = await getUser(updatedUser.id);
+      if (savedUser && savedUser.employeeId === selectedEmployeeId) {
+        console.log('Employee link verified - employeeId persisted:', savedUser.employeeId);
+        // Update local user state
+        const updatedUserState = { ...user, employeeId: selectedEmployeeId };
+        // Reload linked employee
+        await loadLinkedEmployee();
+      } else {
+        console.warn('Employee link verification failed - reloading from storage');
+        // Force reload
+        await loadLinkedEmployee();
+      }
+      
       setShowEmployeeLink(false);
       setSelectedEmployeeId('');
       await loadAvailableEmployees();
@@ -181,7 +196,19 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
       };
       
       await saveUser(updatedUser);
-      setLinkedEmployee(null);
+      
+      // Verify the user was saved correctly by reloading it
+      const { getUser } = await import('@/lib/storage');
+      const savedUser = await getUser(updatedUser.id);
+      if (savedUser && !savedUser.employeeId) {
+        console.log('Employee unlink verified - employeeId removed');
+        setLinkedEmployee(null);
+      } else {
+        console.warn('Employee unlink verification failed - reloading from storage');
+        // Force reload
+        await loadLinkedEmployee();
+      }
+      
       await loadAvailableEmployees();
       
       // Dispatch events to notify both Users and Employees pages to refresh

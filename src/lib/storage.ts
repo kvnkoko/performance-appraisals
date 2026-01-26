@@ -221,7 +221,12 @@ export async function getTemplate(id: string): Promise<Template | undefined> {
 }
 
 export async function saveTemplate(template: Template): Promise<void> {
-  // Try Supabase first if configured
+  // ALWAYS save to IndexedDB first to ensure data persistence
+  const database = await initDB();
+  await database.put('templates', template);
+  console.log('Template saved to IndexedDB:', template.id);
+
+  // Try Supabase if configured (but don't let Supabase errors prevent IndexedDB save)
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
@@ -229,23 +234,16 @@ export async function saveTemplate(template: Template): Promise<void> {
       try {
         await saveTemplateToSupabase(template);
         console.log('Template saved to Supabase:', template.id);
-      } catch (supabaseError) {
-        console.error('Error saving template to Supabase:', supabaseError);
-        // Continue to IndexedDB fallback even if Supabase fails
+      } catch (supabaseError: any) {
+        // Log Supabase errors but don't throw - IndexedDB save already succeeded
+        console.warn('Failed to save template to Supabase (but saved to IndexedDB):', supabaseError);
+        // Don't re-throw - IndexedDB save is sufficient
       }
-      // Also save to IndexedDB as backup/cache
-      const database = await initDB();
-      await database.put('templates', template);
-      return;
     }
   } catch (error) {
-    console.log('Supabase not available, using IndexedDB fallback:', error);
+    // If Supabase import or config check fails, that's fine - IndexedDB save already succeeded
+    console.log('Supabase not available, data saved to IndexedDB only:', error);
   }
-
-  // Fallback to IndexedDB
-  const database = await initDB();
-  await database.put('templates', template);
-  console.log('Template saved to IndexedDB:', template.id);
 }
 
 export async function deleteTemplate(id: string): Promise<void> {
@@ -336,24 +334,28 @@ export async function getEmployee(id: string): Promise<Employee | undefined> {
 }
 
 export async function saveEmployee(employee: Employee): Promise<void> {
-  // Try Supabase first if configured
-  try {
-    const { isSupabaseConfigured } = await import('./supabase');
-    if (isSupabaseConfigured()) {
-      const { saveEmployeeToSupabase } = await import('./supabase-storage');
-      await saveEmployeeToSupabase(employee);
-      // Also save to IndexedDB as backup/cache
-      const database = await initDB();
-      await database.put('employees', employee);
-      return;
-    }
-  } catch (error) {
-    console.log('Supabase not available, using IndexedDB fallback');
-  }
-
-  // Fallback to IndexedDB
+  // ALWAYS save to IndexedDB first to ensure data persistence
   const database = await initDB();
   await database.put('employees', employee);
+  console.log('Employee saved to IndexedDB:', employee.id, 'teamId:', employee.teamId);
+
+  // Try Supabase if configured (but don't let Supabase errors prevent IndexedDB save)
+  try {
+    const { isSupabaseConfigured, saveEmployeeToSupabase } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      try {
+        await saveEmployeeToSupabase(employee);
+        console.log('Employee saved to Supabase:', employee.id);
+      } catch (supabaseError: any) {
+        // Log Supabase errors but don't throw - IndexedDB save already succeeded
+        console.warn('Failed to save employee to Supabase (but saved to IndexedDB):', supabaseError);
+        // Don't re-throw - IndexedDB save is sufficient
+      }
+    }
+  } catch (error) {
+    // If Supabase import or config check fails, that's fine - IndexedDB save already succeeded
+    console.log('Supabase not available, data saved to IndexedDB only:', error);
+  }
 }
 
 export async function deleteEmployee(id: string): Promise<void> {
@@ -440,20 +442,29 @@ export async function getAppraisal(id: string): Promise<Appraisal | undefined> {
 }
 
 export async function saveAppraisal(appraisal: Appraisal): Promise<void> {
+  // ALWAYS save to IndexedDB first to ensure data persistence
+  const database = await initDB();
+  await database.put('appraisals', appraisal);
+  console.log('Appraisal saved to IndexedDB:', appraisal.id);
+
+  // Try Supabase if configured (but don't let Supabase errors prevent IndexedDB save)
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { saveAppraisalToSupabase } = await import('./supabase-storage');
-      await saveAppraisalToSupabase(appraisal);
-      const database = await initDB();
-      await database.put('appraisals', appraisal);
-      return;
+      try {
+        await saveAppraisalToSupabase(appraisal);
+        console.log('Appraisal saved to Supabase:', appraisal.id);
+      } catch (supabaseError: any) {
+        // Log Supabase errors but don't throw - IndexedDB save already succeeded
+        console.warn('Failed to save appraisal to Supabase (but saved to IndexedDB):', supabaseError);
+        // Don't re-throw - IndexedDB save is sufficient
+      }
     }
   } catch (error) {
-    console.log('Supabase not available, using IndexedDB fallback');
+    // If Supabase import or config check fails, that's fine - IndexedDB save already succeeded
+    console.log('Supabase not available, data saved to IndexedDB only:', error);
   }
-  const database = await initDB();
-  await database.put('appraisals', appraisal);
 }
 
 export async function deleteAppraisal(id: string): Promise<void> {
@@ -546,20 +557,29 @@ export async function getLinkByToken(token: string): Promise<AppraisalLink | und
 }
 
 export async function saveLink(link: AppraisalLink): Promise<void> {
+  // ALWAYS save to IndexedDB first to ensure data persistence
+  const database = await initDB();
+  await database.put('links', link);
+  console.log('Link saved to IndexedDB:', link.id);
+
+  // Try Supabase if configured (but don't let Supabase errors prevent IndexedDB save)
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { saveLinkToSupabase } = await import('./supabase-storage');
-      await saveLinkToSupabase(link);
-      const database = await initDB();
-      await database.put('links', link);
-      return;
+      try {
+        await saveLinkToSupabase(link);
+        console.log('Link saved to Supabase:', link.id);
+      } catch (supabaseError: any) {
+        // Log Supabase errors but don't throw - IndexedDB save already succeeded
+        console.warn('Failed to save link to Supabase (but saved to IndexedDB):', supabaseError);
+        // Don't re-throw - IndexedDB save is sufficient
+      }
     }
   } catch (error) {
-    console.log('Supabase not available, using IndexedDB fallback');
+    // If Supabase import or config check fails, that's fine - IndexedDB save already succeeded
+    console.log('Supabase not available, data saved to IndexedDB only:', error);
   }
-  const database = await initDB();
-  await database.put('links', link);
 }
 
 export async function deleteLink(id: string): Promise<void> {
@@ -602,20 +622,29 @@ export async function getSettings(): Promise<CompanySettings> {
 }
 
 export async function saveSettings(settings: CompanySettings): Promise<void> {
+  // ALWAYS save to IndexedDB first to ensure data persistence
+  const database = await initDB();
+  await database.put('settings', { ...settings, key: 'company' } as any);
+  console.log('Settings saved to IndexedDB');
+
+  // Try Supabase if configured (but don't let Supabase errors prevent IndexedDB save)
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { saveSettingsToSupabase } = await import('./supabase-storage');
-      await saveSettingsToSupabase(settings);
-      const database = await initDB();
-      await database.put('settings', { ...settings, key: 'company' } as any);
-      return;
+      try {
+        await saveSettingsToSupabase(settings);
+        console.log('Settings saved to Supabase');
+      } catch (supabaseError: any) {
+        // Log Supabase errors but don't throw - IndexedDB save already succeeded
+        console.warn('Failed to save settings to Supabase (but saved to IndexedDB):', supabaseError);
+        // Don't re-throw - IndexedDB save is sufficient
+      }
     }
   } catch (error) {
-    console.log('Supabase not available, using IndexedDB fallback');
+    // If Supabase import or config check fails, that's fine - IndexedDB save already succeeded
+    console.log('Supabase not available, data saved to IndexedDB only:', error);
   }
-  const database = await initDB();
-  await database.put('settings', { ...settings, key: 'company' } as any);
 }
 
 // Summaries - Hybrid: Supabase (if configured) or IndexedDB (fallback)
@@ -742,20 +771,29 @@ export async function getActiveReviewPeriods(): Promise<ReviewPeriod[]> {
 }
 
 export async function saveReviewPeriod(period: ReviewPeriod): Promise<void> {
+  // ALWAYS save to IndexedDB first to ensure data persistence
+  const database = await initDB();
+  await database.put('reviewPeriods', period);
+  console.log('Review period saved to IndexedDB:', period.id);
+
+  // Try Supabase if configured (but don't let Supabase errors prevent IndexedDB save)
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { saveReviewPeriodToSupabase } = await import('./supabase-storage');
-      await saveReviewPeriodToSupabase(period);
-      const database = await initDB();
-      await database.put('reviewPeriods', period);
-      return;
+      try {
+        await saveReviewPeriodToSupabase(period);
+        console.log('Review period saved to Supabase:', period.id);
+      } catch (supabaseError: any) {
+        // Log Supabase errors but don't throw - IndexedDB save already succeeded
+        console.warn('Failed to save review period to Supabase (but saved to IndexedDB):', supabaseError);
+        // Don't re-throw - IndexedDB save is sufficient
+      }
     }
   } catch (error) {
-    console.log('Supabase not available, using IndexedDB fallback');
+    // If Supabase import or config check fails, that's fine - IndexedDB save already succeeded
+    console.log('Supabase not available, data saved to IndexedDB only:', error);
   }
-  const database = await initDB();
-  await database.put('reviewPeriods', period);
 }
 
 export async function deleteReviewPeriod(id: string): Promise<void> {
@@ -839,20 +877,29 @@ export async function getTeam(id: string): Promise<Team | undefined> {
 }
 
 export async function saveTeam(team: Team): Promise<void> {
+  // ALWAYS save to IndexedDB first to ensure data persistence
+  const database = await initDB();
+  await database.put('teams', team);
+  console.log('Team saved to IndexedDB:', team.id);
+
+  // Try Supabase if configured (but don't let Supabase errors prevent IndexedDB save)
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { saveTeamToSupabase } = await import('./supabase-storage');
-      await saveTeamToSupabase(team);
-      const database = await initDB();
-      await database.put('teams', team);
-      return;
+      try {
+        await saveTeamToSupabase(team);
+        console.log('Team saved to Supabase:', team.id);
+      } catch (supabaseError: any) {
+        // Log Supabase errors but don't throw - IndexedDB save already succeeded
+        console.warn('Failed to save team to Supabase (but saved to IndexedDB):', supabaseError);
+        // Don't re-throw - IndexedDB save is sufficient
+      }
     }
   } catch (error) {
-    console.log('Supabase not available, using IndexedDB fallback');
+    // If Supabase import or config check fails, that's fine - IndexedDB save already succeeded
+    console.log('Supabase not available, data saved to IndexedDB only:', error);
   }
-  const database = await initDB();
-  await database.put('teams', team);
 }
 
 export async function deleteTeam(id: string): Promise<void> {
@@ -1097,23 +1144,32 @@ export async function saveUser(user: User): Promise<void> {
     lastLoginAt: user.lastLoginAt,
   };
 
-  // Try Supabase first if configured
+  // ALWAYS save to IndexedDB first to ensure data persistence
+  const database = await initDB();
+  await database.put('users', userToSave);
+  console.log('User saved to IndexedDB:', userToSave.id, 'employeeId:', userToSave.employeeId);
+
+  // Try Supabase if configured (but don't let Supabase errors prevent IndexedDB save)
   try {
     const { isSupabaseConfigured, saveUserToSupabase } = await import('./supabase');
     if (isSupabaseConfigured()) {
-      await saveUserToSupabase(userToSave);
-      // Also save to IndexedDB as backup/cache
-      const database = await initDB();
-      await database.put('users', userToSave);
-      return;
+      try {
+        await saveUserToSupabase(userToSave);
+        console.log('User saved to Supabase:', userToSave.id);
+      } catch (supabaseError: any) {
+        // Log Supabase errors but don't throw - IndexedDB save already succeeded
+        console.warn('Failed to save user to Supabase (but saved to IndexedDB):', supabaseError);
+        // Check if it's a schema error (column doesn't exist)
+        if (supabaseError?.message?.includes('does not exist') || supabaseError?.code === '42703') {
+          console.error('Supabase schema error - employee_id column may not exist. Data saved to IndexedDB only.');
+        }
+        // Don't re-throw - IndexedDB save is sufficient
+      }
     }
   } catch (error) {
-    console.log('Supabase not available, using IndexedDB fallback');
+    // If Supabase import or config check fails, that's fine - IndexedDB save already succeeded
+    console.log('Supabase not available, data saved to IndexedDB only:', error);
   }
-
-  // Fallback to IndexedDB
-  const database = await initDB();
-  await database.put('users', userToSave);
 }
 
 export async function deleteUser(id: string): Promise<void> {
