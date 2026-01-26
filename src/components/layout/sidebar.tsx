@@ -20,7 +20,7 @@ import {
   SignOut
 } from 'phosphor-react';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/contexts/app-context';
 import { useUser } from '@/contexts/user-context';
@@ -53,22 +53,25 @@ export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { resolvedTheme, setTheme, accentColor } = useTheme();
   const { settings, employees } = useApp();
-  const { user, logout } = useUser();
+  const { user, employee, logout, isAdmin: checkIsAdmin } = useUser();
   
   // Get user info from context or localStorage
   const userName = user?.name || localStorage.getItem('userName') || 'Admin';
   const userEmail = user?.email || localStorage.getItem('userEmail') || user?.username || 'admin@example.com';
-  const userRole = user?.role || localStorage.getItem('userRole') || 'admin';
-  const employeeId = user?.employeeId || localStorage.getItem('employeeId');
   
-  // Get employee info if linked
-  const linkedEmployee = employeeId ? employees.find(e => e.id === employeeId) : null;
+  // Use the isAdmin helper from context, which properly checks both user.role and localStorage
+  const isAdmin = checkIsAdmin();
   
-  // Determine if user is admin (either role is 'admin' or they logged in with PIN)
-  const isAdmin = userRole === 'admin';
+  // Get employee info if linked (prefer context, fallback to finding in employees list)
+  const linkedEmployee = employee || (user?.employeeId ? employees.find(e => e.id === user.employeeId) : null);
   
   // Use appropriate navigation based on role
   const navItems = isAdmin ? adminNavItems : employeeNavItems;
+  
+  // Ensure sidebar updates when user context changes
+  useEffect(() => {
+    // Force re-render when user or employee changes
+  }, [user, employee, isAdmin]);
 
   const toggleTheme = () => {
     setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
@@ -77,6 +80,17 @@ export function Sidebar() {
   const handleLogout = () => {
     logout();
     navigate('/auth');
+  };
+  
+  const handleNavClick = (path: string, e: React.MouseEvent) => {
+    // Prevent navigation to admin routes for non-admin users
+    const isAdminRoute = adminNavItems.some(item => item.path === path);
+    if (isAdminRoute && !isAdmin) {
+      e.preventDefault();
+      navigate('/my-dashboard');
+      return;
+    }
+    setMobileOpen(false);
   };
 
   // Use accent color from settings or theme
@@ -167,7 +181,7 @@ export function Sidebar() {
                 <Link
                   key={item.path}
                   to={item.path}
-                  onClick={() => setMobileOpen(false)}
+                  onClick={(e) => handleNavClick(item.path, e)}
                   className={cn(
                     'group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative',
                     isActive

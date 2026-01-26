@@ -41,7 +41,13 @@ function PrivateRoute({ children }: { children: React.ReactElement }) {
 
 // Admin-only route wrapper
 function AdminRoute({ children }: { children: React.ReactElement }) {
-  const userRole = localStorage.getItem('userRole');
+  const { user, loading } = useUser();
+  
+  if (loading) {
+    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  }
+  
+  const userRole = user?.role || localStorage.getItem('userRole');
   
   if (userRole !== 'admin') {
     return <Navigate to="/my-dashboard" replace />;
@@ -133,6 +139,9 @@ function App() {
                         
                         {/* Smart redirect based on role */}
                         <Route path="/" element={<RoleBasedRedirect />} />
+                        
+                        {/* Catch-all route for unmatched paths */}
+                        <Route path="*" element={<RoleBasedRedirect />} />
                       </Routes>
                     </MainLayout>
                   </PrivateRoute>
