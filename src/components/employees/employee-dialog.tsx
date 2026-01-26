@@ -352,17 +352,29 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
             
             console.log('User created successfully:', { userId: savedUser.id, username: savedUser.username, employeeId: newEmployeeId });
             
+            // Verify user exists in database by fetching all users
+            const { getUsers } = await import('@/lib/storage');
+            const allUsers = await getUsers();
+            const userExists = allUsers.some(u => u.id === savedUser.id);
+            console.log('User verification:', { userId: savedUser.id, exists: userExists, totalUsers: allUsers.length });
+            
             // Dispatch custom event to notify Users page to refresh (multiple times to ensure it's caught)
             window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: savedUser.id, employeeId: newEmployeeId } }));
             
-            // Also dispatch after a delay to catch Users page if it wasn't ready
+            // Also dispatch after delays to catch Users page if it wasn't ready
             setTimeout(() => {
               window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: savedUser.id, employeeId: newEmployeeId } }));
+              // Also trigger a storage event as backup
+              window.dispatchEvent(new StorageEvent('storage', { key: 'users-updated' }));
             }, 1000);
             
             setTimeout(() => {
               window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: savedUser.id, employeeId: newEmployeeId } }));
             }, 3000);
+            
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: savedUser.id, employeeId: newEmployeeId } }));
+            }, 5000);
             
             // Show credentials to admin with editable fields
             setCreatedCredentials({ 

@@ -522,14 +522,32 @@ export function UsersPage() {
       loadUsers();
     };
     
+    // Listen for storage events as backup
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'users-updated') {
+        console.log('Storage event received, refreshing users list...');
+        loadUsers();
+      }
+    };
+    
+    // Poll for updates every 10 seconds (as a fallback, only when page is visible)
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadUsers();
+      }
+    }, 10000);
+    
     window.addEventListener('userCreated', handleUserEvent);
     window.addEventListener('userUpdated', handleUserEvent);
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('storage', handleStorage);
     
     return () => {
       window.removeEventListener('userCreated', handleUserEvent);
       window.removeEventListener('userUpdated', handleUserEvent);
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', handleStorage);
+      clearInterval(pollInterval);
     };
   }, []);
 

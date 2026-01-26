@@ -754,33 +754,50 @@ export async function exportData(): Promise<string> {
 
 // Users - Hybrid: Supabase (if configured) or IndexedDB (fallback)
 export async function getUsers(): Promise<User[]> {
+  const database = await initDB();
+  let indexedDBUsers: User[] = [];
+  
+  // Always get users from IndexedDB as backup/cache
+  try {
+    if (database.objectStoreNames.contains('users')) {
+      indexedDBUsers = await database.getAll('users');
+      console.log('getUsers: Found', indexedDBUsers.length, 'users in IndexedDB');
+    }
+  } catch (error) {
+    console.error('Error getting users from IndexedDB:', error);
+  }
+  
   // Try Supabase first if configured
   try {
     const { isSupabaseConfigured, getUsersFromSupabase } = await import('./supabase');
     if (isSupabaseConfigured()) {
-      const users = await getUsersFromSupabase();
-      if (users.length > 0 || isSupabaseConfigured()) {
-        return users;
+      const supabaseUsers = await getUsersFromSupabase();
+      console.log('getUsers: Found', supabaseUsers.length, 'users in Supabase');
+      
+      // Merge Supabase and IndexedDB users, prioritizing Supabase
+      // Create a map of users by ID to avoid duplicates
+      const usersMap = new Map<string, User>();
+      
+      // Add IndexedDB users first (as backup)
+      for (const user of indexedDBUsers) {
+        usersMap.set(user.id, user);
       }
+      
+      // Add/override with Supabase users (as source of truth)
+      for (const user of supabaseUsers) {
+        usersMap.set(user.id, user);
+      }
+      
+      const mergedUsers = Array.from(usersMap.values());
+      console.log('getUsers: Returning', mergedUsers.length, 'merged users');
+      return mergedUsers;
     }
   } catch (error) {
-    console.log('Supabase not available, using IndexedDB fallback');
+    console.log('Supabase not available or error occurred, using IndexedDB fallback:', error);
   }
 
-  // Fallback to IndexedDB
-  const database = await initDB();
-  try {
-    if (!database.objectStoreNames.contains('users')) {
-      console.log('Users store does not exist in getUsers');
-      return [];
-    }
-    const users = await database.getAll('users');
-    console.log('getUsers: Found', users.length, 'users');
-    return users;
-  } catch (error) {
-    console.error('Error getting users:', error);
-    return [];
-  }
+  // Fallback to IndexedDB only
+  return indexedDBUsers;
 }
 
 export async function getUser(id: string): Promise<User | undefined> {
