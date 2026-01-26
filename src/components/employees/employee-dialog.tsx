@@ -39,6 +39,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [showUserLink, setShowUserLink] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [autoCreateUser, setAutoCreateUser] = useState(true); // Default to auto-create for new employees
 
   const {
     register,
@@ -62,6 +63,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
   useEffect(() => {
     if (open && employeeId) {
       loadEmployee();
+      setAutoCreateUser(false); // Don't auto-create for existing employees
     } else if (open && !employeeId) {
       reset({
         name: '',
@@ -72,6 +74,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
       });
       setLinkedUser(null);
       setShowUserLink(false);
+      setAutoCreateUser(true); // Auto-create for new employees by default
     }
     // Load available users when dialog opens
     if (open) {
@@ -220,144 +223,174 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
 
       await saveEmployee(employee);
       
-      // Auto-create user account for new employees
-      if (!employeeId) {
-        // Generate base username
-        const baseUsername = generateUsername(data.name, data.email);
-        let username = baseUsername;
-        
-        // Get all existing users to check for duplicates (case-insensitive)
-        const { getUsers } = await import('@/lib/storage');
-        const allUsers = await getUsers();
-        const existingUsernames = new Set(allUsers.map(u => u.username.toLowerCase()));
-        
-        // Check if username already exists and make it unique if needed
-        let attempt = 1;
-        const maxAttempts = 1000; // Prevent infinite loops
-        while (existingUsernames.has(username.toLowerCase()) && attempt < maxAttempts) {
-          username = `${baseUsername}${attempt}`;
-          attempt++;
-        }
-        
-        if (attempt >= maxAttempts) {
-          // Fallback: use timestamp to ensure uniqueness
-          username = `${baseUsername}${Date.now().toString().slice(-6)}`;
-        }
-        
-        // Double-check the final username doesn't exist
-        const finalCheck = await getUserByUsername(username);
-        if (finalCheck) {
-          // Last resort: add random suffix
-          const randomSuffix = Math.random().toString(36).substring(2, 6);
-          username = `${baseUsername}${randomSuffix}`;
-        }
-        
-        const password = generateRandomPassword();
-        const passwordHash = await hashPassword(password);
-        
-        const user: User = {
-          id: generateId(),
-          username: username.toLowerCase(), // Ensure lowercase for consistency
-          passwordHash,
-          name: data.name,
-          email: data.email || undefined,
-          role: 'staff', // All employees get staff role
-          active: true,
-          employeeId: newEmployeeId,
-          mustChangePassword: true, // Force password change on first login
-          createdAt: new Date().toISOString(),
-        };
-        
+      // Auto-create user account for new employees (unless user opted out)
+      if (!employeeId && autoCreateUser) {
         try {
-          await saveUser(user);
-        } catch (userError: any) {
-          console.error('Error saving user:', userError);
-          // If it's a constraint error, try with a more unique username
-          if (userError?.name === 'ConstraintError' || userError?.message?.includes('unique') || userError?.message?.includes('constraint')) {
-            // Generate a completely unique username with timestamp
-            const uniqueUsername = `${baseUsername}${Date.now().toString().slice(-8)}`;
-            const retryUser: User = {
-              ...user,
-              username: uniqueUsername.toLowerCase(),
-            };
-            await saveUser(retryUser);
-            // Update the username in credentials and user object
-            username = uniqueUsername;
-            user.username = uniqueUsername.toLowerCase();
-          } else {
-            throw userError; // Re-throw if it's a different error
+          console.log('Auto-creating user account for new employee:', { employeeId: newEmployeeId, name: data.name });
+          // Generate base username
+          const baseUsername = generateUsername(data.name, data.email);
+          let username = baseUsername;
+          
+          // Get all existing users to check for duplicates (case-insensitive)
+          const { getUsers } = await import('@/lib/storage');
+          const allUsers = await getUsers();
+          const existingUsernames = new Set(allUsers.map(u => u.username.toLowerCase()));
+          
+          // Check if username already exists and make it unique if needed
+          let attempt = 1;
+          const maxAttempts = 1000; // Prevent infinite loops
+          while (existingUsernames.has(username.toLowerCase()) && attempt < maxAttempts) {
+            username = `${baseUsername}${attempt}`;
+            attempt++;
           }
-        }
-        
-        // Wait a moment to ensure the user is fully saved (especially for Supabase)
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        // Verify the user was saved correctly by reloading it
-        let savedUser = await getUserByEmployeeId(newEmployeeId);
-        let retries = 0;
-        const maxRetries = 5;
-        
-        // Retry loading the user if not found (for Supabase async operations)
-        while (!savedUser && retries < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-          savedUser = await getUserByEmployeeId(newEmployeeId);
-          retries++;
-        }
-        
-        // If still not found by employeeId, try loading by user ID
-        if (!savedUser) {
-          const { getUser } = await import('@/lib/storage');
-          savedUser = await getUser(user.id);
-        }
-        
-        if (savedUser) {
-          setLinkedUser(savedUser);
-          // Use the saved username from the database
-          username = savedUser.username;
           
-          console.log('User created successfully:', { userId: savedUser.id, username: savedUser.username, employeeId: newEmployeeId });
+          if (attempt >= maxAttempts) {
+            // Fallback: use timestamp to ensure uniqueness
+            username = `${baseUsername}${Date.now().toString().slice(-6)}`;
+          }
           
-          // Dispatch custom event to notify Users page to refresh
-          window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: savedUser.id, employeeId: newEmployeeId } }));
+          // Double-check the final username doesn't exist
+          const finalCheck = await getUserByUsername(username);
+          if (finalCheck) {
+            // Last resort: add random suffix
+            const randomSuffix = Math.random().toString(36).substring(2, 6);
+            username = `${baseUsername}${randomSuffix}`;
+          }
           
-          // Show credentials to admin with editable fields
-          setCreatedCredentials({ 
-            userId: savedUser.id, 
-            username: savedUser.username, 
-            password: password,
-            employeeId: newEmployeeId
+          const password = generateRandomPassword();
+          const passwordHash = await hashPassword(password);
+          
+          const user: User = {
+            id: generateId(),
+            username: username.toLowerCase(), // Ensure lowercase for consistency
+            passwordHash,
+            name: data.name,
+            email: data.email || undefined,
+            role: 'staff', // All employees get staff role
+            active: true,
+            employeeId: newEmployeeId,
+            mustChangePassword: true, // Force password change on first login
+            createdAt: new Date().toISOString(),
+          };
+          
+          try {
+            await saveUser(user);
+          } catch (userError: any) {
+            console.error('Error saving user (first attempt):', userError);
+            // If it's a constraint error, try with a more unique username
+            if (userError?.name === 'ConstraintError' || userError?.message?.includes('unique') || userError?.message?.includes('constraint')) {
+              // Generate a completely unique username with timestamp
+              const uniqueUsername = `${baseUsername}${Date.now().toString().slice(-8)}`;
+              const retryUser: User = {
+                ...user,
+                username: uniqueUsername.toLowerCase(),
+              };
+              await saveUser(retryUser);
+              // Update the username in credentials and user object
+              username = uniqueUsername;
+              user.username = uniqueUsername.toLowerCase();
+            } else {
+              throw userError; // Re-throw if it's a different error
+            }
+          }
+          
+          // Wait a moment to ensure the user is fully saved (especially for Supabase)
+          await new Promise(resolve => setTimeout(resolve, 300));
+          
+          // Verify the user was saved correctly by reloading it
+          let savedUser = await getUserByEmployeeId(newEmployeeId);
+          let retries = 0;
+          const maxRetries = 5;
+          
+          // Retry loading the user if not found (for Supabase async operations)
+          while (!savedUser && retries < maxRetries) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            savedUser = await getUserByEmployeeId(newEmployeeId);
+            retries++;
+          }
+          
+          // If still not found by employeeId, try loading by user ID
+          if (!savedUser) {
+            const { getUser } = await import('@/lib/storage');
+            savedUser = await getUser(user.id);
+          }
+          
+          if (savedUser) {
+            setLinkedUser(savedUser);
+            // Use the saved username from the database
+            username = savedUser.username;
+            
+            console.log('User created successfully:', { userId: savedUser.id, username: savedUser.username, employeeId: newEmployeeId });
+            
+            // Dispatch custom event to notify Users page to refresh
+            window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: savedUser.id, employeeId: newEmployeeId } }));
+            
+            // Show credentials to admin with editable fields
+            setCreatedCredentials({ 
+              userId: savedUser.id, 
+              username: savedUser.username, 
+              password: password,
+              employeeId: newEmployeeId
+            });
+            setEditableUsername(savedUser.username);
+            setEditablePassword(password);
+            
+            toast({ 
+              title: 'Employee & Login Created', 
+              description: 'A login account has been created. You can edit the username and password before saving.', 
+              variant: 'success' 
+            });
+          } else {
+            // Last resort - use the user object we created (shouldn't happen, but handle gracefully)
+            console.warn('User not found after creation, using created user object', { userId: user.id, username: user.username });
+            setLinkedUser(user);
+            
+            // Dispatch custom event to notify Users page to refresh
+            window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: user.id, employeeId: newEmployeeId } }));
+            
+            // Show credentials to admin with editable fields
+            setCreatedCredentials({ 
+              userId: user.id, 
+              username: user.username, 
+              password: password,
+              employeeId: newEmployeeId
+            });
+            setEditableUsername(user.username);
+            setEditablePassword(password);
+            
+            toast({ 
+              title: 'Employee & Login Created', 
+              description: 'A login account has been created. You can edit the username and password before saving.', 
+              variant: 'success' 
+            });
+          }
+        } catch (userCreationError: any) {
+          // If user creation fails, still save the employee but show a warning
+          console.error('Failed to auto-create user account:', userCreationError);
+          toast({ 
+            title: 'Employee Created', 
+            description: 'Employee saved successfully, but user account creation failed. You can manually link a user account later.', 
+            variant: 'default' 
           });
-          setEditableUsername(savedUser.username);
-          setEditablePassword(password);
-        } else {
-          // Last resort - use the user object we created (shouldn't happen, but handle gracefully)
-          console.warn('User not found after creation, using created user object', { userId: user.id, username: user.username });
-          setLinkedUser(user);
-          
-          // Dispatch custom event to notify Users page to refresh
-          window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: user.id, employeeId: newEmployeeId } }));
-          
-          // Show credentials to admin with editable fields
-          setCreatedCredentials({ 
-            userId: user.id, 
-            username: user.username, 
-            password: password,
-            employeeId: newEmployeeId
-          });
-          setEditableUsername(user.username);
-          setEditablePassword(password);
+          // Refresh employees list
+          onSuccess();
+          onOpenChange(false);
         }
-        
-        toast({ 
-          title: 'Employee & Login Created', 
-          description: 'A login account has been created. You can edit the username and password before saving.', 
-          variant: 'success' 
-        });
       } else {
-        // Editing existing employee - refresh and close
+        // Editing existing employee OR new employee with auto-create disabled
+        if (!employeeId && !autoCreateUser) {
+          // New employee but auto-create disabled - just save employee
+          toast({ 
+            title: 'Employee Created', 
+            description: 'Employee saved successfully. You can link a user account manually.', 
+            variant: 'success' 
+          });
+        } else {
+          // Editing existing employee - refresh and close
+          toast({ title: 'Success', description: 'Employee updated successfully.', variant: 'success' });
+        }
         onSuccess();
         onOpenChange(false);
-        toast({ title: 'Success', description: 'Employee updated successfully.', variant: 'success' });
         // Reload linked user in case it changed
         if (employeeId) {
           const user = await getUserByEmployeeId(employeeId);
@@ -645,97 +678,156 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
             </div>
           )}
 
-          {/* User Account Linking Section */}
-          {employeeId && (
-            <div className="space-y-3 pt-4 border-t">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-semibold flex items-center gap-2">
-                  <UserCircle size={18} weight="duotone" />
-                  User Account
-                </Label>
-                {!linkedUser && !showUserLink && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowUserLink(true)}
-                  >
-                    <LinkSimple size={16} className="mr-1.5" />
-                    Link User
-                  </Button>
-                )}
-              </div>
-              
-              {linkedUser ? (
-                <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded bg-green-500/20">
-                        <UserCircle size={16} weight="duotone" className="text-green-600" />
+          {/* User Account Section - Different UI for new vs existing employees */}
+          <div className="space-y-3 pt-4 border-t">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-semibold flex items-center gap-2">
+                <UserCircle size={18} weight="duotone" />
+                User Account
+              </Label>
+            </div>
+            
+            {employeeId ? (
+              // Existing employee - show linking options
+              <>
+                {linkedUser ? (
+                  <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 rounded bg-green-500/20">
+                          <UserCircle size={16} weight="duotone" className="text-green-600" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium">{linkedUser.name}</div>
+                          <div className="text-xs text-muted-foreground">@{linkedUser.username}</div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="text-sm font-medium">{linkedUser.name}</div>
-                        <div className="text-xs text-muted-foreground">@{linkedUser.username}</div>
-                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleUnlinkUser}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-500/10"
+                      >
+                        <LinkSimpleBreak size={16} />
+                      </Button>
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleUnlinkUser}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-500/10"
-                    >
-                      <LinkSimpleBreak size={16} />
-                    </Button>
                   </div>
-                </div>
-              ) : showUserLink ? (
-                <div className="space-y-2 p-3 rounded-lg bg-muted/50 border">
-                  <Select
-                    value={selectedUserId}
-                    onChange={(e) => setSelectedUserId(e.target.value)}
-                  >
-                    <option value="">Select a user to link...</option>
-                    {availableUsers.map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.name} (@{user.username})
-                      </option>
-                    ))}
-                  </Select>
-                  {availableUsers.length === 0 && (
+                ) : showUserLink ? (
+                  <div className="space-y-2 p-3 rounded-lg bg-muted/50 border">
+                    <Select
+                      value={selectedUserId}
+                      onChange={(e) => setSelectedUserId(e.target.value)}
+                    >
+                      <option value="">Select a user to link...</option>
+                      {availableUsers.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.name} (@{user.username})
+                        </option>
+                      ))}
+                    </Select>
+                    {availableUsers.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        No available users to link. Create a user account first.
+                      </p>
+                    )}
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowUserLink(false);
+                          setSelectedUserId('');
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleLinkUser}
+                        disabled={!selectedUserId}
+                      >
+                        Link User
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
                     <p className="text-xs text-muted-foreground">
-                      No available users to link. Create a user account first.
+                      No user account linked. Link an existing user below.
                     </p>
-                  )}
-                  <div className="flex gap-2">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        setShowUserLink(false);
-                        setSelectedUserId('');
-                      }}
+                      onClick={() => setShowUserLink(true)}
                     >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={handleLinkUser}
-                      disabled={!selectedUserId}
-                    >
+                      <LinkSimple size={16} className="mr-1.5" />
                       Link User
                     </Button>
                   </div>
+                )}
+              </>
+            ) : (
+              // New employee - show auto-create option
+              <div className="space-y-3 p-4 rounded-lg bg-blue-500/5 border border-blue-500/20">
+                <div className="flex items-start gap-3">
+                  <div className="p-1.5 rounded bg-blue-500/20 mt-0.5">
+                    <UserCircle size={18} weight="duotone" className="text-blue-600" />
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                          Auto-create Login Account
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          A user account will be automatically created with login credentials
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={autoCreateUser}
+                          onChange={(e) => setAutoCreateUser(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                    {autoCreateUser && (
+                      <div className="mt-2 p-2 rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                        <div className="flex items-start gap-2">
+                          <Info size={16} weight="duotone" className="text-blue-600 mt-0.5 flex-shrink-0" />
+                          <div className="text-xs text-blue-800 dark:text-blue-200">
+                            <p className="font-medium">What happens:</p>
+                            <ul className="mt-1 space-y-0.5 list-disc list-inside">
+                              <li>Username will be auto-generated from name/email</li>
+                              <li>A secure temporary password will be created</li>
+                              <li>You'll be able to edit credentials before saving</li>
+                              <li>Employee will be required to change password on first login</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {!autoCreateUser && (
+                      <div className="mt-2 p-2 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                        <div className="flex items-start gap-2">
+                          <Info size={16} weight="duotone" className="text-amber-600 mt-0.5 flex-shrink-0" />
+                          <p className="text-xs text-amber-800 dark:text-amber-200">
+                            You can manually link a user account after creating the employee.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  No user account linked. Link an existing user or create a new one when saving.
-                </p>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
 
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="ghost" onClick={handleClose}>
