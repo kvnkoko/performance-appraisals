@@ -14,7 +14,6 @@
     "strict": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "suppressImplicitAnyIndexErrors": true,
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {

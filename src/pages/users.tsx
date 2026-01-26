@@ -4,16 +4,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { Plus, Pencil, Trash, User, Shield, UserCircle, Users } from 'phosphor-react';
-import { deleteUser, getUsers, saveUser, getUserByUsername } from '@/lib/storage';
+import { Plus, Pencil, Trash, User, Shield, UserCircle, Users, LinkSimple, LinkSimpleBreak, UsersThree } from 'phosphor-react';
+import { deleteUser, getUsers, saveUser, getUserByUsername, getEmployees, getEmployee } from '@/lib/storage';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useToast } from '@/contexts/toast-context';
 import { formatDate } from '@/lib/utils';
 import { generateId, hashPassword } from '@/lib/utils';
-import type { User as UserType } from '@/types';
+import type { User as UserType, Employee } from '@/types';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useApp } from '@/contexts/app-context';
 
 const userSchema = z.object({
   username: z.string().min(3, 'Username must be at least 3 characters').max(50, 'Username must be less than 50 characters'),
@@ -35,6 +36,12 @@ interface UserDialogProps {
 
 function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
   const { toast } = useToast();
+  const { employees } = useApp();
+  const [linkedEmployee, setLinkedEmployee] = useState<Employee | null>(null);
+  const [availableEmployees, setAvailableEmployees] = useState<Employee[]>([]);
+  const [showEmployeeLink, setShowEmployeeLink] = useState(false);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
+  
   const {
     register,
     handleSubmit,
@@ -56,6 +63,17 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
 
   const isEditing = !!user;
   const passwordValue = watch('password');
+  
+  useEffect(() => {
+    if (open && user) {
+      loadLinkedEmployee();
+      loadAvailableEmployees();
+    } else if (open) {
+      setLinkedEmployee(null);
+      setShowEmployeeLink(false);
+      loadAvailableEmployees();
+    }
+  }, [open, user]);
 
   useEffect(() => {
     if (user) {
@@ -78,6 +96,83 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
       });
     }
   }, [user, open, reset]);
+  
+  const loadLinkedEmployee = async () => {
+    if (!user?.employeeId) {
+      setLinkedEmployee(null);
+      return;
+    }
+    try {
+      const employee = await getEmployee(user.employeeId);
+      setLinkedEmployee(employee || null);
+    } catch (error) {
+      console.error('Error loading linked employee:', error);
+      setLinkedEmployee(null);
+    }
+  };
+  
+  const loadAvailableEmployees = async () => {
+    try {
+      const allEmployees = await getEmployees();
+      const allUsers = await getUsers();
+      // Filter out employees that are already linked to other users (except current one)
+      const available = allEmployees.filter(e => {
+        if (!e.id) return false;
+        // If this user already has an employee linked, include that employee
+        if (user?.employeeId === e.id) return true;
+        // Otherwise, check if employee is linked to any other user
+        return !allUsers.some(u => u.employeeId === e.id && u.id !== user?.id);
+      });
+      setAvailableEmployees(available);
+    } catch (error) {
+      console.error('Error loading employees:', error);
+    }
+  };
+  
+  const handleLinkEmployee = async () => {
+    if (!selectedEmployeeId || !user) return;
+    
+    try {
+      const employee = availableEmployees.find(e => e.id === selectedEmployeeId);
+      if (!employee) return;
+      
+      const updatedUser: UserType = {
+        ...user,
+        employeeId: selectedEmployeeId,
+      };
+      
+      await saveUser(updatedUser);
+      await loadLinkedEmployee();
+      setShowEmployeeLink(false);
+      setSelectedEmployeeId('');
+      await loadAvailableEmployees();
+      toast({ title: 'Success', description: 'Employee linked to user successfully.', variant: 'success' });
+      onSave(); // Refresh the list
+    } catch (error) {
+      console.error('Error linking employee:', error);
+      toast({ title: 'Error', description: 'Failed to link employee.', variant: 'error' });
+    }
+  };
+  
+  const handleUnlinkEmployee = async () => {
+    if (!linkedEmployee || !user) return;
+    
+    try {
+      const updatedUser: UserType = {
+        ...user,
+        employeeId: undefined,
+      };
+      
+      await saveUser(updatedUser);
+      setLinkedEmployee(null);
+      await loadAvailableEmployees();
+      toast({ title: 'Success', description: 'Employee unlinked from user successfully.', variant: 'success' });
+      onSave(); // Refresh the list
+    } catch (error) {
+      console.error('Error unlinking employee:', error);
+      toast({ title: 'Error', description: 'Failed to unlink employee.', variant: 'error' });
+    }
+  };
 
   if (!open) return null;
 
@@ -100,6 +195,7 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
         email: data.email || undefined,
         role: data.role,
         active: data.active,
+        employeeId: user?.employeeId, // Preserve existing employee link
         createdAt: user?.createdAt || new Date().toISOString(),
         lastLoginAt: user?.lastLoginAt,
       };
@@ -248,6 +344,101 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
                   </div>
                 </div>
               </div>
+              
+              {/* Employee Linking Section */}
+              {isEditing && (
+                <div className="space-y-3 md:col-span-2 pt-4 border-t">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-semibold flex items-center gap-2">
+                      <UsersThree size={18} weight="duotone" />
+                      Linked Employee
+                    </Label>
+                    {!linkedEmployee && !showEmployeeLink && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowEmployeeLink(true)}
+                      >
+                        <LinkSimple size={16} className="mr-1.5" />
+                        Link Employee
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {linkedEmployee ? (
+                    <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="p-1.5 rounded bg-green-500/20">
+                            <UsersThree size={16} weight="duotone" className="text-green-600" />
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium">{linkedEmployee.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {linkedEmployee.role} • {linkedEmployee.hierarchy}
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleUnlinkEmployee}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-500/10"
+                        >
+                          <LinkSimpleBreak size={16} />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : showEmployeeLink ? (
+                    <div className="space-y-2 p-3 rounded-lg bg-muted/50 border">
+                      <Select
+                        value={selectedEmployeeId}
+                        onChange={(e) => setSelectedEmployeeId(e.target.value)}
+                        className="w-full"
+                      >
+                        <option value="">Select an employee to link...</option>
+                        {availableEmployees.map((employee) => (
+                          <option key={employee.id} value={employee.id}>
+                            {employee.name} ({employee.role})
+                          </option>
+                        ))}
+                      </Select>
+                      {availableEmployees.length === 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          No available employees to link. Create an employee first.
+                        </p>
+                      )}
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setShowEmployeeLink(false);
+                            setSelectedEmployeeId('');
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleLinkEmployee}
+                          disabled={!selectedEmployeeId}
+                        >
+                          Link Employee
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      No employee linked. Link an employee to enable portal access for this user.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3 pt-6 border-t">
@@ -277,6 +468,7 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
 
 export function UsersPage() {
   const [users, setUsers] = useState<UserType[]>([]);
+  const [linkedEmployees, setLinkedEmployees] = useState<Record<string, { name: string; role: string }>>({});
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserType | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -288,12 +480,25 @@ export function UsersPage() {
   });
   const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
-
+  const { employees } = useApp();
+  
   const loadUsers = async () => {
     try {
       setLoading(true);
       const allUsers = await getUsers();
       setUsers(allUsers);
+      
+      // Load linked employees
+      const employeesMap: Record<string, { name: string; role: string }> = {};
+      for (const user of allUsers) {
+        if (user.employeeId) {
+          const employee = employees.find(e => e.id === user.employeeId);
+          if (employee) {
+            employeesMap[user.id] = { name: employee.name, role: employee.role };
+          }
+        }
+      }
+      setLinkedEmployees(employeesMap);
     } catch (error) {
       console.error('Error loading users:', error);
       toast({ title: 'Error', description: 'Failed to load users', variant: 'error' });
@@ -503,6 +708,22 @@ export function UsersPage() {
                   <div className="flex items-center gap-2 text-sm">
                     <span className="text-muted-foreground min-w-[60px]">Last Login:</span>
                     <span>{formatDate(user.lastLoginAt)}</span>
+                  </div>
+                )}
+                {linkedEmployees[user.id] && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground min-w-[60px]">Employee:</span>
+                    <span className="inline-flex items-center gap-1 text-green-600">
+                      <UsersThree size={14} weight="duotone" />
+                      {linkedEmployees[user.id].name} ({linkedEmployees[user.id].role})
+                    </span>
+                  </div>
+                )}
+                {user.mustChangePassword && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 text-xs font-medium">
+                      Must Change Password
+                    </span>
                   </div>
                 )}
                 <div className="flex items-center gap-2 text-sm">

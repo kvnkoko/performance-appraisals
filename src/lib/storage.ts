@@ -1,5 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, PerformanceSummary, ReviewPeriod, User } from '@/types';
+import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, PerformanceSummary, ReviewPeriod, User, Team } from '@/types';
 
 interface AppraisalDB extends DBSchema {
   templates: {
@@ -33,7 +33,11 @@ interface AppraisalDB extends DBSchema {
   users: {
     key: string;
     value: User;
-    indexes: { 'by-username': string };
+    indexes: { 'by-username': string; 'by-employeeId': string };
+  };
+  teams: {
+    key: string;
+    value: Team;
   };
 }
 
@@ -42,7 +46,7 @@ let db: IDBPDatabase<AppraisalDB> | null = null;
 export async function initDB(): Promise<IDBPDatabase<AppraisalDB>> {
   if (db) return db;
 
-  db = await openDB<AppraisalDB>('appraisal-db', 3, {
+  db = await openDB<AppraisalDB>('appraisal-db', 4, {
     upgrade(db, _oldVersion, _newVersion, transaction) {
       // Create all object stores if they don't exist
       if (!db.objectStoreNames.contains('templates')) {
@@ -109,8 +113,10 @@ export async function initDB(): Promise<IDBPDatabase<AppraisalDB>> {
         const usersStore = db.createObjectStore('users', { keyPath: 'id' });
         // @ts-ignore - idb library type issue
         usersStore.createIndex('by-username', 'username', { unique: true });
+        // @ts-ignore - idb library type issue
+        usersStore.createIndex('by-employeeId', 'employeeId', { unique: false });
       } else {
-        // Add index if it doesn't exist
+        // Add indexes if they don't exist
         try {
           const usersStore = transaction.objectStore('users');
           // @ts-ignore - idb library type issue
@@ -118,9 +124,18 @@ export async function initDB(): Promise<IDBPDatabase<AppraisalDB>> {
             // @ts-ignore - idb library type issue
             usersStore.createIndex('by-username', 'username', { unique: true });
           }
+          // @ts-ignore - idb library type issue
+          if (!usersStore.indexNames.contains('by-employeeId')) {
+            // @ts-ignore - idb library type issue
+            usersStore.createIndex('by-employeeId', 'employeeId', { unique: false });
+          }
         } catch (e) {
           // Index might already exist, ignore
         }
+      }
+      // Create teams store
+      if (!db.objectStoreNames.contains('teams')) {
+        db.createObjectStore('teams', { keyPath: 'id' });
       }
     },
   });
@@ -617,9 +632,102 @@ export async function deleteReviewPeriod(id: string): Promise<void> {
   await database.delete('reviewPeriods', id);
 }
 
+// Teams - Hybrid: Supabase (if configured) or IndexedDB (fallback)
+export async function getTeams(): Promise<Team[]> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getTeamsFromSupabase } = await import('./supabase-storage');
+      return await getTeamsFromSupabase();
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+  const database = await initDB();
+  try {
+    if (!database.objectStoreNames.contains('teams')) {
+      return [];
+    }
+    return database.getAll('teams');
+  } catch (error) {
+    console.error('Error getting teams:', error);
+    return [];
+  }
+}
+
+export async function getTeam(id: string): Promise<Team | undefined> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getTeamFromSupabase } = await import('./supabase-storage');
+      return await getTeamFromSupabase(id);
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+  const database = await initDB();
+  return database.get('teams', id);
+}
+
+export async function saveTeam(team: Team): Promise<void> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { saveTeamToSupabase } = await import('./supabase-storage');
+      await saveTeamToSupabase(team);
+      const database = await initDB();
+      await database.put('teams', team);
+      return;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+  const database = await initDB();
+  await database.put('teams', team);
+}
+
+export async function deleteTeam(id: string): Promise<void> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { deleteTeamFromSupabase } = await import('./supabase-storage');
+      await deleteTeamFromSupabase(id);
+      const database = await initDB();
+      await database.delete('teams', id);
+      return;
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+  const database = await initDB();
+  await database.delete('teams', id);
+}
+
+// Get user by employee ID
+export async function getUserByEmployeeId(employeeId: string): Promise<User | undefined> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getUserByEmployeeIdFromSupabase } = await import('./supabase-storage');
+      return await getUserByEmployeeIdFromSupabase(employeeId);
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+  
+  const database = await initDB();
+  try {
+    const allUsers = await database.getAll('users');
+    return allUsers.find((u) => u.employeeId === employeeId);
+  } catch (error) {
+    console.error('Error getting user by employee ID:', error);
+    return undefined;
+  }
+}
+
 // Export/Import
 export async function exportData(): Promise<string> {
-  const [templates, employees, appraisals, links, settings, reviewPeriods, users] = await Promise.all([
+  const [templates, employees, appraisals, links, settings, reviewPeriods, users, teams] = await Promise.all([
     getTemplates(),
     getEmployees(),
     getAppraisals(),
@@ -627,6 +735,7 @@ export async function exportData(): Promise<string> {
     getSettings(),
     getReviewPeriods(),
     getUsers(),
+    getTeams(),
   ]);
 
   return JSON.stringify({
@@ -637,6 +746,7 @@ export async function exportData(): Promise<string> {
     settings,
     reviewPeriods,
     users,
+    teams,
     version: '1.0.0',
     exportedAt: new Date().toISOString(),
   }, null, 2);
@@ -778,6 +888,8 @@ export async function saveUser(user: User): Promise<void> {
     email: user.email,
     role: user.role,
     active: user.active !== undefined ? user.active : true,
+    employeeId: user.employeeId, // Link to employee record
+    mustChangePassword: user.mustChangePassword, // Force password change flag
     createdAt: user.createdAt || new Date().toISOString(),
     lastLoginAt: user.lastLoginAt,
   };
@@ -861,6 +973,11 @@ export async function importData(json: string): Promise<void> {
   if (data.users) {
     for (const user of data.users) {
       await database.put('users', user);
+    }
+  }
+  if (data.teams) {
+    for (const team of data.teams) {
+      await database.put('teams', team);
     }
   }
 }

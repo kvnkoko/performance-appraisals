@@ -1,14 +1,20 @@
 import { useEffect, useState } from 'react';
 import { getSettings, saveSettings } from '@/lib/storage';
+import { applyAccentColor } from '@/lib/utils';
 
 export function useTheme() {
   const [theme, setThemeState] = useState<'light' | 'dark' | 'system'>('system');
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
+  const [accentColor, setAccentColorState] = useState<string>('#3B82F6');
 
   useEffect(() => {
     getSettings().then((settings) => {
       setThemeState(settings.theme);
+      setAccentColorState(settings.accentColor);
       applyTheme(settings.theme);
+      if (settings.accentColor) {
+        applyAccentColor(settings.accentColor);
+      }
     });
   }, []);
 
@@ -34,6 +40,13 @@ export function useTheme() {
     await saveSettings({ ...settings, theme: newTheme });
   };
 
+  const setAccentColor = async (color: string) => {
+    setAccentColorState(color);
+    applyAccentColor(color);
+    const settings = await getSettings();
+    await saveSettings({ ...settings, accentColor: color });
+  };
+
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = () => {
@@ -45,5 +58,5 @@ export function useTheme() {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
-  return { theme, resolvedTheme, setTheme };
+  return { theme, resolvedTheme, setTheme, accentColor, setAccentColor };
 }

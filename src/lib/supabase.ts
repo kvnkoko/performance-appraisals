@@ -75,6 +75,8 @@ export async function getUsersFromSupabase(): Promise<User[]> {
       email: user.email,
       role: user.role,
       active: user.active,
+      employeeId: user.employee_id,
+      mustChangePassword: user.must_change_password,
       createdAt: user.created_at,
       lastLoginAt: user.last_login_at,
     }));
@@ -121,6 +123,8 @@ export async function getUserByUsernameFromSupabase(username: string): Promise<U
       email: data.email,
       role: data.role,
       active: data.active,
+      employeeId: data.employee_id,
+      mustChangePassword: data.must_change_password,
       createdAt: data.created_at,
       lastLoginAt: data.last_login_at,
     };
@@ -150,6 +154,8 @@ export async function saveUserToSupabase(user: User): Promise<void> {
       email: user.email || null,
       role: user.role,
       active: user.active !== undefined ? user.active : true,
+      employee_id: user.employeeId || null,
+      must_change_password: user.mustChangePassword || false,
       created_at: user.createdAt || new Date().toISOString(),
       last_login_at: user.lastLoginAt || null,
     };

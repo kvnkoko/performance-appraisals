@@ -1,18 +1,26 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import type { User } from '@/types';
-import { getUser } from '@/lib/storage';
+import type { User, Employee } from '@/types';
+import { getUser, getEmployee, getTeams } from '@/lib/storage';
 
 interface UserContextType {
   user: User | null;
+  employee: Employee | null;
   loading: boolean;
   refresh: () => Promise<void>;
   logout: () => void;
+  // Helper functions
+  isAdmin: () => boolean;
+  isExecutive: () => boolean;
+  isLeader: () => boolean;
+  isMember: () => boolean;
+  getTeamIds: () => string[];
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [employee, setEmployee] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = async () => {
@@ -20,6 +28,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const authenticated = localStorage.getItem('authenticated');
       if (authenticated !== 'true') {
         setUser(null);
+        setEmployee(null);
         setLoading(false);
         return;
       }
@@ -35,11 +44,21 @@ export function UserProvider({ children }: { children: ReactNode }) {
             localStorage.setItem('userName', userData.name);
             localStorage.setItem('userEmail', userData.email || userData.username);
             localStorage.setItem('userRole', userData.role);
+            localStorage.setItem('employeeId', userData.employeeId || '');
+            
+            // Load linked employee if exists
+            if (userData.employeeId) {
+              const employeeData = await getEmployee(userData.employeeId);
+              setEmployee(employeeData || null);
+            } else {
+              setEmployee(null);
+            }
           } else {
             // User not found in DB but authenticated - might be a new user or DB issue
             // Don't logout, just set a temporary user object
             const username = localStorage.getItem('username') || 'User';
             const userRole = localStorage.getItem('userRole') || 'staff';
+            const employeeId = localStorage.getItem('employeeId');
             setUser({
               id: userId,
               username: localStorage.getItem('username') || 'user',
@@ -48,14 +67,22 @@ export function UserProvider({ children }: { children: ReactNode }) {
               email: localStorage.getItem('userEmail') || undefined,
               role: userRole as 'admin' | 'staff',
               active: true,
+              employeeId: employeeId || undefined,
               createdAt: new Date().toISOString(),
             });
+            
+            // Try to load employee
+            if (employeeId) {
+              const employeeData = await getEmployee(employeeId);
+              setEmployee(employeeData || null);
+            }
           }
         } catch (error) {
           console.error('Error loading user from DB:', error);
           // Don't logout on error, use localStorage data
           const username = localStorage.getItem('username') || 'User';
           const userRole = localStorage.getItem('userRole') || 'staff';
+          const employeeId = localStorage.getItem('employeeId');
           setUser({
             id: userId || 'temp-user',
             username: localStorage.getItem('username') || 'user',
@@ -64,6 +91,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
             email: localStorage.getItem('userEmail') || undefined,
             role: userRole as 'admin' | 'staff',
             active: true,
+            employeeId: employeeId || undefined,
             createdAt: new Date().toISOString(),
           });
         }
@@ -79,6 +107,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           active: true,
           createdAt: new Date().toISOString(),
         });
+        setEmployee(null);
       }
     } catch (error) {
       console.error('Error in refresh:', error);
@@ -97,6 +126,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         });
       } else {
         setUser(null);
+        setEmployee(null);
       }
     } finally {
       setLoading(false);
@@ -110,7 +140,31 @@ export function UserProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('userName');
     localStorage.removeItem('userEmail');
     localStorage.removeItem('userRole');
+    localStorage.removeItem('employeeId');
     setUser(null);
+    setEmployee(null);
+  };
+  
+  // Helper functions
+  const isAdmin = () => {
+    return user?.role === 'admin' || localStorage.getItem('userRole') === 'admin';
+  };
+  
+  const isExecutive = () => {
+    return employee?.hierarchy === 'executive';
+  };
+  
+  const isLeader = () => {
+    return employee?.hierarchy === 'leader';
+  };
+  
+  const isMember = () => {
+    return employee?.hierarchy === 'member';
+  };
+  
+  const getTeamIds = () => {
+    if (!employee?.teamId) return [];
+    return [employee.teamId];
   };
 
   useEffect(() => {
@@ -118,7 +172,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <UserContext.Provider value={{ user, loading, refresh, logout }}>
+    <UserContext.Provider value={{ 
+      user, 
+      employee,
+      loading, 
+      refresh, 
+      logout,
+      isAdmin,
+      isExecutive,
+      isLeader,
+      isMember,
+      getTeamIds
+    }}>
       {children}
     </UserContext.Provider>
   );

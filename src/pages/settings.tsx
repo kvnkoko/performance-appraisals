@@ -4,14 +4,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Download, Moon, Sun, Monitor, SignOut } from 'phosphor-react';
+import { Download, Moon, Sun, Monitor, SignOut, Check } from 'phosphor-react';
 import { saveSettings, exportData, importData } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { useTheme } from '@/hooks/use-theme';
+import { applyAccentColor } from '@/lib/utils';
+
+// Preset accent colors for easy selection
+const PRESET_COLORS = [
+  { name: 'Blue', color: '#3B82F6' },
+  { name: 'Purple', color: '#8B5CF6' },
+  { name: 'Pink', color: '#EC4899' },
+  { name: 'Rose', color: '#F43F5E' },
+  { name: 'Orange', color: '#F97316' },
+  { name: 'Amber', color: '#F59E0B' },
+  { name: 'Green', color: '#22C55E' },
+  { name: 'Teal', color: '#14B8A6' },
+  { name: 'Cyan', color: '#06B6D4' },
+  { name: 'Indigo', color: '#6366F1' },
+];
 
 export function SettingsPage() {
   const { settings, refresh } = useApp();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, setAccentColor } = useTheme();
   const { toast } = useToast();
   const [formData, setFormData] = useState({
     name: settings.name,
@@ -27,6 +42,12 @@ export function SettingsPage() {
       accentColor: settings.accentColor,
     });
   }, [settings]);
+
+  // Apply accent color preview immediately when changed
+  const handleAccentColorChange = (color: string) => {
+    setFormData({ ...formData, accentColor: color });
+    applyAccentColor(color); // Apply immediately for live preview
+  };
 
   const handleSave = async () => {
     setLoading(true);
@@ -147,8 +168,8 @@ export function SettingsPage() {
             <CardTitle>Appearance</CardTitle>
             <CardDescription>Customize the look and feel</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
+          <CardContent className="space-y-6">
+            <div className="space-y-3">
               <Label htmlFor="theme">Theme</Label>
               <div className="flex gap-2 flex-wrap">
                 <Button
@@ -180,23 +201,81 @@ export function SettingsPage() {
                 </Button>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="accent">Accent Color</Label>
-              <div className="flex gap-2">
+            
+            <div className="space-y-3">
+              <Label>Accent Color</Label>
+              <p className="text-xs text-muted-foreground">Choose a color that represents your brand</p>
+              
+              {/* Preset color swatches */}
+              <div className="flex flex-wrap gap-2">
+                {PRESET_COLORS.map((preset) => (
+                  <button
+                    key={preset.color}
+                    type="button"
+                    onClick={() => handleAccentColorChange(preset.color)}
+                    className="relative w-10 h-10 rounded-lg transition-all hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring"
+                    style={{ backgroundColor: preset.color }}
+                    title={preset.name}
+                  >
+                    {formData.accentColor.toLowerCase() === preset.color.toLowerCase() && (
+                      <Check 
+                        size={20} 
+                        weight="bold" 
+                        className="absolute inset-0 m-auto text-white drop-shadow-md" 
+                      />
+                    )}
+                  </button>
+                ))}
+              </div>
+              
+              {/* Custom color picker */}
+              <div className="flex gap-2 items-center pt-2">
+                <div className="relative">
+                  <Input
+                    id="accent"
+                    type="color"
+                    value={formData.accentColor}
+                    onChange={(e) => handleAccentColorChange(e.target.value)}
+                    className="w-14 h-10 cursor-pointer p-1"
+                  />
+                </div>
                 <Input
-                  id="accent"
-                  type="color"
                   value={formData.accentColor}
-                  onChange={(e) => setFormData({ ...formData, accentColor: e.target.value })}
-                  className="w-20 h-10"
-                />
-                <Input
-                  value={formData.accentColor}
-                  onChange={(e) => setFormData({ ...formData, accentColor: e.target.value })}
+                  onChange={(e) => handleAccentColorChange(e.target.value)}
                   placeholder="#3B82F6"
+                  className="flex-1 font-mono text-sm"
                 />
               </div>
+              
+              {/* Live preview */}
+              <div className="mt-4 p-4 rounded-lg border border-border/50 bg-card/50">
+                <p className="text-sm text-muted-foreground mb-3">Preview</p>
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm"
+                    style={{ backgroundColor: formData.accentColor }}
+                  >
+                    A
+                  </div>
+                  <div 
+                    className="px-4 py-2 rounded-lg text-white text-sm font-medium"
+                    style={{ backgroundColor: formData.accentColor }}
+                  >
+                    Primary Button
+                  </div>
+                  <div 
+                    className="px-3 py-1.5 rounded text-sm font-medium"
+                    style={{ 
+                      backgroundColor: `${formData.accentColor}20`,
+                      color: formData.accentColor 
+                    }}
+                  >
+                    Active Tab
+                  </div>
+                </div>
+              </div>
             </div>
+            
             <Button onClick={handleSave} disabled={loading}>
               {loading ? 'Saving...' : 'Save Appearance'}
             </Button>

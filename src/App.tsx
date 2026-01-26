@@ -21,6 +21,10 @@ import { ReviewsPage } from '@/pages/reviews';
 import { HistoricalReviewsPage } from '@/pages/historical-reviews';
 import { SettingsPage } from '@/pages/settings';
 import { AppraisalFormPage } from '@/pages/appraisal-form';
+import { TeamsPage } from '@/pages/teams';
+import { EmployeeDashboardPage } from '@/pages/employee-dashboard';
+import { MyAppraisalsPage } from '@/pages/my-appraisals';
+import { MyPerformancePage } from '@/pages/my-performance';
 import { useUser } from '@/contexts/user-context';
 
 function PrivateRoute({ children }: { children: React.ReactElement }) {
@@ -33,6 +37,28 @@ function PrivateRoute({ children }: { children: React.ReactElement }) {
   const authenticated = localStorage.getItem('authenticated') === 'true';
   
   return authenticated ? children : <Navigate to="/auth" replace />;
+}
+
+// Admin-only route wrapper
+function AdminRoute({ children }: { children: React.ReactElement }) {
+  const userRole = localStorage.getItem('userRole');
+  
+  if (userRole !== 'admin') {
+    return <Navigate to="/my-dashboard" replace />;
+  }
+  
+  return children;
+}
+
+// Smart redirect based on user role
+function RoleBasedRedirect() {
+  const userRole = localStorage.getItem('userRole');
+  
+  if (userRole === 'admin') {
+    return <Navigate to="/dashboard" replace />;
+  }
+  
+  return <Navigate to="/my-dashboard" replace />;
 }
 
 function App() {
@@ -78,32 +104,40 @@ function App() {
         <UserProvider>
           <AppProvider>
             <Routes>
-        <Route path="/auth" element={<AuthPage />} />
-        <Route
-          path="/appraisal/:token"
-          element={<AppraisalFormPage />}
-        />
-        <Route
-          path="/*"
-          element={
-            <PrivateRoute>
-              <MainLayout>
-                <Routes>
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/templates" element={<TemplatesPage />} />
-                  <Route path="/employees" element={<EmployeesPage />} />
-                  <Route path="/users" element={<UsersPage />} />
-                  <Route path="/links" element={<LinksPage />} />
-                  <Route path="/periods" element={<PeriodsPage />} />
-                  <Route path="/reviews" element={<ReviewsPage />} />
-                  <Route path="/historical" element={<HistoricalReviewsPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                </Routes>
-              </MainLayout>
-            </PrivateRoute>
-          }
-        />
+              <Route path="/auth" element={<AuthPage />} />
+              <Route path="/appraisal/:token" element={<AppraisalFormPage />} />
+              <Route
+                path="/*"
+                element={
+                  <PrivateRoute>
+                    <MainLayout>
+                      <Routes>
+                        {/* Admin routes */}
+                        <Route path="/dashboard" element={<AdminRoute><Dashboard /></AdminRoute>} />
+                        <Route path="/templates" element={<AdminRoute><TemplatesPage /></AdminRoute>} />
+                        <Route path="/employees" element={<AdminRoute><EmployeesPage /></AdminRoute>} />
+                        <Route path="/teams" element={<AdminRoute><TeamsPage /></AdminRoute>} />
+                        <Route path="/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
+                        <Route path="/links" element={<AdminRoute><LinksPage /></AdminRoute>} />
+                        <Route path="/periods" element={<AdminRoute><PeriodsPage /></AdminRoute>} />
+                        <Route path="/reviews" element={<AdminRoute><ReviewsPage /></AdminRoute>} />
+                        <Route path="/historical" element={<AdminRoute><HistoricalReviewsPage /></AdminRoute>} />
+                        
+                        {/* Employee routes */}
+                        <Route path="/my-dashboard" element={<EmployeeDashboardPage />} />
+                        <Route path="/my-appraisals" element={<MyAppraisalsPage />} />
+                        <Route path="/my-performance" element={<MyPerformancePage />} />
+                        
+                        {/* Shared routes */}
+                        <Route path="/settings" element={<SettingsPage />} />
+                        
+                        {/* Smart redirect based on role */}
+                        <Route path="/" element={<RoleBasedRedirect />} />
+                      </Routes>
+                    </MainLayout>
+                  </PrivateRoute>
+                }
+              />
             </Routes>
           </AppProvider>
         </UserProvider>

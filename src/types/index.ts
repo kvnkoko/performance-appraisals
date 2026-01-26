@@ -64,6 +64,14 @@ export interface Employee {
   email?: string;
   role: string;
   hierarchy: 'executive' | 'leader' | 'member';
+  teamId?: string; // Optional - not required for executives
+  createdAt: string;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  description?: string;
   createdAt: string;
 }
 
@@ -158,6 +166,8 @@ export interface User {
   email?: string;
   role: 'admin' | 'staff';
   active: boolean;
+  employeeId?: string; // Links to employee record for non-admin users
+  mustChangePassword?: boolean; // Force password change on first login
   createdAt: string;
   lastLoginAt?: string;
 }

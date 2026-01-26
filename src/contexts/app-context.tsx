@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, ReviewPeriod } from '@/types';
-import { getTemplates, getEmployees, getAppraisals, getLinks, getSettings, getReviewPeriods, getActiveReviewPeriods } from '@/lib/storage';
+import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, ReviewPeriod, Team } from '@/types';
+import { getTemplates, getEmployees, getAppraisals, getLinks, getSettings, getReviewPeriods, getActiveReviewPeriods, getTeams } from '@/lib/storage';
+import { applyAccentColor } from '@/lib/utils';
 
 interface AppContextType {
   templates: Template[];
@@ -10,6 +11,7 @@ interface AppContextType {
   settings: CompanySettings;
   reviewPeriods: ReviewPeriod[];
   activePeriods: ReviewPeriod[];
+  teams: Team[];
   loading: boolean;
   refresh: () => Promise<void>;
 }
@@ -29,6 +31,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   });
   const [reviewPeriods, setReviewPeriods] = useState<ReviewPeriod[]>([]);
   const [activePeriods, setActivePeriods] = useState<ReviewPeriod[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = async () => {
@@ -42,15 +45,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         getSettings(),
         getReviewPeriods(),
         getActiveReviewPeriods(),
+        getTeams(),
       ]);
       
       if (results[0].status === 'fulfilled') setTemplates(results[0].value);
       if (results[1].status === 'fulfilled') setEmployees(results[1].value);
       if (results[2].status === 'fulfilled') setAppraisals(results[2].value);
       if (results[3].status === 'fulfilled') setLinks(results[3].value);
-      if (results[4].status === 'fulfilled') setSettings(results[4].value);
+      if (results[4].status === 'fulfilled') {
+        const loadedSettings = results[4].value;
+        setSettings(loadedSettings);
+        // Apply accent color when settings are loaded
+        if (loadedSettings.accentColor) {
+          applyAccentColor(loadedSettings.accentColor);
+        }
+      }
       if (results[5].status === 'fulfilled') setReviewPeriods(results[5].value);
       if (results[6].status === 'fulfilled') setActivePeriods(results[6].value);
+      if (results[7].status === 'fulfilled') setTeams(results[7].value);
       
       // Log any failures for debugging
       results.forEach((result, index) => {
@@ -70,7 +82,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AppContext.Provider value={{ templates, employees, appraisals, links, settings, reviewPeriods, activePeriods, loading, refresh }}>
+    <AppContext.Provider value={{ templates, employees, appraisals, links, settings, reviewPeriods, activePeriods, teams, loading, refresh }}>
       {children}
     </AppContext.Provider>
   );

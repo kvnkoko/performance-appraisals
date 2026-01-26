@@ -1,12 +1,12 @@
 import { useState, FormEvent, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, User as UserIcon } from 'phosphor-react';
+import { Lock, User as UserIcon, Key, Warning } from 'phosphor-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { getSettings, initDB, getUserByUsername } from '@/lib/storage';
-import { verifyPassword } from '@/lib/utils';
+import { getSettings, initDB, getUserByUsername, saveUser } from '@/lib/storage';
+import { verifyPassword, hashPassword } from '@/lib/utils';
 import { useToast } from '@/contexts/toast-context';
 import type { User } from '@/types';
 
@@ -17,6 +17,14 @@ export function AuthPage() {
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
+  
+  // Password change state
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -29,6 +37,60 @@ export function AuthPage() {
         setInitializing(false);
       });
   }, []);
+
+  // Handle password change
+  const handlePasswordChange = async (e: FormEvent) => {
+    e.preventDefault();
+    
+    if (!currentUser) return;
+    
+    if (newPassword.length < 6) {
+      toast({ title: 'Error', description: 'Password must be at least 6 characters.', variant: 'error' });
+      return;
+    }
+    
+    if (newPassword !== confirmPassword) {
+      toast({ title: 'Error', description: 'Passwords do not match.', variant: 'error' });
+      return;
+    }
+    
+    setChangingPassword(true);
+    
+    try {
+      const passwordHash = await hashPassword(newPassword);
+      
+      const updatedUser: User = {
+        ...currentUser,
+        passwordHash,
+        mustChangePassword: false,
+        lastLoginAt: new Date().toISOString(),
+      };
+      
+      await saveUser(updatedUser);
+      
+      // Store user session
+      localStorage.setItem('authenticated', 'true');
+      localStorage.setItem('userId', updatedUser.id);
+      localStorage.setItem('username', updatedUser.username);
+      localStorage.setItem('userName', updatedUser.name);
+      localStorage.setItem('userEmail', updatedUser.email || updatedUser.username);
+      localStorage.setItem('userRole', updatedUser.role);
+      localStorage.setItem('employeeId', updatedUser.employeeId || '');
+      
+      toast({ title: 'Password Changed', description: 'Your password has been updated successfully.', variant: 'success' });
+      
+      // Redirect based on user role
+      const redirectUrl = updatedUser.role === 'admin' ? '/dashboard' : '/my-dashboard';
+      
+      setTimeout(() => {
+        window.location.href = redirectUrl;
+      }, 300);
+    } catch (error) {
+      console.error('Password change error:', error);
+      toast({ title: 'Error', description: 'Failed to change password. Please try again.', variant: 'error' });
+      setChangingPassword(false);
+    }
+  };
 
   const handleUserSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -90,6 +152,20 @@ export function AuthPage() {
       console.log('Password valid:', isValid);
       
       if (isValid) {
+        // Check if user must change password
+        if (user.mustChangePassword) {
+          console.log('User must change password on first login');
+          setCurrentUser(user);
+          setShowPasswordChange(true);
+          setLoading(false);
+          toast({ 
+            title: 'Password Change Required', 
+            description: 'You must change your password before continuing.', 
+            variant: 'default' 
+          });
+          return;
+        }
+        
         // Store user session FIRST (before any async operations)
         localStorage.setItem('authenticated', 'true');
         localStorage.setItem('userId', user.id);
@@ -97,6 +173,7 @@ export function AuthPage() {
         localStorage.setItem('userName', user.name);
         localStorage.setItem('userEmail', user.email || user.username);
         localStorage.setItem('userRole', user.role);
+        localStorage.setItem('employeeId', user.employeeId || '');
         console.log('Session stored in localStorage');
         
         // Update last login - ensure user has all required fields (non-blocking)
@@ -106,7 +183,6 @@ export function AuthPage() {
             await updateUserLastLogin(user.id);
           } else {
             // Fallback to IndexedDB
-            const { saveUser } = await import('@/lib/storage');
             const updatedUser: User = {
               id: user.id,
               username: user.username,
@@ -115,6 +191,8 @@ export function AuthPage() {
               email: user.email,
               role: user.role,
               active: user.active,
+              employeeId: user.employeeId,
+              mustChangePassword: user.mustChangePassword,
               createdAt: user.createdAt,
               lastLoginAt: new Date().toISOString(),
             };
@@ -129,10 +207,13 @@ export function AuthPage() {
         console.log('Session stored, showing toast and navigating...');
         toast({ title: 'Welcome!', description: `Successfully logged in as ${user.name}`, variant: 'success' });
         
+        // Redirect based on user role
+        const redirectUrl = user.role === 'admin' ? '/dashboard' : '/my-dashboard';
+        
         // Use window.location for more reliable navigation
         setTimeout(() => {
-          console.log('Navigating to dashboard via window.location...');
-          window.location.href = '/dashboard';
+          console.log('Navigating to', redirectUrl, 'via window.location...');
+          window.location.href = redirectUrl;
         }, 300);
       } else {
         console.log('Password invalid');
@@ -211,6 +292,64 @@ export function AuthPage() {
       setLoading(false);
     }
   };
+
+  // Password change screen
+  if (showPasswordChange && currentUser) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="space-y-1 text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10">
+              <Key size={24} weight="duotone" className="text-amber-500" />
+            </div>
+            <CardTitle className="text-2xl font-bold">Change Your Password</CardTitle>
+            <CardDescription>
+              For security, you must set a new password before continuing.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4 flex items-start gap-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+              <Warning size={20} weight="duotone" className="text-amber-600 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                Welcome, <strong>{currentUser.name}</strong>! This is your first login. Please create a secure password.
+              </p>
+            </div>
+            
+            <form onSubmit={handlePasswordChange} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="newPassword">New Password</Label>
+                <Input
+                  id="newPassword"
+                  type="password"
+                  placeholder="Enter new password (min 6 characters)"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  placeholder="Confirm your new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+              </div>
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={changingPassword || newPassword.length < 6 || newPassword !== confirmPassword}
+              >
+                {changingPassword ? 'Changing Password...' : 'Set New Password'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">

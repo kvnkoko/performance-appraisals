@@ -8,7 +8,9 @@ import type {
   AppraisalLink, 
   CompanySettings, 
   PerformanceSummary, 
-  ReviewPeriod 
+  ReviewPeriod,
+  Team,
+  User
 } from '@/types';
 import { isSupabaseConfigured, getSupabaseClient } from './supabase';
 
@@ -749,5 +751,141 @@ export async function saveSummaryToSupabase(summary: PerformanceSummary): Promis
   } catch (error) {
     console.error('Error in saveSummaryToSupabase:', error);
     throw error;
+  }
+}
+
+// ============================================
+// TEAMS
+// ============================================
+export async function getTeamsFromSupabase(): Promise<Team[]> {
+  if (!isSupabaseConfigured()) return [];
+  
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return [];
+    
+    const { data, error } = await supabase
+      .from('teams')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching teams from Supabase:', error);
+      return [];
+    }
+    
+    return (data || []).map((t: any) => ({
+      id: t.id,
+      name: t.name,
+      description: t.description,
+      createdAt: t.created_at,
+    }));
+  } catch (error) {
+    console.error('Error in getTeamsFromSupabase:', error);
+    return [];
+  }
+}
+
+export async function getTeamFromSupabase(id: string): Promise<Team | undefined> {
+  if (!isSupabaseConfigured()) return undefined;
+  
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return undefined;
+    
+    const { data, error } = await supabase
+      .from('teams')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error || !data) return undefined;
+    
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description,
+      createdAt: data.created_at,
+    };
+  } catch (error) {
+    console.error('Error in getTeamFromSupabase:', error);
+    return undefined;
+  }
+}
+
+export async function saveTeamToSupabase(team: Team): Promise<void> {
+  if (!isSupabaseConfigured()) throw new Error('Supabase not configured');
+  
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) throw new Error('Supabase client not available');
+    
+    const { error } = await supabase
+      .from('teams')
+      .upsert({
+        id: team.id,
+        name: team.name,
+        description: team.description || null,
+        created_at: team.createdAt,
+      }, { onConflict: 'id' });
+    
+    if (error) throw error;
+  } catch (error) {
+    console.error('Error in saveTeamToSupabase:', error);
+    throw error;
+  }
+}
+
+export async function deleteTeamFromSupabase(id: string): Promise<void> {
+  if (!isSupabaseConfigured()) throw new Error('Supabase not configured');
+  
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) throw new Error('Supabase client not available');
+    
+    const { error } = await supabase
+      .from('teams')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
+  } catch (error) {
+    console.error('Error in deleteTeamFromSupabase:', error);
+    throw error;
+  }
+}
+
+// Get user by employee ID
+export async function getUserByEmployeeIdFromSupabase(employeeId: string): Promise<User | undefined> {
+  if (!isSupabaseConfigured()) return undefined;
+  
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return undefined;
+    
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('employee_id', employeeId)
+      .single();
+    
+    if (error || !data) return undefined;
+    
+    return {
+      id: data.id,
+      username: data.username,
+      passwordHash: data.password_hash,
+      name: data.name,
+      email: data.email,
+      role: data.role,
+      active: data.active,
+      employeeId: data.employee_id,
+      mustChangePassword: data.must_change_password,
+      createdAt: data.created_at,
+      lastLoginAt: data.last_login_at,
+    };
+  } catch (error) {
+    console.error('Error in getUserByEmployeeIdFromSupabase:', error);
+    return undefined;
   }
 }

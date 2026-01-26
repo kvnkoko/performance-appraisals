@@ -4,15 +4,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Plus, Pencil, Trash, Users, MagnifyingGlass } from 'phosphor-react';
+import { Plus, Pencil, Trash, Users, MagnifyingGlass, UsersThree, UserCircle, CheckCircle } from 'phosphor-react';
 import { EmployeeDialog } from '@/components/employees/employee-dialog';
 import { HIERARCHY_LABELS } from '@/types';
-import { deleteEmployee } from '@/lib/storage';
+import { deleteEmployee, getUserByEmployeeId } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { formatDate } from '@/lib/utils';
+import { useEffect } from 'react';
 
 export function EmployeesPage() {
-  const { employees, refresh } = useApp();
+  const { employees, teams, refresh } = useApp();
+  const [linkedUsers, setLinkedUsers] = useState<Record<string, { name: string; username: string }>>({});
+  
+  // Helper to get team name
+  const getTeamName = (teamId?: string) => {
+    if (!teamId) return null;
+    const team = teams.find(t => t.id === teamId);
+    return team?.name;
+  };
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -23,6 +32,28 @@ export function EmployeesPage() {
   });
   const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
+  
+  // Load linked users for all employees
+  useEffect(() => {
+    const loadLinkedUsers = async () => {
+      const usersMap: Record<string, { name: string; username: string }> = {};
+      for (const employee of employees) {
+        try {
+          const user = await getUserByEmployeeId(employee.id);
+          if (user) {
+            usersMap[employee.id] = { name: user.name, username: user.username };
+          }
+        } catch (error) {
+          // Ignore errors
+        }
+      }
+      setLinkedUsers(usersMap);
+    };
+    
+    if (employees.length > 0) {
+      loadLinkedUsers();
+    }
+  }, [employees]);
 
   const handleDeleteClick = (id: string, name: string) => {
     setDeleteConfirm({ open: true, id, name });
@@ -120,10 +151,34 @@ export function EmployeesPage() {
                   <span className="text-muted-foreground min-w-[80px]">Hierarchy:</span>
                   <span className="font-semibold">{HIERARCHY_LABELS[employee.hierarchy]}</span>
                 </div>
+                {employee.teamId && getTeamName(employee.teamId) && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground min-w-[80px]">Team:</span>
+                    <span className="inline-flex items-center gap-1 text-primary">
+                      <UsersThree size={14} weight="duotone" />
+                      {getTeamName(employee.teamId)}
+                    </span>
+                  </div>
+                )}
                 {employee.email && (
                   <div className="flex items-center gap-2 text-sm">
                     <span className="text-muted-foreground min-w-[80px]">Email:</span>
                     <span className="truncate">{employee.email}</span>
+                  </div>
+                )}
+                {linkedUsers[employee.id] && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground min-w-[80px]">User:</span>
+                    <span className="inline-flex items-center gap-1 text-green-600">
+                      <CheckCircle size={14} weight="duotone" />
+                      {linkedUsers[employee.id].name} (@{linkedUsers[employee.id].username})
+                    </span>
+                  </div>
+                )}
+                {!linkedUsers[employee.id] && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="text-muted-foreground min-w-[80px]">User:</span>
+                    <span className="text-xs text-muted-foreground italic">Not linked</span>
                   </div>
                 )}
                 <div className="text-xs text-muted-foreground pt-2 border-t">
@@ -181,7 +236,28 @@ export function EmployeesPage() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         employeeId={editingEmployee}
-        onSuccess={refresh}
+        onSuccess={() => {
+          refresh();
+          // Reload linked users after refresh
+          setTimeout(() => {
+            const loadLinkedUsers = async () => {
+              const usersMap: Record<string, { name: string; username: string }> = {};
+              const updatedEmployees = await import('@/lib/storage').then(m => m.getEmployees());
+              for (const employee of updatedEmployees) {
+                try {
+                  const user = await getUserByEmployeeId(employee.id);
+                  if (user) {
+                    usersMap[employee.id] = { name: user.name, username: user.username };
+                  }
+                } catch (error) {
+                  // Ignore errors
+                }
+              }
+              setLinkedUsers(usersMap);
+            };
+            loadLinkedUsers();
+          }, 500);
+        }}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   SquaresFour,
   FileText,
@@ -12,7 +12,12 @@ import {
   List,
   X,
   Moon,
-  Sun
+  Sun,
+  House,
+  ClipboardText,
+  ChartLineUp,
+  UsersThree,
+  SignOut
 } from 'phosphor-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -20,11 +25,13 @@ import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/contexts/app-context';
 import { useUser } from '@/contexts/user-context';
 
-const navItems = [
+// Admin navigation items
+const adminNavItems = [
   { path: '/dashboard', label: 'Dashboard', icon: SquaresFour },
   { path: '/templates', label: 'Templates', icon: FileText },
   { path: '/employees', label: 'Employees', icon: Users },
-  { path: '/users', label: 'Users', icon: UserCircle, adminOnly: true },
+  { path: '/teams', label: 'Teams', icon: UsersThree },
+  { path: '/users', label: 'Users', icon: UserCircle },
   { path: '/links', label: 'Appraisal Links', icon: LinkIcon },
   { path: '/periods', label: 'Review Periods', icon: Calendar },
   { path: '/reviews', label: 'Reviews', icon: ChartBar },
@@ -32,21 +39,48 @@ const navItems = [
   { path: '/settings', label: 'Settings', icon: Gear },
 ];
 
+// Employee navigation items (non-admin users)
+const employeeNavItems = [
+  { path: '/my-dashboard', label: 'Dashboard', icon: House },
+  { path: '/my-appraisals', label: 'My Appraisals', icon: ClipboardText },
+  { path: '/my-performance', label: 'My Performance', icon: ChartLineUp },
+  { path: '/settings', label: 'Settings', icon: Gear },
+];
+
 export function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { resolvedTheme, setTheme } = useTheme();
-  const { settings } = useApp();
-  const { user } = useUser();
+  const { resolvedTheme, setTheme, accentColor } = useTheme();
+  const { settings, employees } = useApp();
+  const { user, logout } = useUser();
   
   // Get user info from context or localStorage
   const userName = user?.name || localStorage.getItem('userName') || 'Admin';
   const userEmail = user?.email || localStorage.getItem('userEmail') || user?.username || 'admin@example.com';
   const userRole = user?.role || localStorage.getItem('userRole') || 'admin';
+  const employeeId = user?.employeeId || localStorage.getItem('employeeId');
+  
+  // Get employee info if linked
+  const linkedEmployee = employeeId ? employees.find(e => e.id === employeeId) : null;
+  
+  // Determine if user is admin (either role is 'admin' or they logged in with PIN)
+  const isAdmin = userRole === 'admin';
+  
+  // Use appropriate navigation based on role
+  const navItems = isAdmin ? adminNavItems : employeeNavItems;
 
   const toggleTheme = () => {
     setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
   };
+  
+  const handleLogout = () => {
+    logout();
+    navigate('/auth');
+  };
+
+  // Use accent color from settings or theme
+  const currentAccentColor = settings.accentColor || accentColor || '#3B82F6';
 
   return (
     <>
@@ -66,17 +100,29 @@ export function Sidebar() {
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        {/* Left gradient border - subtle reddish-pink gradient */}
-        <div className="absolute left-0 top-0 bottom-0 w-[1px] bg-gradient-to-b from-pink-500/30 via-rose-500/20 to-transparent opacity-60" />
+        {/* Left gradient border - uses accent color */}
+        <div 
+          className="absolute left-0 top-0 bottom-0 w-[1px] opacity-60"
+          style={{ 
+            background: `linear-gradient(to bottom, ${currentAccentColor}50, ${currentAccentColor}30, transparent)` 
+          }} 
+        />
         
         <div className="flex h-full flex-col">
           {/* Header with logo and theme toggle */}
           <div className="px-6 pt-6 pb-4 border-b border-border/30">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-3">
-                {/* Logo */}
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">A</span>
+                {/* Logo - uses accent color */}
+                <div 
+                  className="w-10 h-10 rounded-full flex items-center justify-center"
+                  style={{ 
+                    background: `linear-gradient(135deg, ${currentAccentColor}, ${currentAccentColor}CC)` 
+                  }}
+                >
+                  <span className="text-white font-bold text-lg">
+                    {settings.name ? settings.name.charAt(0).toUpperCase() : 'A'}
+                  </span>
                 </div>
                 <h1 className="text-lg font-semibold text-foreground">
                   {settings.name || 'Appraisals'}
@@ -100,9 +146,15 @@ export function Sidebar() {
             <div className="space-y-1">
               <div className="text-sm font-medium text-foreground">{userName}</div>
               <div className="text-xs text-muted-foreground">{userEmail}</div>
-              {userRole === 'admin' && (
-                <div className="text-xs text-purple-500 font-medium">Administrator</div>
-              )}
+              {isAdmin ? (
+                <div className="text-xs font-medium" style={{ color: currentAccentColor }}>
+                  Administrator
+                </div>
+              ) : linkedEmployee ? (
+                <div className="text-xs text-muted-foreground">
+                  {linkedEmployee.hierarchy.charAt(0).toUpperCase() + linkedEmployee.hierarchy.slice(1)} • {linkedEmployee.role}
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -111,10 +163,6 @@ export function Sidebar() {
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
-              // Hide admin-only items for non-admin users
-              if (item.adminOnly && userRole !== 'admin') {
-                return null;
-              }
               return (
                 <Link
                   key={item.path}
@@ -123,27 +171,42 @@ export function Sidebar() {
                   className={cn(
                     'group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative',
                     isActive
-                      ? 'bg-purple-500/20 text-foreground'
+                      ? 'text-foreground'
                       : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                   )}
+                  style={isActive ? { 
+                    backgroundColor: `${currentAccentColor}20`
+                  } : undefined}
                 >
-                  {/* Active indicator bar */}
+                  {/* Active indicator bar - uses accent color */}
                   {isActive && (
-                    <div className="absolute left-0 top-1 bottom-1 w-1 bg-purple-500 rounded-r" />
+                    <div 
+                      className="absolute left-0 top-1 bottom-1 w-1 rounded-r"
+                      style={{ backgroundColor: currentAccentColor }}
+                    />
                   )}
                   <Icon 
                     size={20} 
                     weight={isActive ? 'duotone' : 'regular'}
-                    className={cn(
-                      'relative z-10',
-                      isActive ? 'text-purple-500' : ''
-                    )} 
+                    className="relative z-10"
+                    style={isActive ? { color: currentAccentColor } : undefined}
                   />
                   <span className="relative z-10">{item.label}</span>
                 </Link>
               );
             })}
           </nav>
+          
+          {/* Logout Button */}
+          <div className="px-4 py-4 border-t border-border/30">
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-red-500/10 hover:text-red-500 transition-colors"
+            >
+              <SignOut size={20} weight="duotone" />
+              <span>Sign Out</span>
+            </button>
+          </div>
         </div>
       </aside>
 

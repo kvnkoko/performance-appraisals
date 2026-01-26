@@ -1,22 +1,25 @@
 import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { X } from 'phosphor-react';
+import { X, Info, Copy, Check } from 'phosphor-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { getEmployee, saveEmployee } from '@/lib/storage';
-import { generateId } from '@/lib/utils';
-import type { Employee } from '@/types';
+import { getEmployee, saveEmployee, saveUser, getUserByUsername, getUsers, getUserByEmployeeId } from '@/lib/storage';
+import { generateId, hashPassword } from '@/lib/utils';
+import type { Employee, User } from '@/types';
 import { useToast } from '@/contexts/toast-context';
+import { useApp } from '@/contexts/app-context';
+import { LinkSimple, LinkSimpleBreak, UserCircle } from 'phosphor-react';
 
 const employeeSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   email: z.string().email('Invalid email').optional().or(z.literal('')),
   role: z.string().min(1, 'Role is required'),
   hierarchy: z.enum(['executive', 'leader', 'member']),
+  teamId: z.string().optional(),
 });
 
 type EmployeeFormData = z.infer<typeof employeeSchema>;
@@ -30,12 +33,18 @@ interface EmployeeDialogProps {
 
 export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: EmployeeDialogProps) {
   const { toast } = useToast();
+  const { teams } = useApp();
   const [loading, setLoading] = useState(false);
+  const [linkedUser, setLinkedUser] = useState<User | null>(null);
+  const [availableUsers, setAvailableUsers] = useState<User[]>([]);
+  const [showUserLink, setShowUserLink] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
 
   const {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<EmployeeFormData>({
     resolver: zodResolver(employeeSchema),
@@ -44,8 +53,11 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
       email: '',
       role: '',
       hierarchy: 'member',
+      teamId: '',
     },
   });
+
+  const selectedHierarchy = watch('hierarchy');
 
   useEffect(() => {
     if (open && employeeId) {
@@ -56,7 +68,14 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         email: '',
         role: '',
         hierarchy: 'member',
+        teamId: '',
       });
+      setLinkedUser(null);
+      setShowUserLink(false);
+    }
+    // Load available users when dialog opens
+    if (open) {
+      loadAvailableUsers();
     }
   }, [open, employeeId]);
 
@@ -70,38 +89,266 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           email: employee.email || '',
           role: employee.role,
           hierarchy: employee.hierarchy,
+          teamId: employee.teamId || '',
         });
+        
+        // Load linked user if exists
+        const user = await getUserByEmployeeId(employeeId);
+        setLinkedUser(user || null);
       }
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to load employee.', variant: 'error' });
     }
   };
+  
+  const loadAvailableUsers = async () => {
+    try {
+      const users = await getUsers();
+      // Filter out users that are already linked to other employees (except current one)
+      const available = users.filter(u => !u.employeeId || (employeeId && u.employeeId === employeeId));
+      setAvailableUsers(available);
+    } catch (error) {
+      console.error('Error loading users:', error);
+    }
+  };
+  
+  const handleLinkUser = async () => {
+    if (!selectedUserId || !employeeId) return;
+    
+    try {
+      const user = availableUsers.find(u => u.id === selectedUserId);
+      if (!user) return;
+      
+      const updatedUser: User = {
+        ...user,
+        employeeId: employeeId,
+      };
+      
+      await saveUser(updatedUser);
+      setLinkedUser(updatedUser);
+      setShowUserLink(false);
+      setSelectedUserId('');
+      await loadAvailableUsers();
+      toast({ title: 'Success', description: 'User linked to employee successfully.', variant: 'success' });
+    } catch (error) {
+      console.error('Error linking user:', error);
+      toast({ title: 'Error', description: 'Failed to link user.', variant: 'error' });
+    }
+  };
+  
+  const handleUnlinkUser = async () => {
+    if (!linkedUser || !employeeId) return;
+    
+    try {
+      const updatedUser: User = {
+        ...linkedUser,
+        employeeId: undefined,
+      };
+      
+      await saveUser(updatedUser);
+      setLinkedUser(null);
+      await loadAvailableUsers();
+      toast({ title: 'Success', description: 'User unlinked from employee successfully.', variant: 'success' });
+    } catch (error) {
+      console.error('Error unlinking user:', error);
+      toast({ title: 'Error', description: 'Failed to unlink user.', variant: 'error' });
+    }
+  };
+
+  // Generate username from name (e.g., "John Doe" -> "john.doe")
+  const generateUsername = (name: string, email?: string): string => {
+    if (email) {
+      // Use email prefix as username
+      return email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+    // Generate from name
+    return name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '');
+  };
+
+  // Generate random password
+  const generateRandomPassword = (): string => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let password = '';
+    for (let i = 0; i < 8; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return password;
+  };
+
+  const [createdCredentials, setCreatedCredentials] = useState<{ username: string; password: string } | null>(null);
+  const [copiedField, setCopiedField] = useState<'username' | 'password' | null>(null);
+
+  const copyToClipboard = async (text: string, field: 'username' | 'password') => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
 
   const onSubmit = async (data: EmployeeFormData) => {
     setLoading(true);
+    setCreatedCredentials(null);
+    
     try {
       const existingEmployee = employeeId ? await getEmployee(employeeId) : null;
+      const newEmployeeId = employeeId || generateId();
+      
       const employee: Employee = {
-        id: employeeId || generateId(),
+        id: newEmployeeId,
         name: data.name,
         email: data.email || undefined,
         role: data.role,
         hierarchy: data.hierarchy,
+        teamId: data.hierarchy !== 'executive' && data.teamId ? data.teamId : undefined,
         createdAt: existingEmployee?.createdAt || new Date().toISOString(),
       };
 
       await saveEmployee(employee);
-      onSuccess();
-      onOpenChange(false);
-      toast({ title: 'Success', description: 'Employee saved successfully.', variant: 'success' });
+      
+      // Auto-create user account for new employees
+      if (!employeeId) {
+        let username = generateUsername(data.name, data.email);
+        
+        // Check if username already exists and make it unique if needed
+        let existingUser = await getUserByUsername(username);
+        let attempt = 1;
+        while (existingUser) {
+          username = `${generateUsername(data.name, data.email)}${attempt}`;
+          existingUser = await getUserByUsername(username);
+          attempt++;
+        }
+        
+        const password = generateRandomPassword();
+        const passwordHash = await hashPassword(password);
+        
+        const user: User = {
+          id: generateId(),
+          username,
+          passwordHash,
+          name: data.name,
+          email: data.email || undefined,
+          role: 'staff', // All employees get staff role
+          active: true,
+          employeeId: newEmployeeId,
+          mustChangePassword: true, // Force password change on first login
+          createdAt: new Date().toISOString(),
+        };
+        
+        await saveUser(user);
+        
+        // Show credentials to admin
+        setCreatedCredentials({ username, password });
+        
+        toast({ 
+          title: 'Employee & Login Created', 
+          description: 'A login account has been created. Please share the credentials with the employee.', 
+          variant: 'success' 
+        });
+      } else {
+        onSuccess();
+        onOpenChange(false);
+        toast({ title: 'Success', description: 'Employee updated successfully.', variant: 'success' });
+        // Reload linked user in case it changed
+        if (employeeId) {
+          const user = await getUserByEmployeeId(employeeId);
+          setLinkedUser(user || null);
+        }
+      }
     } catch (error) {
+      console.error('Error saving employee:', error);
       toast({ title: 'Error', description: 'Failed to save employee.', variant: 'error' });
     } finally {
       setLoading(false);
     }
   };
+  
+  const handleClose = () => {
+    setCreatedCredentials(null);
+    onOpenChange(false);
+  };
+  
+  const handleDone = () => {
+    onSuccess();
+    setCreatedCredentials(null);
+    onOpenChange(false);
+  };
 
   if (!open) return null;
+
+  // Show credentials screen after creating new employee
+  if (createdCredentials) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="bg-background rounded-lg border shadow-lg w-full max-w-md">
+          <div className="flex items-center justify-between p-6 border-b">
+            <h2 className="text-2xl font-bold text-green-600">Employee Created</h2>
+            <Button type="button" variant="ghost" size="sm" onClick={handleClose}>
+              <X size={18} weight="duotone" />
+            </Button>
+          </div>
+          
+          <div className="p-6 space-y-4">
+            <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+              <Info size={20} weight="duotone" className="text-amber-600 mt-0.5 flex-shrink-0" />
+              <div className="text-sm text-amber-800 dark:text-amber-200">
+                <p className="font-semibold">Important: Save these credentials!</p>
+                <p className="mt-1">Share these login details with the employee. They will be required to change their password on first login.</p>
+              </div>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Username</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    value={createdCredentials.username} 
+                    readOnly 
+                    className="font-mono bg-muted"
+                  />
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => copyToClipboard(createdCredentials.username, 'username')}
+                  >
+                    {copiedField === 'username' ? <Check size={16} /> : <Copy size={16} />}
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Temporary Password</Label>
+                <div className="flex gap-2">
+                  <Input 
+                    value={createdCredentials.password} 
+                    readOnly 
+                    className="font-mono bg-muted"
+                  />
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => copyToClipboard(createdCredentials.password, 'password')}
+                  >
+                    {copiedField === 'password' ? <Check size={16} /> : <Copy size={16} />}
+                  </Button>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-3 pt-4 border-t">
+              <Button type="button" onClick={handleDone}>
+                Done
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -110,7 +357,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           <h2 className="text-2xl font-bold">
             {employeeId ? 'Edit Employee' : 'Add Employee'}
           </h2>
-          <Button type="button" variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="ghost" size="sm" onClick={handleClose}>
             <X size={18} weight="duotone" />
           </Button>
         </div>
@@ -144,8 +391,121 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
             {errors.hierarchy && <p className="text-sm text-destructive">{errors.hierarchy.message}</p>}
           </div>
 
+          {/* Team selector - only show for non-executives */}
+          {selectedHierarchy !== 'executive' && (
+            <div className="space-y-2">
+              <Label htmlFor="teamId">Team</Label>
+              <Select id="teamId" {...register('teamId')}>
+                <option value="">Select a team (optional)</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {selectedHierarchy === 'leader' 
+                  ? 'The team this leader manages' 
+                  : 'The team this member belongs to'}
+              </p>
+              {errors.teamId && <p className="text-sm text-destructive">{errors.teamId.message}</p>}
+            </div>
+          )}
+
+          {/* User Account Linking Section */}
+          {employeeId && (
+            <div className="space-y-3 pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold flex items-center gap-2">
+                  <UserCircle size={18} weight="duotone" />
+                  User Account
+                </Label>
+                {!linkedUser && !showUserLink && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowUserLink(true)}
+                  >
+                    <LinkSimple size={16} className="mr-1.5" />
+                    Link User
+                  </Button>
+                )}
+              </div>
+              
+              {linkedUser ? (
+                <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded bg-green-500/20">
+                        <UserCircle size={16} weight="duotone" className="text-green-600" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium">{linkedUser.name}</div>
+                        <div className="text-xs text-muted-foreground">@{linkedUser.username}</div>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleUnlinkUser}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-500/10"
+                    >
+                      <LinkSimpleBreak size={16} />
+                    </Button>
+                  </div>
+                </div>
+              ) : showUserLink ? (
+                <div className="space-y-2 p-3 rounded-lg bg-muted/50 border">
+                  <Select
+                    value={selectedUserId}
+                    onChange={(e) => setSelectedUserId(e.target.value)}
+                  >
+                    <option value="">Select a user to link...</option>
+                    {availableUsers.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} (@{user.username})
+                      </option>
+                    ))}
+                  </Select>
+                  {availableUsers.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      No available users to link. Create a user account first.
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowUserLink(false);
+                        setSelectedUserId('');
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleLinkUser}
+                      disabled={!selectedUserId}
+                    >
+                      Link User
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No user account linked. Link an existing user or create a new one when saving.
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="ghost" onClick={handleClose}>
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>

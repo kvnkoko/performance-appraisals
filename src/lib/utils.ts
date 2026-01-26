@@ -5,6 +5,98 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Convert hex color to HSL values for CSS custom properties
+export function hexToHSL(hex: string): { h: number; s: number; l: number } {
+  // Remove # if present
+  hex = hex.replace(/^#/, '');
+
+  // Parse hex values
+  const r = parseInt(hex.substring(0, 2), 16) / 255;
+  const g = parseInt(hex.substring(2, 4), 16) / 255;
+  const b = parseInt(hex.substring(4, 6), 16) / 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+
+    switch (max) {
+      case r:
+        h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+        break;
+      case g:
+        h = ((b - r) / d + 2) / 6;
+        break;
+      case b:
+        h = ((r - g) / d + 4) / 6;
+        break;
+    }
+  }
+
+  return {
+    h: Math.round(h * 360),
+    s: Math.round(s * 100),
+    l: Math.round(l * 100),
+  };
+}
+
+// Convert HSL values to hex color
+function hslToHex(h: number, s: number, l: number): string {
+  s /= 100;
+  l /= 100;
+  
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+  const m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  
+  if (0 <= h && h < 60) { r = c; g = x; b = 0; }
+  else if (60 <= h && h < 120) { r = x; g = c; b = 0; }
+  else if (120 <= h && h < 180) { r = 0; g = c; b = x; }
+  else if (180 <= h && h < 240) { r = 0; g = x; b = c; }
+  else if (240 <= h && h < 300) { r = x; g = 0; b = c; }
+  else if (300 <= h && h < 360) { r = c; g = 0; b = x; }
+  
+  const toHex = (n: number) => Math.round((n + m) * 255).toString(16).padStart(2, '0');
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+// Apply accent color to CSS custom properties
+export function applyAccentColor(hexColor: string): void {
+  const { h, s, l } = hexToHSL(hexColor);
+  const root = document.documentElement;
+
+  // Set the accent color CSS variables
+  root.style.setProperty('--accent-h', `${h}`);
+  root.style.setProperty('--accent-s', `${s}%`);
+  root.style.setProperty('--accent-l', `${l}%`);
+  
+  // Apply to primary color (buttons, etc.)
+  root.style.setProperty('--primary', `${h} ${s}% ${Math.max(l - 10, 10)}%`);
+  root.style.setProperty('--ring', `${h} ${s}% ${l}%`);
+  
+  // Apply to accent variables used by Tailwind
+  root.style.setProperty('--accent-color', hexColor);
+  
+  // Create variations for hover states and gradients
+  const lighterL = Math.min(l + 10, 95);
+  const darkerL = Math.max(l - 10, 5);
+  
+  // Generate actual hex colors for gradient support
+  const lighterHex = hslToHex(h, s, lighterL);
+  const darkerHex = hslToHex(h, s, darkerL);
+  
+  root.style.setProperty('--accent-light', `${h} ${s}% ${lighterL}%`);
+  root.style.setProperty('--accent-dark', `${h} ${s}% ${darkerL}%`);
+  root.style.setProperty('--accent-color-light', lighterHex);
+  root.style.setProperty('--accent-color-dark', darkerHex);
+}
+
 export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }

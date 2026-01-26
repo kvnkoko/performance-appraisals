@@ -11,7 +11,7 @@
     --foreground: 240 10% 8%;
     --card: 0 0% 100%;
     --card-foreground: 240 10% 8%;
-    --primary: 240 5.9% 10%;
+    --primary: 217 91% 50%;
     --primary-foreground: 0 0% 98%;
     --secondary: 240 4.8% 95.9%;
     --secondary-foreground: 240 5.9% 10%;
@@ -23,8 +23,16 @@
     --destructive-foreground: 0 0% 98%;
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
-    --ring: 240 5.9% 10%;
+    --ring: 217 91% 60%;
     --radius: 0.75rem;
+    
+    /* Dynamic accent color (set via JS) */
+    --accent-h: 217;
+    --accent-s: 91%;
+    --accent-l: 60%;
+    --accent-color: #3B82F6;
+    --accent-light: 217 91% 70%;
+    --accent-dark: 217 91% 50%;
   }
 
   .dark {
@@ -36,8 +44,7 @@
     --card: 240 12% 6%;
     --card-foreground: 0 0% 98%;
     
-    /* Vibrant blue primary */
-    --primary: 217 91% 60%;
+    /* Primary uses accent color - set via JS */
     --primary-foreground: 0 0% 98%;
     
     /* Dark secondary for elevated surfaces */
@@ -48,8 +55,7 @@
     --muted: 240 10% 8%;
     --muted-foreground: 240 5% 64.9%;
     
-    /* Vibrant accent colors */
-    --accent: 217 91% 60%;
+    /* Accent foreground */
     --accent-foreground: 0 0% 98%;
     
     /* Enhanced destructive (red) */
@@ -59,7 +65,6 @@
     /* Subtle borders */
     --border: 240 8% 16%;
     --input: 240 8% 16%;
-    --ring: 217 91% 60%;
     
     /* Success green */
     --success: 142 71% 45%;
@@ -257,9 +262,10 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
   
-  /* Gradient backgrounds */
+  /* Gradient backgrounds - uses dynamic accent color */
   .gradient-primary {
-    background: linear-gradient(135deg, hsl(217, 91%, 60%) 0%, hsl(217, 91%, 50%) 100%);
+    background: var(--accent-color, #3B82F6);
+    background: linear-gradient(135deg, var(--accent-color, #3B82F6) 0%, var(--accent-color-dark, #2563EB) 100%);
   }
   
   .gradient-success {
@@ -275,14 +281,18 @@
   }
   
   .gradient-card {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(147, 51, 234, 0.1) 100%);
+    background: linear-gradient(135deg, hsl(var(--accent-h), var(--accent-s), var(--accent-l), 0.1) 0%, hsl(var(--accent-h), var(--accent-s), calc(var(--accent-l) + 20%), 0.1) 100%);
   }
   
   .dark .gradient-card {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(147, 51, 234, 0.15) 100%);
+    background: linear-gradient(135deg, hsl(var(--accent-h), var(--accent-s), var(--accent-l), 0.15) 0%, hsl(var(--accent-h), var(--accent-s), calc(var(--accent-l) + 20%), 0.15) 100%);
   }
   
-  /* Glow effects */
+  /* Glow effects - uses dynamic accent color */
+  .glow-accent {
+    box-shadow: 0 0 20px hsl(var(--accent-h), var(--accent-s), var(--accent-l), 0.4);
+  }
+  
   .glow-blue {
     box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
   }
@@ -293,6 +303,27 @@
   
   .glow-purple {
     box-shadow: 0 0 20px rgba(147, 51, 234, 0.4);
+  }
+  
+  /* Accent color utilities */
+  .bg-accent-primary {
+    background-color: var(--accent-color);
+  }
+  
+  .text-accent-primary {
+    color: var(--accent-color);
+  }
+  
+  .border-accent-primary {
+    border-color: var(--accent-color);
+  }
+  
+  .bg-accent-primary\/20 {
+    background-color: hsl(var(--accent-h), var(--accent-s), var(--accent-l), 0.2);
+  }
+  
+  .bg-accent-primary\/10 {
+    background-color: hsl(var(--accent-h), var(--accent-s), var(--accent-l), 0.1);
   }
   
   /* Refined shadows */
