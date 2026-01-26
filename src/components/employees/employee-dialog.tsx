@@ -97,6 +97,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         setLinkedUser(user || null);
       }
     } catch (error) {
+      console.error('Error loading employee:', error);
       toast({ title: 'Error', description: 'Failed to load employee.', variant: 'error' });
     }
   };
@@ -129,6 +130,10 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
       setShowUserLink(false);
       setSelectedUserId('');
       await loadAvailableUsers();
+      
+      // Dispatch event to notify Users page to refresh
+      window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id } }));
+      
       toast({ title: 'Success', description: 'User linked to employee successfully.', variant: 'success' });
     } catch (error) {
       console.error('Error linking user:', error);
@@ -148,6 +153,10 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
       await saveUser(updatedUser);
       setLinkedUser(null);
       await loadAvailableUsers();
+      
+      // Dispatch event to notify Users page to refresh
+      window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id } }));
+      
       toast({ title: 'Success', description: 'User unlinked from employee successfully.', variant: 'success' });
     } catch (error) {
       console.error('Error unlinking user:', error);
@@ -239,6 +248,18 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         
         await saveUser(user);
         
+        // Verify the user was saved correctly by reloading it
+        const savedUser = await getUserByEmployeeId(newEmployeeId);
+        if (savedUser) {
+          setLinkedUser(savedUser);
+        } else {
+          // If not found, set it anyway (might be a timing issue with Supabase)
+          setLinkedUser(user);
+        }
+        
+        // Dispatch custom event to notify Users page to refresh
+        window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: user.id, employeeId: newEmployeeId } }));
+        
         // Show credentials to admin
         setCreatedCredentials({ username, password });
         
@@ -248,6 +269,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           variant: 'success' 
         });
       } else {
+        // Editing existing employee - refresh and close
         onSuccess();
         onOpenChange(false);
         toast({ title: 'Success', description: 'Employee updated successfully.', variant: 'success' });
@@ -270,8 +292,13 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
     onOpenChange(false);
   };
   
-  const handleDone = () => {
+  const handleDone = async () => {
+    // Refresh employees list
     onSuccess();
+    
+    // Refresh available users list in case we need to link more
+    await loadAvailableUsers();
+    
     setCreatedCredentials(null);
     onOpenChange(false);
   };

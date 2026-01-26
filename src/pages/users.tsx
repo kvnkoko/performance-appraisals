@@ -509,6 +509,19 @@ export function UsersPage() {
 
   useEffect(() => {
     loadUsers();
+    
+    // Listen for user creation/update events
+    const handleUserEvent = () => {
+      loadUsers();
+    };
+    
+    window.addEventListener('userCreated', handleUserEvent);
+    window.addEventListener('userUpdated', handleUserEvent);
+    
+    return () => {
+      window.removeEventListener('userCreated', handleUserEvent);
+      window.removeEventListener('userUpdated', handleUserEvent);
+    };
   }, []);
 
   const handleDeleteClick = (id: string, name: string) => {
