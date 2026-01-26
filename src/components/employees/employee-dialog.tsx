@@ -224,6 +224,10 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
 
       await saveEmployee(employee);
       
+      // Dispatch event to notify other pages (like Teams) to refresh
+      window.dispatchEvent(new CustomEvent('employeeCreated', { detail: { employeeId: newEmployeeId } }));
+      window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: newEmployeeId } }));
+      
       // Auto-create user account for new employees (unless user opted out)
       if (!employeeId && autoCreateUser) {
         try {
@@ -449,6 +453,22 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           // Editing existing employee - refresh and close
           toast({ title: 'Success', description: 'Employee updated successfully.', variant: 'success' });
         }
+        
+        // Dispatch event to notify other pages (like Teams) to refresh
+        window.dispatchEvent(new CustomEvent('employeeCreated', { detail: { employeeId: newEmployeeId } }));
+        window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: newEmployeeId } }));
+        
+        // Also dispatch after delays to catch pages if they weren't ready
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('employeeCreated', { detail: { employeeId: newEmployeeId } }));
+          window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: newEmployeeId } }));
+        }, 500);
+        
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('employeeCreated', { detail: { employeeId: newEmployeeId } }));
+          window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: newEmployeeId } }));
+        }, 2000);
+        
         onSuccess();
         onOpenChange(false);
         // Reload linked user in case it changed

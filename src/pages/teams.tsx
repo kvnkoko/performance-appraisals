@@ -30,6 +30,12 @@ export function TeamsPage() {
       refresh();
     };
     
+    // Listen for employee creation/update events (employees can be added to teams)
+    const handleEmployeeEvent = () => {
+      console.log('Employee event received, refreshing teams list...');
+      refresh();
+    };
+    
     // Listen for window focus to refresh when user returns to the page
     const handleFocus = () => {
       console.log('Window focused, refreshing teams list...');
@@ -45,11 +51,15 @@ export function TeamsPage() {
     
     window.addEventListener('teamCreated', handleTeamEvent);
     window.addEventListener('teamUpdated', handleTeamEvent);
+    window.addEventListener('employeeCreated', handleEmployeeEvent);
+    window.addEventListener('employeeUpdated', handleEmployeeEvent);
     window.addEventListener('focus', handleFocus);
     
     return () => {
       window.removeEventListener('teamCreated', handleTeamEvent);
       window.removeEventListener('teamUpdated', handleTeamEvent);
+      window.removeEventListener('employeeCreated', handleEmployeeEvent);
+      window.removeEventListener('employeeUpdated', handleEmployeeEvent);
       window.removeEventListener('focus', handleFocus);
       clearInterval(pollInterval);
     };
