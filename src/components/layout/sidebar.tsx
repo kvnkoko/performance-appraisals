@@ -25,9 +25,9 @@ import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/contexts/app-context';
 import { useUser } from '@/contexts/user-context';
 
-// Admin navigation items
+// Admin navigation items (Overview = system-wide dashboard)
 const adminNavItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: SquaresFour },
+  { path: '/dashboard', label: 'Overview', icon: SquaresFour },
   { path: '/templates', label: 'Templates', icon: FileText },
   { path: '/employees', label: 'Employees', icon: Users },
   { path: '/teams', label: 'Teams', icon: UsersThree },
@@ -41,7 +41,7 @@ const adminNavItems = [
 
 // Employee navigation items (non-admin users)
 const employeeNavItems = [
-  { path: '/my-dashboard', label: 'Dashboard', icon: House },
+  { path: '/my-dashboard', label: 'My Dashboard', icon: House },
   { path: '/my-appraisals', label: 'My Appraisals', icon: ClipboardText },
   { path: '/my-performance', label: 'My Performance', icon: ChartLineUp },
   { path: '/settings', label: 'Settings', icon: Gear },

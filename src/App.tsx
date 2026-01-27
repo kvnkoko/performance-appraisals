@@ -67,6 +67,15 @@ function RoleBasedRedirect() {
   return <Navigate to="/my-dashboard" replace />;
 }
 
+// If admin hits /my-dashboard (e.g. bookmark or back), send to admin dashboard so Vercel and localhost match
+function MyDashboardOrRedirect() {
+  const { user, loading } = useUser();
+  const userRole = user?.role || localStorage.getItem('userRole');
+  if (loading) return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  if (userRole === 'admin') return <Navigate to="/dashboard" replace />;
+  return <EmployeeDashboardPage />;
+}
+
 function App() {
   const [initialized, setInitialized] = useState(false);
 
@@ -129,8 +138,8 @@ function App() {
                         <Route path="/reviews" element={<AdminRoute><ReviewsPage /></AdminRoute>} />
                         <Route path="/historical" element={<AdminRoute><HistoricalReviewsPage /></AdminRoute>} />
                         
-                        {/* Employee routes */}
-                        <Route path="/my-dashboard" element={<EmployeeDashboardPage />} />
+                        {/* Employee routes — admins always see admin dashboard instead */}
+                        <Route path="/my-dashboard" element={<MyDashboardOrRedirect />} />
                         <Route path="/my-appraisals" element={<MyAppraisalsPage />} />
                         <Route path="/my-performance" element={<MyPerformancePage />} />
                         
