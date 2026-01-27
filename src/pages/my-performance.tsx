@@ -8,8 +8,11 @@ import {
   Star,
   Target,
   Calendar,
-  Info
+  Info,
+  Lightning
 } from 'phosphor-react';
+import { generatePerformanceSummary } from '@/lib/ai-summary';
+import type { PerformanceInsight } from '@/lib/ai-summary';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import type { Appraisal, Template, Category } from '@/types';
 
@@ -24,6 +27,8 @@ export function MyPerformancePage() {
   const { appraisals, templates, reviewPeriods, employees, loading } = useApp();
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
+  const [narrativeSummary, setNarrativeSummary] = useState<PerformanceInsight | null>(null);
+  const [narrativeLoading, setNarrativeLoading] = useState(false);
 
   useEffect(() => {
     const storedEmployeeId = localStorage.getItem('employeeId');
@@ -60,6 +65,27 @@ export function MyPerformancePage() {
     if (!selectedPeriodId) return myAppraisals;
     return myAppraisals.filter(a => a.reviewPeriodId === selectedPeriodId);
   }, [myAppraisals, selectedPeriodId]);
+
+  // Load AI narrative summary when period or appraisals change
+  useEffect(() => {
+    if (!employeeId || periodAppraisals.length === 0) {
+      setNarrativeSummary(null);
+      return;
+    }
+    let cancelled = false;
+    setNarrativeLoading(true);
+    generatePerformanceSummary(employeeId, periodAppraisals)
+      .then((insight) => {
+        if (!cancelled) setNarrativeSummary(insight);
+      })
+      .catch(() => {
+        if (!cancelled) setNarrativeSummary(null);
+      })
+      .finally(() => {
+        if (!cancelled) setNarrativeLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [employeeId, periodAppraisals]);
 
   // Calculate overall score
   const overallStats = useMemo(() => {
@@ -264,6 +290,23 @@ export function MyPerformancePage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* AI Narrative Summary */}
+      {(narrativeLoading || narrativeSummary?.narrative) && (
+        <div className="p-5 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/20 border border-blue-200 dark:border-blue-800">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="p-2 rounded-lg bg-blue-100/50 dark:bg-blue-900/30">
+              <Lightning size={20} weight="duotone" className="text-blue-600/80 dark:text-blue-400/80" />
+            </div>
+            <h3 className="font-bold text-lg text-blue-900 dark:text-blue-100">Narrative Summary</h3>
+          </div>
+          {narrativeLoading ? (
+            <p className="text-sm text-blue-700/70 dark:text-blue-300/70 italic">Generating summary...</p>
+          ) : narrativeSummary?.narrative ? (
+            <p className="text-sm leading-relaxed text-blue-900 dark:text-blue-100 whitespace-pre-line">{narrativeSummary.narrative}</p>
+          ) : null}
+        </div>
+      )}
 
       {/* Strengths and Improvements */}
       <div className="grid gap-6 md:grid-cols-2">
