@@ -332,6 +332,27 @@ export async function saveEmployee(employee: Employee): Promise<void> {
   console.log('Employee saved to IndexedDB:', employee.id, 'teamId:', employee.teamId);
 }
 
+/** Update only an employee's team (assign/remove as department leader). Uses PATCH when Supabase is configured to avoid upsert 400s. */
+export async function updateEmployeeTeam(employeeId: string, teamId: string | null): Promise<void> {
+  const database = await initDB();
+  const { isSupabaseConfigured } = await import('./supabase');
+
+  if (isSupabaseConfigured()) {
+    const { updateEmployeeTeamInSupabase } = await import('./supabase-storage');
+    await updateEmployeeTeamInSupabase(employeeId, teamId);
+    const emp = await getEmployee(employeeId);
+    if (emp && database.objectStoreNames.contains('employees')) {
+      await database.put('employees', { ...emp, teamId: teamId ?? undefined });
+    }
+    return;
+  }
+
+  const emp = await getEmployee(employeeId);
+  if (emp) {
+    await saveEmployee({ ...emp, teamId: teamId ?? undefined });
+  }
+}
+
 export async function deleteEmployee(id: string): Promise<void> {
   // Try Supabase first if configured
   try {

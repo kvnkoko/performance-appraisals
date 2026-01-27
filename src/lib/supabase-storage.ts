@@ -234,27 +234,49 @@ export async function getEmployeeFromSupabase(id: string): Promise<Employee | un
   }
 }
 
+/** Update only team_id for an employee (assign/remove as department leader). Avoids full upsert 400s. */
+export async function updateEmployeeTeamInSupabase(employeeId: string, teamId: string | null): Promise<void> {
+  if (!isSupabaseConfigured()) throw new Error('Supabase not configured');
+  const supabase = await getSupabaseClient();
+  if (!supabase) throw new Error('Supabase client not available');
+
+  const { error } = await supabase
+    .from(TABLES.EMPLOYEES)
+    .update({ team_id: teamId })
+    .eq('id', employeeId);
+
+  if (error) {
+    console.error('Error in updateEmployeeTeamInSupabase:', error.message, error.details);
+    throw error;
+  }
+}
+
 export async function saveEmployeeToSupabase(employee: Employee): Promise<void> {
   if (!isSupabaseConfigured()) throw new Error('Supabase not configured');
-  
+
   try {
     const supabase = await getSupabaseClient();
     if (!supabase) throw new Error('Supabase client not available');
-    
+
+    const payload = {
+      id: employee.id,
+      name: employee.name,
+      email: employee.email ?? null,
+      role: employee.role,
+      hierarchy: employee.hierarchy,
+      team_id: employee.teamId ?? null,
+      reports_to: (employee as { reportsTo?: string }).reportsTo ?? null,
+      created_at: employee.createdAt || new Date().toISOString(),
+    };
+
     const { error } = await supabase
       .from(TABLES.EMPLOYEES)
-      .upsert({
-        id: employee.id,
-        name: employee.name,
-        email: employee.email || null,
-        role: employee.role,
-        hierarchy: employee.hierarchy,
-        team_id: employee.teamId || null,
-        reports_to: (employee as { reportsTo?: string }).reportsTo ?? null,
-        created_at: employee.createdAt,
-      }, { onConflict: 'id' });
-    
-    if (error) throw error;
+      .upsert(payload, { onConflict: 'id' });
+
+    if (error) {
+      console.error('Error in saveEmployeeToSupabase:', error.message, error.details, payload);
+      throw error;
+    }
   } catch (error) {
     console.error('Error in saveEmployeeToSupabase:', error);
     throw error;

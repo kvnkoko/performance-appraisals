@@ -889,7 +889,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
                     Assign as department head
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    Optional. When set, this executive leads the chosen department and appears as a leader there.
+                    Optional. When set, this executive leads the chosen department and sees both executive appraisal forms and leader-to-member forms for that team.
                   </p>
                 </div>
               </div>

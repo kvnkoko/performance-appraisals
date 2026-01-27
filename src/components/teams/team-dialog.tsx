@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
-import { getTeam, saveTeam, getEmployee, saveEmployee } from '@/lib/storage';
+import { getTeam, saveTeam, updateEmployeeTeam } from '@/lib/storage';
 import { generateId } from '@/lib/utils';
 import type { Team } from '@/types';
 import { useToast } from '@/contexts/toast-context';
@@ -52,20 +52,16 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
 
   const assignLeader = async (employeeId: string) => {
     if (!teamId) return;
+    const emp = employees.find((e) => e.id === employeeId);
     setLeaderActionLoading(employeeId);
     try {
-      const emp = await getEmployee(employeeId);
-      if (!emp) {
-        toast({ title: 'Error', description: 'Employee not found.', variant: 'error' });
-        return;
-      }
-      await saveEmployee({ ...emp, teamId });
+      await updateEmployeeTeam(employeeId, teamId);
       window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId } }));
       await Promise.resolve(onSuccess());
       setAddLeaderId('');
       toast({
         title: 'Leader assigned',
-        description: `${emp.name} is now a leader of this department.`,
+        description: emp ? `${emp.name} is now a leader of this department.` : 'Department leader updated.',
         variant: 'success',
       });
     } catch (err) {
@@ -77,16 +73,15 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
   };
 
   const removeAsLeader = async (employeeId: string) => {
+    const emp = employees.find((e) => e.id === employeeId);
     setLeaderActionLoading(employeeId);
     try {
-      const emp = await getEmployee(employeeId);
-      if (!emp) return;
-      await saveEmployee({ ...emp, teamId: undefined });
+      await updateEmployeeTeam(employeeId, null);
       window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId } }));
       await Promise.resolve(onSuccess());
       toast({
         title: 'Removed as leader',
-        description: `${emp.name} is no longer a leader of this department.`,
+        description: emp ? `${emp.name} is no longer a leader of this department.` : 'Leader removed.',
         variant: 'success',
       });
     } catch (err) {
@@ -217,7 +212,7 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
                 <Label className="text-base font-semibold">Department Leaders</Label>
               </div>
               <p className="text-sm text-muted-foreground">
-                Assign Executives or Leaders to lead this department. They will appear as department heads and can have direct reports.
+                Assign Executives or Leaders to lead this department. Executives who lead a department see both executive appraisal forms and leader-to-member forms for this team.
               </p>
               {currentLeaders.length > 0 && (
                 <div className="flex flex-wrap gap-2">
