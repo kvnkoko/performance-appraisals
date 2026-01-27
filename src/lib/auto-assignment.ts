@@ -1,6 +1,6 @@
 /**
- * Auto-assignment logic: preview and generate appraisal assignments from org structure (reportsTo).
- * Complements manual link creation; both coexist.
+ * Auto-assignment logic: preview and generate appraisal assignments from org structure.
+ * Uses Reports To first; falls back to same-team (member's team = leader/exec's department) when Reports To is missing.
  */
 import type { Employee, AppraisalAssignment, AssignmentRelationshipType } from '@/types';
 import { generateId } from '@/lib/utils';
@@ -24,10 +24,18 @@ const DEFAULT_OPTIONS: AutoAssignmentOptions = {
   includeLeaderToMember: true,
   includeMemberToLeader: true,
   includeLeaderToLeader: false,
-  includeExecToLeader: false,
+  includeExecToLeader: true,
 };
 
-/** Build preview of what auto-assignments would be created from current employees and reportsTo. */
+/** Direct reports = has reportsTo→this id, or (member in same team when manager has teamId). */
+function countDirectReports(managerId: string, managerTeamId: string | undefined, employees: Employee[]): number {
+  const byReportsTo = employees.filter((m) => m.reportsTo === managerId).length;
+  if (byReportsTo > 0) return byReportsTo;
+  if (!managerTeamId) return 0;
+  return employees.filter((m) => m.hierarchy === 'member' && m.teamId === managerTeamId).length;
+}
+
+/** Build preview of what auto-assignments would be created from current employees. */
 export function previewAutoAssignments(
   employees: Employee[],
   _reviewPeriodId: string,
@@ -41,57 +49,79 @@ export function previewAutoAssignments(
   const leaderToLeader: AutoAssignmentPreview['leaderToLeader'] = [];
   const execToLeader: AutoAssignmentPreview['execToLeader'] = [];
 
-  // "Managers" = anyone who can have direct reports (leaders + executives who can lead departments)
   const isManager = (e: Employee) => e.hierarchy === 'leader' || e.hierarchy === 'executive';
 
-  const membersWithoutReportsTo = employees.filter((e) => e.hierarchy === 'member' && !e.reportsTo);
-  if (membersWithoutReportsTo.length > 0) {
-    warnings.push(`${membersWithoutReportsTo.length} member(s) have no "Reports To" set – skipped for Leader→Member and Member→Leader.`);
+  // Members with neither Reports To nor team get skipped
+  const membersNoReportNoTeam = employees.filter((e) => e.hierarchy === 'member' && !e.reportsTo && !e.teamId);
+  if (membersNoReportNoTeam.length > 0) {
+    warnings.push(`${membersNoReportNoTeam.length} member(s) have no "Reports To" and no team – set one on the Employees tab to include them.`);
   }
 
-  const managersWithNoReports = employees.filter((e) => isManager(e) && !employees.some((m) => m.reportsTo === e.id));
+  const managersWithNoReports = employees.filter((e) => isManager(e) && countDirectReports(e.id, e.teamId, employees) === 0);
   if (managersWithNoReports.length > 0) {
-    warnings.push(`${managersWithNoReports.length} manager(s) (leaders/executives) have no direct reports.`);
+    warnings.push(`${managersWithNoReports.length} manager(s) have no direct reports (set "Reports To" on members, or put members in the same team).`);
   }
 
-  // RULE 1: Leader → Member (manager appraises direct report; manager = leader OR executive)
+  const seenL2M = new Set<string>();
+  const seenM2L = new Set<string>();
+
+  // RULE 1: Leader → Member — from Reports To, or same-team fallback when member has no reportsTo
   if (opts.includeLeaderToMember) {
     for (const member of employees) {
-      if (member.hierarchy !== 'member' || !member.reportsTo) continue;
-      const manager = byId.get(member.reportsTo);
-      if (!manager || !isManager(manager)) continue;
-      leaderToMember.push({
-        appraiserId: manager.id,
-        appraiserName: manager.name,
-        employeeId: member.id,
-        employeeName: member.name,
-      });
+      if (member.hierarchy !== 'member') continue;
+      let managers: Employee[] = [];
+      if (member.reportsTo) {
+        const m = byId.get(member.reportsTo);
+        if (m && isManager(m)) managers = [m];
+      } else if (member.teamId) {
+        managers = employees.filter((e) => isManager(e) && e.teamId === member.teamId);
+      }
+      for (const manager of managers) {
+        const key = `${manager.id}:${member.id}`;
+        if (seenL2M.has(key)) continue;
+        seenL2M.add(key);
+        leaderToMember.push({
+          appraiserId: manager.id,
+          appraiserName: manager.name,
+          employeeId: member.id,
+          employeeName: member.name,
+        });
+      }
     }
   }
 
-  // RULE 2: Member → Leader (upward feedback; manager = leader OR executive)
+  // RULE 2: Member → Leader — same pairs as above, reversed
   if (opts.includeMemberToLeader) {
     for (const member of employees) {
-      if (member.hierarchy !== 'member' || !member.reportsTo) continue;
-      const manager = byId.get(member.reportsTo);
-      if (!manager) continue;
-      memberToLeader.push({
-        appraiserId: member.id,
-        appraiserName: member.name,
-        employeeId: manager.id,
-        employeeName: manager.name,
-      });
+      if (member.hierarchy !== 'member') continue;
+      let managers: Employee[] = [];
+      if (member.reportsTo) {
+        const m = byId.get(member.reportsTo);
+        if (m && isManager(m)) managers = [m];
+      } else if (member.teamId) {
+        managers = employees.filter((e) => isManager(e) && e.teamId === member.teamId);
+      }
+      for (const manager of managers) {
+        const key = `${member.id}:${manager.id}`;
+        if (seenM2L.has(key)) continue;
+        seenM2L.add(key);
+        memberToLeader.push({
+          appraiserId: member.id,
+          appraiserName: member.name,
+          employeeId: manager.id,
+          employeeName: manager.name,
+        });
+      }
     }
   }
 
-  // RULE 3: Leader → Leader (peer review in same department; includes executives who lead that department)
+  // RULE 3: Leader → Leader (peer review same department)
   if (opts.includeLeaderToLeader) {
     const departmentLeaders = employees.filter((e) => isManager(e) && e.teamId);
-    const sameTeam = (a: Employee, b: Employee) => (a.teamId && b.teamId && a.teamId === b.teamId) || (!a.teamId && !b.teamId);
     for (const appraiser of departmentLeaders) {
       for (const target of departmentLeaders) {
         if (appraiser.id === target.id) continue;
-        if (!sameTeam(appraiser, target)) continue;
+        if (appraiser.teamId !== target.teamId) continue;
         leaderToLeader.push({
           appraiserId: appraiser.id,
           appraiserName: appraiser.name,
@@ -102,20 +132,24 @@ export function previewAutoAssignments(
     }
   }
 
-  // RULE 4: Executive → Leader (exec appraises leaders in same department; execs who lead a dept are in leader peer pool above)
+  // RULE 4: Executive → Leader — execs who lead a department appraise leaders in that department
   if (opts.includeExecToLeader) {
-    const execs = employees.filter((e) => e.hierarchy === 'executive' && e.teamId);
+    const execsWithDept = employees.filter((e) => e.hierarchy === 'executive' && e.teamId);
     const leaders = employees.filter((e) => e.hierarchy === 'leader');
-    for (const exec of execs) {
+    for (const exec of execsWithDept) {
       for (const leader of leaders) {
-        if (!exec.teamId || !leader.teamId || exec.teamId !== leader.teamId) continue;
-        execToLeader.push({
-          appraiserId: exec.id,
-          appraiserName: exec.name,
-          employeeId: leader.id,
-          employeeName: leader.name,
-        });
+        if (leader.teamId && exec.teamId === leader.teamId) {
+          execToLeader.push({
+            appraiserId: exec.id,
+            appraiserName: exec.name,
+            employeeId: leader.id,
+            employeeName: leader.name,
+          });
+        }
       }
+    }
+    if (execsWithDept.length > 0 && leaders.length > 0 && execToLeader.length === 0) {
+      warnings.push('No Executive→Leader pairs: assign leaders to a department (Teams/Employees) that an executive leads.');
     }
   }
 

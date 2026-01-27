@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { PeriodSelector } from '@/components/periods/period-selector';
 import { getReviewPeriod, saveAppraisalAssignments } from '@/lib/storage';
@@ -40,7 +40,7 @@ export function LinksPage() {
   const [autoStep, setAutoStep] = useState<AutoWizardStep>(1);
   const [autoPreview, setAutoPreview] = useState<AutoAssignmentPreview | null>(null);
   const [includeLeaderToLeader, setIncludeLeaderToLeader] = useState(false);
-  const [includeExecToLeader, setIncludeExecToLeader] = useState(false);
+  const [includeExecToLeader, setIncludeExecToLeader] = useState(true);
   const [autoTemplateMap, setAutoTemplateMap] = useState<TemplateMapping>({
     leaderToMember: '',
     memberToLeader: '',
@@ -57,19 +57,25 @@ export function LinksPage() {
     }
   }, [activePeriods, selectedPeriod]);
 
-  const runAutoPreview = () => {
-    if (!selectedPeriod) {
-      toast({ title: 'Select period', description: 'Choose a review period first.', variant: 'error' });
-      return;
-    }
-    const preview = previewAutoAssignments(employees, selectedPeriod, {
+  const livePreview = useMemo(() => {
+    if (!selectedPeriod || mode !== 'auto') return null;
+    return previewAutoAssignments(employees, selectedPeriod, {
       includeLeaderToMember: true,
       includeMemberToLeader: true,
       includeLeaderToLeader,
       includeExecToLeader,
     });
-    setAutoPreview(preview);
-    setAutoStep(2);
+  }, [employees, selectedPeriod, includeLeaderToLeader, includeExecToLeader, mode]);
+
+  const runAutoPreview = () => {
+    if (!selectedPeriod) {
+      toast({ title: 'Select period', description: 'Choose a review period first.', variant: 'error' });
+      return;
+    }
+    if (livePreview) {
+      setAutoPreview(livePreview);
+      setAutoStep(2);
+    }
   };
 
   const totalAutoCount = autoPreview
@@ -253,7 +259,7 @@ export function LinksPage() {
                 <span className="font-semibold">Auto-Generate</span>
                 <span className="text-xs rounded bg-muted px-1.5 py-0.5">Faster</span>
               </div>
-              <p className="text-sm text-muted-foreground mt-1">Bulk create from Reports To &amp; org structure</p>
+              <p className="text-sm text-muted-foreground mt-1">Bulk create from Reports To and same-team leaders</p>
             </button>
           </div>
         </CardContent>
@@ -497,9 +503,9 @@ export function LinksPage() {
           <CardHeader>
             <CardTitle>Auto-assignment</CardTitle>
             <CardDescription>
-              {autoStep === 1 && 'Select period and preview what will be created from Reports To and org structure.'}
-              {autoStep === 2 && 'Choose templates and due date, then generate.'}
-              {autoStep === 3 && 'Assignments created. You can add manual links for special cases.'}
+              {autoStep === 1 && 'Select a period to see how many appraisals will be created from your org structure (Reports To + same team).'}
+              {autoStep === 2 && 'Pick a template per type and optional due date, then generate.'}
+              {autoStep === 3 && 'Assignments created. Add manual links from the Manual tab if needed.'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -514,8 +520,11 @@ export function LinksPage() {
                     showCreateOption={false}
                   />
                 </div>
+                <p className="text-sm text-muted-foreground">
+                  Pairs use &quot;Reports To&quot; first; members in the same team as a leader/executive count as reports when &quot;Reports To&quot; is not set.
+                </p>
                 <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-                  <p className="text-sm font-medium">Optional: include in this run</p>
+                  <p className="text-sm font-medium">Include in this run</p>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
@@ -530,18 +539,59 @@ export function LinksPage() {
                       checked={includeExecToLeader}
                       onChange={(e) => setIncludeExecToLeader(e.target.checked)}
                     />
-                    <span className="text-sm">Executive → Leader reviews</span>
+                    <span className="text-sm">Executive → Leader (department head appraises leaders in that department)</span>
                   </label>
                 </div>
-                {existingForPeriod > 0 && (
-                  <p className="text-sm text-amber-600 flex items-center gap-2">
-                    <Warning size={16} />
-                    {existingForPeriod} assignment(s) already exist for this period. Auto-generate will add more.
-                  </p>
+                {livePreview && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-lg border bg-card p-3">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Leader → Member</p>
+                        <p className="text-2xl font-bold mt-0.5">{livePreview.leaderToMember.length}</p>
+                        <p className="text-xs text-muted-foreground">Manager appraises report (Reports To or same team)</p>
+                      </div>
+                      <div className="rounded-lg border bg-card p-3">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Member → Leader</p>
+                        <p className="text-2xl font-bold mt-0.5">{livePreview.memberToLeader.length}</p>
+                        <p className="text-xs text-muted-foreground">Upward feedback</p>
+                      </div>
+                      <div className="rounded-lg border bg-card p-3">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Leader → Leader</p>
+                        <p className="text-2xl font-bold mt-0.5">{livePreview.leaderToLeader.length}</p>
+                        <p className="text-xs text-muted-foreground">Peer (same team)</p>
+                      </div>
+                      <div className="rounded-lg border bg-card p-3">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Executive → Leader</p>
+                        <p className="text-2xl font-bold mt-0.5">{livePreview.execToLeader.length}</p>
+                        <p className="text-xs text-muted-foreground">Dept head appraises leaders</p>
+                      </div>
+                    </div>
+                    {livePreview.warnings.length > 0 && (
+                      <div className="rounded-lg border border-amber-500/50 bg-amber-500/5 p-4">
+                        <p className="text-sm font-medium flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                          <Warning size={16} />
+                          Tips
+                        </p>
+                        <ul className="list-disc list-inside text-sm text-muted-foreground mt-2 space-y-0.5">
+                          {livePreview.warnings.map((w, i) => (
+                            <li key={i}>{w}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {existingForPeriod > 0 && (
+                      <p className="text-sm text-amber-600 flex items-center gap-2">
+                        <Warning size={16} />
+                        {existingForPeriod} assignment(s) already exist for this period. Auto-generate will add more.
+                      </p>
+                    )}
+                  </>
                 )}
                 <div className="flex justify-end">
-                  <Button onClick={runAutoPreview} disabled={!selectedPeriod}>
-                    Preview &amp; continue
+                  <Button onClick={runAutoPreview} disabled={!selectedPeriod || !livePreview}>
+                    {livePreview && (livePreview.leaderToMember.length + livePreview.memberToLeader.length + livePreview.leaderToLeader.length + livePreview.execToLeader.length) > 0
+                      ? `Continue with ${livePreview.leaderToMember.length + livePreview.memberToLeader.length + livePreview.leaderToLeader.length + livePreview.execToLeader.length} appraisals`
+                      : 'Preview &amp; continue'}
                     <CaretRight size={16} className="ml-1" />
                   </Button>
                 </div>
