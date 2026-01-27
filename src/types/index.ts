@@ -64,8 +64,34 @@ export interface Employee {
   email?: string;
   role: string;
   hierarchy: 'executive' | 'leader' | 'member';
-  teamId?: string; // Optional - not required for executives
+  teamId?: string; // department/team
+  reportsTo?: string; // employeeId of direct manager (Leader or Executive) – for auto-assignment
   createdAt: string;
+}
+
+/** Relationship type for an assignment (maps to template type or custom) */
+export type AssignmentRelationshipType =
+  | 'exec-to-leader'
+  | 'leader-to-member'
+  | 'member-to-leader'
+  | 'leader-to-leader'
+  | 'custom';
+
+/** Single appraisal assignment (auto or manual); used alongside AppraisalLink for unified dashboard */
+export interface AppraisalAssignment {
+  id: string;
+  reviewPeriodId: string;
+  appraiserId: string;
+  appraiserName: string;
+  employeeId: string;
+  employeeName: string;
+  relationshipType: AssignmentRelationshipType;
+  templateId: string;
+  status: 'pending' | 'in-progress' | 'completed';
+  assignmentType: 'auto' | 'manual';
+  linkToken?: string; // if created from manual link, store token for URL
+  createdAt: string;
+  dueDate?: string;
 }
 
 export interface Team {

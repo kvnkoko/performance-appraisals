@@ -20,6 +20,7 @@ const employeeSchema = z.object({
   role: z.string().min(1, 'Role is required'),
   hierarchy: z.enum(['executive', 'leader', 'member']),
   teamId: z.string().optional(),
+  reportsTo: z.string().optional(),
 });
 
 type EmployeeFormData = z.infer<typeof employeeSchema>;
@@ -33,7 +34,7 @@ interface EmployeeDialogProps {
 
 export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: EmployeeDialogProps) {
   const { toast } = useToast();
-  const { teams } = useApp();
+  const { teams, employees } = useApp();
   const [loading, setLoading] = useState(false);
   const [linkedUser, setLinkedUser] = useState<User | null>(null);
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
@@ -55,6 +56,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
       role: '',
       hierarchy: 'member',
       teamId: '',
+      reportsTo: '',
     },
   });
 
@@ -71,6 +73,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         role: '',
         hierarchy: 'member',
         teamId: '',
+        reportsTo: '',
       });
       setLinkedUser(null);
       setShowUserLink(false);
@@ -93,6 +96,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           role: employee.role,
           hierarchy: employee.hierarchy,
           teamId: employee.teamId || '',
+          reportsTo: employee.reportsTo || '',
         });
         
         // Load linked user if exists
@@ -278,6 +282,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         role: data.role,
         hierarchy: data.hierarchy,
         teamId: data.hierarchy !== 'executive' && data.teamId ? data.teamId : undefined,
+        reportsTo: data.reportsTo || undefined,
         createdAt: existingEmployee?.createdAt || new Date().toISOString(),
       };
 
@@ -890,6 +895,27 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
                   : 'The team this member belongs to'}
               </p>
               {errors.teamId && <p className="text-sm text-destructive">{errors.teamId.message}</p>}
+            </div>
+          )}
+
+          {/* Reports To - for members and leaders (direct manager for auto-assignment) */}
+          {(selectedHierarchy === 'member' || selectedHierarchy === 'leader') && (
+            <div className="space-y-2">
+              <Label htmlFor="reportsTo">Reports To</Label>
+              <Select id="reportsTo" {...register('reportsTo')}>
+                <option value="">Not set</option>
+                {employees
+                  .filter((e) => (e.hierarchy === 'leader' || e.hierarchy === 'executive') && e.id !== employeeId)
+                  .map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.hierarchy})
+                    </option>
+                  ))}
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Direct manager. Used for auto-assignment of appraisals (Leader→Member, Member→Leader).
+              </p>
+              {errors.reportsTo && <p className="text-sm text-destructive">{errors.reportsTo.message}</p>}
             </div>
           )}
 

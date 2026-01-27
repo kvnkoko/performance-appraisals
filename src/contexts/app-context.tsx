@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, ReviewPeriod, Team } from '@/types';
-import { getTemplates, getEmployees, getAppraisals, getLinks, getSettings, getReviewPeriods, getActiveReviewPeriods, getTeams } from '@/lib/storage';
+import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, ReviewPeriod, Team, AppraisalAssignment } from '@/types';
+import { getTemplates, getEmployees, getAppraisals, getLinks, getSettings, getReviewPeriods, getActiveReviewPeriods, getTeams, getAppraisalAssignments } from '@/lib/storage';
 import { applyAccentColor } from '@/lib/utils';
 
 interface AppContextType {
@@ -8,6 +8,7 @@ interface AppContextType {
   employees: Employee[];
   appraisals: Appraisal[];
   links: AppraisalLink[];
+  assignments: AppraisalAssignment[];
   settings: CompanySettings;
   reviewPeriods: ReviewPeriod[];
   activePeriods: ReviewPeriod[];
@@ -32,6 +33,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [reviewPeriods, setReviewPeriods] = useState<ReviewPeriod[]>([]);
   const [activePeriods, setActivePeriods] = useState<ReviewPeriod[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [assignments, setAssignments] = useState<AppraisalAssignment[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -46,6 +48,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         getReviewPeriods(),
         getActiveReviewPeriods(),
         getTeams(),
+        getAppraisalAssignments(),
       ]);
       
       if (results[0].status === 'fulfilled') setTemplates(results[0].value);
@@ -63,6 +66,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (results[5].status === 'fulfilled') setReviewPeriods(results[5].value);
       if (results[6].status === 'fulfilled') setActivePeriods(results[6].value);
       if (results[7].status === 'fulfilled') setTeams(results[7].value);
+      if (results[8].status === 'fulfilled') setAssignments(results[8].value);
       
       // Log any failures for debugging
       results.forEach((result, index) => {
@@ -105,7 +109,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   return (
-    <AppContext.Provider value={{ templates, employees, appraisals, links, settings, reviewPeriods, activePeriods, teams, loading, refresh }}>
+    <AppContext.Provider value={{ templates, employees, appraisals, links, assignments, settings, reviewPeriods, activePeriods, teams, loading, refresh }}>
       {children}
     </AppContext.Provider>
   );

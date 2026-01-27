@@ -1,5 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, PerformanceSummary, ReviewPeriod, User, Team } from '@/types';
+import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, PerformanceSummary, ReviewPeriod, User, Team, AppraisalAssignment } from '@/types';
 
 interface AppraisalDB extends DBSchema {
   templates: {
@@ -39,6 +39,11 @@ interface AppraisalDB extends DBSchema {
     key: string;
     value: Team;
   };
+  appraisalAssignments: {
+    key: string;
+    value: AppraisalAssignment;
+    indexes: { 'by-period': string; 'by-appraiser': string };
+  };
 }
 
 let db: IDBPDatabase<AppraisalDB> | null = null;
@@ -47,7 +52,7 @@ let _supabaseUsersDiagnosticLogged = false;
 export async function initDB(): Promise<IDBPDatabase<AppraisalDB>> {
   if (db) return db;
 
-  db = await openDB<AppraisalDB>('appraisal-db', 4, {
+  db = await openDB<AppraisalDB>('appraisal-db', 5, {
     upgrade(db, _oldVersion, _newVersion, transaction) {
       // Create all object stores if they don't exist
       if (!db.objectStoreNames.contains('templates')) {
@@ -137,6 +142,14 @@ export async function initDB(): Promise<IDBPDatabase<AppraisalDB>> {
       // Create teams store
       if (!db.objectStoreNames.contains('teams')) {
         db.createObjectStore('teams', { keyPath: 'id' });
+      }
+      // Create appraisal_assignments store (auto + manual assignments)
+      if (!db.objectStoreNames.contains('appraisalAssignments')) {
+        const asnStore = db.createObjectStore('appraisalAssignments', { keyPath: 'id' });
+        // @ts-ignore - idb library type issue
+        asnStore.createIndex('by-period', 'reviewPeriodId', { unique: false });
+        // @ts-ignore - idb library type issue
+        asnStore.createIndex('by-appraiser', 'appraiserId', { unique: false });
       }
     },
   });
@@ -525,6 +538,52 @@ export async function deleteLink(id: string): Promise<void> {
   }
   const database = await initDB();
   await database.delete('links', id);
+}
+
+// Appraisal Assignments (auto + manual) – IndexedDB only for now; Supabase can be added later
+export async function getAppraisalAssignments(): Promise<AppraisalAssignment[]> {
+  const database = await initDB();
+  if (!database.objectStoreNames.contains('appraisalAssignments')) return [];
+  return database.getAll('appraisalAssignments');
+}
+
+export async function getAppraisalAssignment(id: string): Promise<AppraisalAssignment | undefined> {
+  const database = await initDB();
+  if (!database.objectStoreNames.contains('appraisalAssignments')) return undefined;
+  return database.get('appraisalAssignments', id);
+}
+
+export async function getAppraisalAssignmentsForPeriod(reviewPeriodId: string): Promise<AppraisalAssignment[]> {
+  const database = await initDB();
+  if (!database.objectStoreNames.contains('appraisalAssignments')) return [];
+  const all = await database.getAll('appraisalAssignments');
+  return all.filter((a) => a.reviewPeriodId === reviewPeriodId);
+}
+
+export async function getAppraisalAssignmentsByAppraiser(appraiserId: string): Promise<AppraisalAssignment[]> {
+  const database = await initDB();
+  if (!database.objectStoreNames.contains('appraisalAssignments')) return [];
+  const all = await database.getAll('appraisalAssignments');
+  return all.filter((a) => a.appraiserId === appraiserId);
+}
+
+export async function saveAppraisalAssignment(assignment: AppraisalAssignment): Promise<void> {
+  const database = await initDB();
+  if (!database.objectStoreNames.contains('appraisalAssignments')) return;
+  await database.put('appraisalAssignments', assignment);
+}
+
+export async function saveAppraisalAssignments(assignments: AppraisalAssignment[]): Promise<void> {
+  const database = await initDB();
+  if (!database.objectStoreNames.contains('appraisalAssignments')) return;
+  for (const a of assignments) await database.put('appraisalAssignments', a);
+}
+
+export async function deleteAppraisalAssignment(id: string): Promise<void> {
+  const database = await initDB();
+  if (database.objectStoreNames.contains('appraisalAssignments')) {
+    await database.delete('appraisalAssignments', id);
+  }
 }
 
 // Settings - Supabase as single source of truth when configured; else IndexedDB

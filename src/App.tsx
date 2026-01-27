@@ -21,6 +21,7 @@ import { ReviewsPage } from '@/pages/reviews';
 import { HistoricalReviewsPage } from '@/pages/historical-reviews';
 import { SettingsPage } from '@/pages/settings';
 import { AppraisalFormPage } from '@/pages/appraisal-form';
+import { AppraisalFormByAssignmentPage } from '@/pages/appraisal-form-by-assignment';
 import { TeamsPage } from '@/pages/teams';
 import { EmployeeDashboardPage } from '@/pages/employee-dashboard';
 import { MyAppraisalsPage } from '@/pages/my-appraisals';
@@ -120,6 +121,7 @@ function App() {
           <AppProvider>
             <Routes>
               <Route path="/auth" element={<AuthPage />} />
+              <Route path="/appraisal/assignment/:assignmentId" element={<PrivateRoute><AppraisalFormByAssignmentPage /></PrivateRoute>} />
               <Route path="/appraisal/:token" element={<AppraisalFormPage />} />
               <Route
                 path="/*"

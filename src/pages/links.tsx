@@ -1,22 +1,28 @@
 import { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { PeriodSelector } from '@/components/periods/period-selector';
-import { getReviewPeriod } from '@/lib/storage';
+import { getReviewPeriod, saveAppraisalAssignments } from '@/lib/storage';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { Plus, Copy, Trash, LinkSimple, CheckCircle, Clock } from 'phosphor-react';
+import { Plus, Copy, Trash, LinkSimple, CheckCircle, Clock, FileText, Lightning, Warning, CaretRight, CaretLeft } from 'phosphor-react';
 import { generateToken, generateId } from '@/lib/utils';
 import { saveLink, deleteLink } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { formatDate } from '@/lib/utils';
 import type { AppraisalLink } from '@/types';
+import { previewAutoAssignments, buildAssignmentsFromPreview } from '@/lib/auto-assignment';
+import type { AutoAssignmentPreview, TemplateMapping } from '@/lib/auto-assignment';
+
+type LinkMode = 'manual' | 'auto';
+type AutoWizardStep = 1 | 2 | 3;
 
 export function LinksPage() {
-  const { employees, templates, links, activePeriods, refresh } = useApp();
+  const { employees, templates, links, activePeriods, assignments, refresh } = useApp();
+  const [mode, setMode] = useState<LinkMode>('manual');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [selectedAppraiser, setSelectedAppraiser] = useState('');
@@ -30,12 +36,97 @@ export function LinksPage() {
   const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
 
+  // Auto-assignment wizard state
+  const [autoStep, setAutoStep] = useState<AutoWizardStep>(1);
+  const [autoPreview, setAutoPreview] = useState<AutoAssignmentPreview | null>(null);
+  const [includeLeaderToLeader, setIncludeLeaderToLeader] = useState(false);
+  const [includeExecToLeader, setIncludeExecToLeader] = useState(false);
+  const [autoTemplateMap, setAutoTemplateMap] = useState<TemplateMapping>({
+    leaderToMember: '',
+    memberToLeader: '',
+    leaderToLeader: '',
+    execToLeader: '',
+  });
+  const [autoDueDate, setAutoDueDate] = useState('');
+  const [autoGenerating, setAutoGenerating] = useState(false);
+  const [autoDoneCount, setAutoDoneCount] = useState<number | null>(null);
+
   useEffect(() => {
-    // Auto-select first active period if available
     if (activePeriods.length > 0 && !selectedPeriod) {
       setSelectedPeriod(activePeriods[0].id);
     }
   }, [activePeriods, selectedPeriod]);
+
+  const runAutoPreview = () => {
+    if (!selectedPeriod) {
+      toast({ title: 'Select period', description: 'Choose a review period first.', variant: 'error' });
+      return;
+    }
+    const preview = previewAutoAssignments(employees, selectedPeriod, {
+      includeLeaderToMember: true,
+      includeMemberToLeader: true,
+      includeLeaderToLeader,
+      includeExecToLeader,
+    });
+    setAutoPreview(preview);
+    setAutoStep(2);
+  };
+
+  const totalAutoCount = autoPreview
+    ? autoPreview.leaderToMember.length +
+      autoPreview.memberToLeader.length +
+      autoPreview.leaderToLeader.length +
+      autoPreview.execToLeader.length
+    : 0;
+
+  const handleAutoGenerate = async () => {
+    if (!selectedPeriod || !autoPreview) return;
+    const period = await getReviewPeriod(selectedPeriod);
+    if (!period) {
+      toast({ title: 'Error', description: 'Selected review period not found.', variant: 'error' });
+      return;
+    }
+    const templateMapping: TemplateMapping = {
+      leaderToMember: autoTemplateMap.leaderToMember || templates[0]?.id || '',
+      memberToLeader: autoTemplateMap.memberToLeader || templates[0]?.id || '',
+      leaderToLeader: autoTemplateMap.leaderToLeader || templates[0]?.id || '',
+      execToLeader: autoTemplateMap.execToLeader || templates[0]?.id || '',
+    };
+    const hasEmpty =
+      !templateMapping.leaderToMember ||
+      !templateMapping.memberToLeader ||
+      (includeLeaderToLeader && !templateMapping.leaderToLeader) ||
+      (includeExecToLeader && !templateMapping.execToLeader);
+    if (hasEmpty) {
+      toast({ title: 'Select templates', description: 'Choose a template for each relationship type.', variant: 'error' });
+      return;
+    }
+    setAutoGenerating(true);
+    try {
+      const built = buildAssignmentsFromPreview(
+        autoPreview,
+        templateMapping,
+        selectedPeriod,
+        period.name,
+        autoDueDate || undefined
+      );
+      await saveAppraisalAssignments(built);
+      await refresh();
+      setAutoDoneCount(built.length);
+      setAutoStep(3);
+      toast({ title: 'Success', description: `${built.length} appraisals created.`, variant: 'success' });
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to create assignments.', variant: 'error' });
+    } finally {
+      setAutoGenerating(false);
+    }
+  };
+
+  const resetAutoWizard = () => {
+    setAutoStep(1);
+    setAutoPreview(null);
+    setAutoDoneCount(null);
+  };
 
   const handleGenerate = async () => {
     if (!selectedEmployee || !selectedAppraiser || !selectedTemplate || !selectedPeriod) {
@@ -92,7 +183,6 @@ export function LinksPage() {
 
   const handleDeleteConfirm = async () => {
     if (!deleteConfirm.id) return;
-    
     setDeleting(true);
     try {
       await deleteLink(deleteConfirm.id);
@@ -108,275 +198,499 @@ export function LinksPage() {
   };
 
   const activeLinks = links.filter((l) => !l.used && (!l.expiresAt || new Date(l.expiresAt) > new Date()));
-  // const expiredLinks = links.filter((l) => l.expiresAt && new Date(l.expiresAt) <= new Date() && !l.used);
   const usedLinks = links.filter((l) => l.used);
+  const existingForPeriod = selectedPeriod ? assignments.filter((a) => a.reviewPeriodId === selectedPeriod).length : 0;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Appraisal Links</h1>
-          <p className="text-muted-foreground mt-2">Generate and manage appraisal links</p>
+          <h1 className="text-3xl font-bold tracking-tight">Send Appraisals</h1>
+          <p className="text-muted-foreground mt-2">Create appraisal links or auto-assign from org structure</p>
         </div>
-        <Button type="button" onClick={() => setDialogOpen(true)}>
-          <Plus size={18} weight="duotone" className="mr-2" />
-          Generate Link
-        </Button>
+        {mode === 'manual' && (
+          <Button type="button" onClick={() => setDialogOpen(true)}>
+            <Plus size={18} weight="duotone" className="mr-2" />
+            Generate Link
+          </Button>
+        )}
       </div>
 
-      {/* Generate Dialog */}
-      {dialogOpen && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Generate New Link</CardTitle>
-            <CardDescription>Create a unique link for an employee appraisal</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Review Period *</Label>
-              {activePeriods.length === 0 ? (
+      {/* Mode toggle: Manual vs Auto */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">How to create appraisals</CardTitle>
+          <CardDescription>Choose manual links (one-by-one) or auto-generate from reporting structure</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => { setMode('manual'); resetAutoWizard(); }}
+              className={`p-4 rounded-lg border-2 text-left transition-all ${
+                mode === 'manual'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-primary/50'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <FileText size={20} weight="duotone" />
+                <span className="font-semibold">Manual Links</span>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">Create individual links one-by-one</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('auto')}
+              className={`p-4 rounded-lg border-2 text-left transition-all ${
+                mode === 'auto'
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-primary/50'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <Lightning size={20} weight="duotone" />
+                <span className="font-semibold">Auto-Generate</span>
+                <span className="text-xs rounded bg-muted px-1.5 py-0.5">Faster</span>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">Bulk create from Reports To &amp; org structure</p>
+            </button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {mode === 'manual' && (
+        <>
+          {/* Generate Dialog (Manual) */}
+          {dialogOpen && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Generate New Link</CardTitle>
+                <CardDescription>Create a unique link for an employee appraisal</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">No active periods found. Please create a review period first.</p>
-                  <Button type="button" variant="secondary" onClick={() => window.location.href = '/periods'}>
-                    Go to Review Periods
+                  <Label>Review Period *</Label>
+                  {activePeriods.length === 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-sm text-muted-foreground">No active periods found. Please create a review period first.</p>
+                      <Button type="button" variant="secondary" onClick={() => (window.location.href = '/periods')}>
+                        Go to Review Periods
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <PeriodSelector
+                        value={selectedPeriod || undefined}
+                        onChange={setSelectedPeriod}
+                        showActiveOnly={true}
+                        showCreateOption={false}
+                      />
+                      {!selectedPeriod && (
+                        <p className="text-sm text-destructive">Please select a review period</p>
+                      )}
+                    </>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="employee">Employee Being Appraised</Label>
+                  <Select id="employee" value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)}>
+                    <option value="">Select employee...</option>
+                    {employees.map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} ({emp.role})
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="appraiser">Appraiser</Label>
+                  <Select id="appraiser" value={selectedAppraiser} onChange={(e) => setSelectedAppraiser(e.target.value)}>
+                    <option value="">Select appraiser...</option>
+                    {employees.map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} ({emp.role})
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="template">Template</Label>
+                  <Select id="template" value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)}>
+                    <option value="">Select template...</option>
+                    {templates.map((tpl) => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {tpl.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="expiration">Expiration (Days, optional)</Label>
+                  <Input
+                    id="expiration"
+                    type="number"
+                    min="1"
+                    value={expirationDays}
+                    onChange={(e) => setExpirationDays(e.target.value ? Number(e.target.value) : '')}
+                    placeholder="30"
+                  />
+                </div>
+                <div className="flex justify-end gap-3">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setDialogOpen(false);
+                      setSelectedEmployee('');
+                      setSelectedAppraiser('');
+                      setSelectedTemplate('');
+                      setSelectedPeriod(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleGenerate}
+                    disabled={!selectedEmployee || !selectedAppraiser || !selectedTemplate || !selectedPeriod}
+                  >
+                    Generate Link
                   </Button>
                 </div>
-              ) : (
-                <>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Active Links */}
+          {activeLinks.length > 0 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold">Active Links</h2>
+              <div className="grid gap-4">
+                {activeLinks.map((link) => {
+                  const employee = employees.find((e) => e.id === link.employeeId);
+                  const appraiser = employees.find((e) => e.id === link.appraiserId);
+                  const template = templates.find((t) => t.id === link.templateId);
+                  const url = `${window.location.origin}/appraisal/${link.token}`;
+                  return (
+                    <Card key={link.id}>
+                      <CardContent className="p-6">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Clock size={16} weight="duotone" className="text-green-600/80" />
+                              <span className="text-sm font-medium text-green-600/90">Active</span>
+                            </div>
+                            <div>
+                              <p className="font-semibold">
+                                {employee?.name} ← {appraiser?.name}
+                              </p>
+                              <p className="text-sm text-muted-foreground">{template?.name}</p>
+                              {link.reviewPeriodName && (
+                                <p className="text-xs text-muted-foreground mt-1">Period: {link.reviewPeriodName}</p>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Created {formatDate(link.createdAt)}
+                              {link.expiresAt && ` • Expires ${formatDate(link.expiresAt)}`}
+                            </div>
+                            <div className="flex items-center gap-2 mt-2">
+                              <Input value={url} readOnly className="text-xs font-mono" />
+                              <Button type="button" size="sm" variant="secondary" onClick={() => handleCopyLink(link.token)} title="Copy link">
+                                <Copy size={16} weight="duotone" />
+                              </Button>
+                              <Button type="button" size="sm" variant="ghost" onClick={() => window.open(url, '_blank')} title="Open in new tab">
+                                <LinkSimple size={16} weight="duotone" />
+                              </Button>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteClick(link.id);
+                            }}
+                            title="Delete link"
+                          >
+                            <Trash size={16} weight="duotone" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Used Links */}
+          {usedLinks.length > 0 && (
+            <div className="space-y-4">
+              <h2 className="text-xl font-semibold">Completed</h2>
+              <div className="grid gap-4">
+                {usedLinks.map((link) => {
+                  const employee = employees.find((e) => e.id === link.employeeId);
+                  const appraiser = employees.find((e) => e.id === link.appraiserId);
+                  const template = templates.find((t) => t.id === link.templateId);
+                  return (
+                    <Card key={link.id} className="opacity-60">
+                      <CardContent className="p-6">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle size={16} weight="duotone" className="text-muted-foreground/80" />
+                              <span className="text-sm font-medium text-muted-foreground">Completed</span>
+                            </div>
+                            <div>
+                              <p className="font-semibold">
+                                {employee?.name} ← {appraiser?.name}
+                              </p>
+                              <p className="text-sm text-muted-foreground">{template?.name}</p>
+                              {link.reviewPeriodName && (
+                                <p className="text-xs text-muted-foreground mt-1">Period: {link.reviewPeriodName}</p>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">Created {formatDate(link.createdAt)}</div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteClick(link.id);
+                            }}
+                            title="Delete link"
+                          >
+                            <Trash size={16} weight="duotone" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {links.length === 0 && (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <p className="text-muted-foreground">No links generated yet</p>
+                <Button type="button" onClick={() => setDialogOpen(true)} className="mt-4">
+                  <Plus size={18} weight="duotone" className="mr-2" />
+                  Generate Your First Link
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* Auto-Generate wizard */}
+      {mode === 'auto' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Auto-assignment</CardTitle>
+            <CardDescription>
+              {autoStep === 1 && 'Select period and preview what will be created from Reports To and org structure.'}
+              {autoStep === 2 && 'Choose templates and due date, then generate.'}
+              {autoStep === 3 && 'Assignments created. You can add manual links for special cases.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {autoStep === 1 && (
+              <>
+                <div className="space-y-2">
+                  <Label>Review period</Label>
                   <PeriodSelector
                     value={selectedPeriod || undefined}
                     onChange={setSelectedPeriod}
                     showActiveOnly={true}
                     showCreateOption={false}
                   />
-                  {!selectedPeriod && (
-                    <p className="text-sm text-destructive">Please select a review period</p>
-                  )}
-                </>
-              )}
-            </div>
+                </div>
+                <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                  <p className="text-sm font-medium">Optional: include in this run</p>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includeLeaderToLeader}
+                      onChange={(e) => setIncludeLeaderToLeader(e.target.checked)}
+                    />
+                    <span className="text-sm">Leader → Leader peer reviews (same team)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includeExecToLeader}
+                      onChange={(e) => setIncludeExecToLeader(e.target.checked)}
+                    />
+                    <span className="text-sm">Executive → Leader reviews</span>
+                  </label>
+                </div>
+                {existingForPeriod > 0 && (
+                  <p className="text-sm text-amber-600 flex items-center gap-2">
+                    <Warning size={16} />
+                    {existingForPeriod} assignment(s) already exist for this period. Auto-generate will add more.
+                  </p>
+                )}
+                <div className="flex justify-end">
+                  <Button onClick={runAutoPreview} disabled={!selectedPeriod}>
+                    Preview &amp; continue
+                    <CaretRight size={16} className="ml-1" />
+                  </Button>
+                </div>
+              </>
+            )}
 
-            <div className="space-y-2">
-              <Label htmlFor="employee">Employee Being Appraised</Label>
-              <Select
-                id="employee"
-                value={selectedEmployee}
-                onChange={(e) => setSelectedEmployee(e.target.value)}
-              >
-                <option value="">Select employee...</option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.name} ({emp.role})
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="appraiser">Appraiser</Label>
-              <Select
-                id="appraiser"
-                value={selectedAppraiser}
-                onChange={(e) => setSelectedAppraiser(e.target.value)}
-              >
-                <option value="">Select appraiser...</option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.name} ({emp.role})
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="template">Template</Label>
-              <Select
-                id="template"
-                value={selectedTemplate}
-                onChange={(e) => setSelectedTemplate(e.target.value)}
-              >
-                <option value="">Select template...</option>
-                {templates.map((tpl) => (
-                  <option key={tpl.id} value={tpl.id}>
-                    {tpl.name}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="expiration">Expiration (Days, optional)</Label>
-              <Input
-                id="expiration"
-                type="number"
-                min="1"
-                value={expirationDays}
-                onChange={(e) => setExpirationDays(e.target.value ? Number(e.target.value) : '')}
-                placeholder="30"
-              />
-            </div>
-
-            <div className="flex justify-end gap-3">
-              <Button type="button" variant="ghost" onClick={() => {
-                setDialogOpen(false);
-                setSelectedEmployee('');
-                setSelectedAppraiser('');
-                setSelectedTemplate('');
-                setSelectedPeriod(null);
-              }}>
-                Cancel
-              </Button>
-              <Button type="button" onClick={handleGenerate} disabled={!selectedEmployee || !selectedAppraiser || !selectedTemplate || !selectedPeriod}>
-                Generate Link
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Active Links */}
-      {activeLinks.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold">Active Links</h2>
-          <div className="grid gap-4">
-            {activeLinks.map((link) => {
-              const employee = employees.find((e) => e.id === link.employeeId);
-              const appraiser = employees.find((e) => e.id === link.appraiserId);
-              const template = templates.find((t) => t.id === link.templateId);
-              const url = `${window.location.origin}/appraisal/${link.token}`;
-
-              return (
-                <Card key={link.id}>
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Clock size={16} weight="duotone" className="text-green-600/80" />
-                          <span className="text-sm font-medium text-green-600/90">Active</span>
-                        </div>
-                        <div>
-                          <p className="font-semibold">
-                            {employee?.name} ← {appraiser?.name}
-                          </p>
-                          <p className="text-sm text-muted-foreground">{template?.name}</p>
-                          {link.reviewPeriodName && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Period: {link.reviewPeriodName}
-                            </p>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Created {formatDate(link.createdAt)}
-                          {link.expiresAt && ` • Expires ${formatDate(link.expiresAt)}`}
-                        </div>
-                        <div className="flex items-center gap-2 mt-2">
-                          <Input value={url} readOnly className="text-xs font-mono" />
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => handleCopyLink(link.token)}
-                            title="Copy link"
-                          >
-                            <Copy size={16} weight="duotone" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => window.open(url, '_blank')}
-                            title="Open in new tab"
-                          >
-                            <LinkSimple size={16} weight="duotone" />
-                          </Button>
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteClick(link.id);
-                        }}
-                        title="Delete link"
+            {autoStep === 2 && autoPreview && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader className="py-3">
+                      <CardTitle className="text-sm">Leader → Member</CardTitle>
+                    </CardHeader>
+                    <CardContent className="py-2">
+                      <p className="text-2xl font-bold">{autoPreview.leaderToMember.length}</p>
+                      <p className="text-xs text-muted-foreground">Based on Reports To</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="py-3">
+                      <CardTitle className="text-sm">Member → Leader</CardTitle>
+                    </CardHeader>
+                    <CardContent className="py-2">
+                      <p className="text-2xl font-bold">{autoPreview.memberToLeader.length}</p>
+                      <p className="text-xs text-muted-foreground">Upward feedback</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="py-3">
+                      <CardTitle className="text-sm">Leader → Leader</CardTitle>
+                    </CardHeader>
+                    <CardContent className="py-2">
+                      <p className="text-2xl font-bold">{autoPreview.leaderToLeader.length}</p>
+                      <p className="text-xs text-muted-foreground">Peer (same team)</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="py-3">
+                      <CardTitle className="text-sm">Executive → Leader</CardTitle>
+                    </CardHeader>
+                    <CardContent className="py-2">
+                      <p className="text-2xl font-bold">{autoPreview.execToLeader.length}</p>
+                      <p className="text-xs text-muted-foreground">Department head</p>
+                    </CardContent>
+                  </Card>
+                </div>
+                {autoPreview.warnings.length > 0 && (
+                  <div className="rounded-lg border border-amber-500/50 bg-amber-500/5 p-4">
+                    <p className="text-sm font-medium flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                      <Warning size={16} />
+                      Warnings
+                    </p>
+                    <ul className="list-disc list-inside text-sm text-muted-foreground mt-2">
+                      {autoPreview.warnings.map((w, i) => (
+                        <li key={i}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div className="space-y-3">
+                  <Label>Templates per type</Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Leader → Member</Label>
+                      <Select
+                        value={autoTemplateMap.leaderToMember}
+                        onChange={(e) => setAutoTemplateMap((m) => ({ ...m, leaderToMember: e.target.value }))}
                       >
-                        <Trash size={16} weight="duotone" />
-                      </Button>
+                        <option value="">Select...</option>
+                        {templates.map((t) => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </Select>
                     </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Used Links */}
-      {usedLinks.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold">Completed</h2>
-          <div className="grid gap-4">
-            {usedLinks.map((link) => {
-              const employee = employees.find((e) => e.id === link.employeeId);
-              const appraiser = employees.find((e) => e.id === link.appraiserId);
-              const template = templates.find((t) => t.id === link.templateId);
-
-              return (
-                <Card key={link.id} className="opacity-60">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle size={16} weight="duotone" className="text-muted-foreground/80" />
-                          <span className="text-sm font-medium text-muted-foreground">Completed</span>
-                        </div>
-                        <div>
-                          <p className="font-semibold">
-                            {employee?.name} ← {appraiser?.name}
-                          </p>
-                          <p className="text-sm text-muted-foreground">{template?.name}</p>
-                          {link.reviewPeriodName && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Period: {link.reviewPeriodName}
-                            </p>
-                          )}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Created {formatDate(link.createdAt)}
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteClick(link.id);
-                        }}
-                        title="Delete link"
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Member → Leader</Label>
+                      <Select
+                        value={autoTemplateMap.memberToLeader}
+                        onChange={(e) => setAutoTemplateMap((m) => ({ ...m, memberToLeader: e.target.value }))}
                       >
-                        <Trash size={16} weight="duotone" />
-                      </Button>
+                        <option value="">Select...</option>
+                        {templates.map((t) => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </Select>
                     </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      )}
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Leader → Leader</Label>
+                      <Select
+                        value={autoTemplateMap.leaderToLeader}
+                        onChange={(e) => setAutoTemplateMap((m) => ({ ...m, leaderToLeader: e.target.value }))}
+                      >
+                        <option value="">Select...</option>
+                        {templates.map((t) => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Executive → Leader</Label>
+                      <Select
+                        value={autoTemplateMap.execToLeader}
+                        onChange={(e) => setAutoTemplateMap((m) => ({ ...m, execToLeader: e.target.value }))}
+                      >
+                        <option value="">Select...</option>
+                        {templates.map((t) => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </Select>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Due date (optional)</Label>
+                    <Input
+                      type="date"
+                      value={autoDueDate}
+                      onChange={(e) => setAutoDueDate(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-between">
+                  <Button variant="outline" onClick={() => setAutoStep(1)}>
+                    <CaretLeft size={16} className="mr-1" />
+                    Back
+                  </Button>
+                  <Button onClick={handleAutoGenerate} disabled={autoGenerating}>
+                    {autoGenerating ? 'Creating...' : `Generate ${totalAutoCount} appraisals`}
+                  </Button>
+                </div>
+              </>
+            )}
 
-      {links.length === 0 && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <p className="text-muted-foreground">No links generated yet</p>
-            <Button type="button" onClick={() => setDialogOpen(true)} className="mt-4">
-              <Plus size={18} weight="duotone" className="mr-2" />
-              Generate Your First Link
-            </Button>
+            {autoStep === 3 && autoDoneCount !== null && (
+              <>
+                <div className="flex flex-col items-center py-6">
+                  <CheckCircle size={48} weight="duotone" className="text-green-600 mb-4" />
+                  <h3 className="text-xl font-semibold">{autoDoneCount} appraisals created</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Employees will see them in My Appraisals. You can add manual links for special cases.
+                  </p>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => { setMode('manual'); setDialogOpen(true); resetAutoWizard(); }}>
+                    Create manual link
+                  </Button>
+                  <Button onClick={resetAutoWizard}>Done</Button>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       )}
