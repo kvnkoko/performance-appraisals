@@ -598,10 +598,13 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
     
     setSavingCredentials(true);
     try {
-      // Get the current user
+      // Get the current user (Supabase first, then IndexedDB for read-your-writes)
       const { getUser } = await import('@/lib/storage');
-      const currentUser = await getUser(createdCredentials.userId);
-      
+      let currentUser = await getUser(createdCredentials.userId);
+      // If just created, linkedUser may hold the user before it's visible from storage
+      if (!currentUser && linkedUser?.id === createdCredentials.userId) {
+        currentUser = linkedUser;
+      }
       if (!currentUser) {
         toast({ title: 'Error', description: 'User not found.', variant: 'error' });
         setSavingCredentials(false);

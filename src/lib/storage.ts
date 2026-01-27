@@ -823,19 +823,20 @@ export async function deleteTeam(id: string): Promise<void> {
   await database.delete('teams', id);
 }
 
-// Get user by employee ID - Supabase as single source of truth when configured
+// Get user by employee ID - Supabase first when configured; fallback to IndexedDB so same-device read-after-write works
 export async function getUserByEmployeeId(employeeId: string): Promise<User | undefined> {
+  const database = await initDB();
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { getUserByEmployeeIdFromSupabase } = await import('./supabase-storage');
       const supabaseUser = await getUserByEmployeeIdFromSupabase(employeeId);
-      return supabaseUser;
+      if (supabaseUser) return supabaseUser;
+      // Supabase returned nothing – fall back to IndexedDB so the creating browser sees its just-written user
     }
   } catch (error) {
     if (import.meta.env.DEV) console.log('getUserByEmployeeId: Supabase not available, using IndexedDB:', error);
   }
-  const database = await initDB();
   try {
     if (database.objectStoreNames.contains('users')) {
       const allUsers = await database.getAll('users');
@@ -1010,26 +1011,26 @@ export async function getUsers(): Promise<User[]> {
 }
 
 export async function getUser(id: string): Promise<User | undefined> {
+  const database = await initDB();
   try {
     const { isSupabaseConfigured, getUserFromSupabase } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const user = await getUserFromSupabase(id);
       if (user) {
         try {
-          const database = await initDB();
           if (database.objectStoreNames.contains('users')) {
             await database.put('users', { ...user, username: (user.username || '').toLowerCase() });
           }
         } catch (_) {
           /* ignore cache write errors */
         }
+        return user;
       }
-      return user;
+      // Supabase returned nothing – fall back to IndexedDB so the creating browser sees its just-written user
     }
   } catch (error) {
     if (import.meta.env.DEV) console.log('getUser: Supabase not available, using IndexedDB:', error);
   }
-  const database = await initDB();
   return database.get('users', id);
 }
 
