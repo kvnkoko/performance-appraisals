@@ -10,6 +10,7 @@ import {
   Calendar,
   Clock,
   List,
+  ListChecks,
   X,
   Moon,
   Sun,
@@ -36,6 +37,7 @@ const adminNavItems = [
   { path: '/periods', label: 'Review Periods', icon: Calendar },
   { path: '/reviews', label: 'Reviews', icon: ChartBar },
   { path: '/historical', label: 'Historical Reviews', icon: Clock },
+  { path: '/submission-tracker', label: 'Submission Tracker', icon: ListChecks },
   { path: '/settings', label: 'Settings', icon: Gear },
 ];
 
