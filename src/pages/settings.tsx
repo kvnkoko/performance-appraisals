@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Download, Moon, Sun, Monitor, SignOut, Check, CloudArrowDown } from 'phosphor-react';
 import { saveSettings, exportData, importData, syncFromSupabase } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
+import { useUser } from '@/contexts/user-context';
 import { useTheme } from '@/hooks/use-theme';
 import { applyAccentColor } from '@/lib/utils';
 
@@ -26,6 +27,7 @@ const PRESET_COLORS = [
 
 export function SettingsPage() {
   const { settings, refresh } = useApp();
+  const { logout } = useUser();
   const { theme, setTheme, setAccentColor } = useTheme();
   const { toast } = useToast();
   const [formData, setFormData] = useState({
@@ -121,20 +123,14 @@ export function SettingsPage() {
   };
 
   const handleLogout = () => {
-    // Clear all auth data
-    localStorage.removeItem('authenticated');
-    localStorage.removeItem('userId');
-    localStorage.removeItem('username');
-    localStorage.removeItem('userName');
-    localStorage.removeItem('userEmail');
-    localStorage.removeItem('userRole');
+    logout();
     window.location.href = '/auth';
   };
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        <h1 className="page-title text-foreground">Settings</h1>
         <p className="text-muted-foreground mt-2">Manage your application settings</p>
       </div>
 

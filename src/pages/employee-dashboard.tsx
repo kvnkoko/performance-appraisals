@@ -63,63 +63,58 @@ export function EmployeeDashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Welcome Header */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Welcome back, {userName}!
-        </h1>
-        <p className="text-muted-foreground">
-          {employee ? `${employee.role} • ${employee.hierarchy.charAt(0).toUpperCase() + employee.hierarchy.slice(1)}` : 'Your personal appraisal dashboard'}
+      {/* Welcome Header – award-worthy hierarchy */}
+      <div className="space-y-1">
+        <h1 className="page-title text-foreground">Welcome back, {userName}!</h1>
+        <p className="page-subtitle">
+          {employee ? `${employee.role} · ${employee.hierarchy.charAt(0).toUpperCase() + employee.hierarchy.slice(1)}` : 'Your personal appraisal dashboard'}
         </p>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards – Proxel/Finvero style */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Card className="relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-amber-500/20 to-amber-600/10 rounded-bl-full" />
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Clock size={18} weight="duotone" className="text-amber-500" />
-              Pending Reviews
-            </CardTitle>
+        <Card className="overflow-hidden border-border/50 hover:shadow-dropdown transition-shadow duration-200">
+          <CardHeader className="pb-2 pt-5 px-5">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <Clock size={16} weight="duotone" className="text-chart-4" />
+                Pending Reviews
+              </CardTitle>
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{myPendingLinks.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {myPendingLinks.length === 1 ? 'appraisal' : 'appraisals'} waiting for you
-            </p>
+          <CardContent className="px-5 pb-5 pt-0">
+            <div className="text-3xl font-bold tracking-tight text-foreground">{myPendingLinks.length}</div>
+            <p className="text-xs text-muted-foreground mt-1">{myPendingLinks.length === 1 ? 'appraisal' : 'appraisals'} waiting for you</p>
           </CardContent>
         </Card>
 
-        <Card className="relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-green-500/20 to-green-600/10 rounded-bl-full" />
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <CheckCircle size={18} weight="duotone" className="text-green-500" />
-              Completed
-            </CardTitle>
+        <Card className="overflow-hidden border-border/50 hover:shadow-dropdown transition-shadow duration-200">
+          <CardHeader className="pb-2 pt-5 px-5">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <CheckCircle size={16} weight="duotone" className="text-chart-2" />
+                Completed
+              </CardTitle>
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{myCompletedLinks.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              reviews you've submitted
-            </p>
+          <CardContent className="px-5 pb-5 pt-0">
+            <div className="text-3xl font-bold tracking-tight text-foreground">{myCompletedLinks.length}</div>
+            <p className="text-xs text-muted-foreground mt-1">reviews you've submitted</p>
           </CardContent>
         </Card>
 
-        <Card className="relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-blue-500/20 to-blue-600/10 rounded-bl-full" />
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <ChartLineUp size={18} weight="duotone" className="text-blue-500" />
-              Your Reviews
-            </CardTitle>
+        <Card className="overflow-hidden border-border/50 hover:shadow-dropdown transition-shadow duration-200">
+          <CardHeader className="pb-2 pt-5 px-5">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <ChartLineUp size={16} weight="duotone" className="text-chart-1" />
+                Your Reviews
+              </CardTitle>
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{myAppraisals.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              performance reviews received
-            </p>
+          <CardContent className="px-5 pb-5 pt-0">
+            <div className="text-3xl font-bold tracking-tight text-foreground">{myAppraisals.length}</div>
+            <p className="text-xs text-muted-foreground mt-1">performance reviews received</p>
           </CardContent>
         </Card>
       </div>

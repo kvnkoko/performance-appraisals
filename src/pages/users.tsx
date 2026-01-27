@@ -633,10 +633,19 @@ export function UsersPage() {
     if (!deleteConfirm.id) return;
     
     setDeleting(true);
+    const deletedUserId = deleteConfirm.id;
     try {
-      await deleteUser(deleteConfirm.id);
+      await deleteUser(deletedUserId);
       await loadUsers();
-      toast({ title: 'Success', description: 'User deleted successfully', variant: 'success' });
+      // Notify other tabs/windows so that if the deleted user is logged in elsewhere, they are logged out
+      try {
+        const channel = new BroadcastChannel('appraisals-auth');
+        channel.postMessage({ type: 'userDeleted', userId: deletedUserId });
+        channel.close();
+      } catch {
+        // BroadcastChannel not supported
+      }
+      toast({ title: 'Success', description: 'User deleted. They can no longer sign in and any existing sessions are invalid.', variant: 'success' });
       setDeleteConfirm({ open: false, id: null, name: '' });
     } catch (error) {
       console.error('Delete error:', error);
@@ -665,7 +674,7 @@ export function UsersPage() {
       {/* Header Section */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+          <h1 className="page-title text-foreground">
             User Management
           </h1>
           <p className="text-muted-foreground mt-2">Manage user accounts and portal access</p>

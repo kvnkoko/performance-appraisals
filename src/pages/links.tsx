@@ -211,7 +211,7 @@ export function LinksPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Send Appraisals</h1>
+          <h1 className="page-title text-foreground">Send Appraisals</h1>
           <p className="text-muted-foreground mt-2">Create appraisal links or auto-assign from org structure</p>
         </div>
         {mode === 'manual' && (

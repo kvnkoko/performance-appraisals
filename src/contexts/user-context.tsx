@@ -54,28 +54,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
               setEmployee(null);
             }
           } else {
-            // User not found in DB but authenticated - might be a new user or DB issue
-            // Don't logout, just set a temporary user object
-            const username = localStorage.getItem('username') || 'User';
-            const userRole = localStorage.getItem('userRole') || 'staff';
-            const employeeId = localStorage.getItem('employeeId');
-            setUser({
-              id: userId,
-              username: localStorage.getItem('username') || 'user',
-              passwordHash: '',
-              name: localStorage.getItem('userName') || username,
-              email: localStorage.getItem('userEmail') || undefined,
-              role: userRole as 'admin' | 'staff',
-              active: true,
-              employeeId: employeeId || undefined,
-              createdAt: new Date().toISOString(),
-            });
-            
-            // Try to load employee
-            if (employeeId) {
-              const employeeData = await getEmployee(employeeId);
-              setEmployee(employeeData || null);
-            }
+            // User not found in DB – account was deleted or no longer exists. Invalidate session
+            // so they cannot stay logged in and are logged out on this and any other device on next load.
+            localStorage.removeItem('authenticated');
+            localStorage.removeItem('userId');
+            localStorage.removeItem('username');
+            localStorage.removeItem('userName');
+            localStorage.removeItem('userEmail');
+            localStorage.removeItem('userRole');
+            localStorage.removeItem('employeeId');
+            setUser(null);
+            setEmployee(null);
           }
         } catch (error) {
           console.error('Error loading user from DB:', error);
@@ -169,6 +158,34 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refresh();
+  }, []);
+
+  // When a user is deleted (e.g. by admin in another tab), broadcast is sent. If this tab
+  // is that user, clear session so they are logged out immediately.
+  useEffect(() => {
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('appraisals-auth');
+      channel.onmessage = (e: MessageEvent) => {
+        const d = e.data;
+        if (d?.type === 'userDeleted' && d.userId && d.userId === localStorage.getItem('userId')) {
+          localStorage.removeItem('authenticated');
+          localStorage.removeItem('userId');
+          localStorage.removeItem('username');
+          localStorage.removeItem('userName');
+          localStorage.removeItem('userEmail');
+          localStorage.removeItem('userRole');
+          localStorage.removeItem('employeeId');
+          setUser(null);
+          setEmployee(null);
+        }
+      };
+    } catch {
+      // BroadcastChannel not supported (e.g. some old browsers)
+    }
+    return () => {
+      channel?.close();
+    };
   }, []);
 
   return (

@@ -297,12 +297,12 @@ export function AuthPage() {
   if (showPasswordChange && currentUser) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-md border-border/50 shadow-dropdown">
           <CardHeader className="space-y-1 text-center">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10">
-              <Key size={24} weight="duotone" className="text-amber-500" />
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-chart-4/12">
+              <Key size={24} weight="duotone" className="text-chart-4" />
             </div>
-            <CardTitle className="text-2xl font-bold">Change Your Password</CardTitle>
+            <CardTitle className="page-title text-center">Change Your Password</CardTitle>
             <CardDescription>
               For security, you must set a new password before continuing.
             </CardDescription>
@@ -353,7 +353,7 @@ export function AuthPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-md border-border/50 shadow-dropdown">
         <CardHeader className="space-y-1 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-accent/10">
             {authMode === 'user' ? (

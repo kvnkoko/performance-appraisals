@@ -111,10 +111,10 @@ export function ReviewsPage() {
     <div className="space-y-4">
       {/* Header */}
       <div className="space-y-1">
-        <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+        <h1 className="page-title text-foreground">
           Performance Reviews
         </h1>
-        <p className="text-muted-foreground text-base">Comprehensive analytics and performance insights</p>
+        <p className="page-subtitle">Comprehensive analytics and performance insights</p>
       </div>
 
       {/* Key Metrics */}

@@ -185,7 +185,7 @@ export function MyPerformancePage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">My Performance</h1>
+          <h1 className="page-title text-foreground">My Performance</h1>
           <p className="text-muted-foreground mt-2">Your performance review summary</p>
         </div>
         
@@ -209,7 +209,7 @@ export function MyPerformancePage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">My Performance</h1>
+          <h1 className="page-title text-foreground">My Performance</h1>
           <p className="text-muted-foreground mt-2">Your aggregated performance review summary</p>
         </div>
         

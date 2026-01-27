@@ -98,82 +98,66 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile menu button */}
+      {/* Mobile menu button – minimal, striking */}
       <button
         onClick={() => setMobileOpen(!mobileOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2.5 rounded-xl bg-card/80 backdrop-blur-sm border border-border/50 hover:bg-accent/30 transition-all shadow-soft"
+        className="lg:hidden fixed top-4 left-4 z-50 p-2.5 rounded-xl bg-card border border-border shadow-card hover:bg-surface transition-all duration-200"
       >
         {mobileOpen ? <X size={20} weight="duotone" /> : <List size={20} weight="duotone" />}
       </button>
 
-      {/* Sidebar */}
+      {/* Sidebar – Holo/Finvero-style: crisp, minimal active state */}
       <aside
         className={cn(
-          'fixed left-0 top-0 z-40 h-screen w-60 bg-background border-r border-border/30 transition-transform duration-300',
+          'fixed left-0 top-0 z-40 h-screen w-60 bg-card border-r border-border/40 transition-transform duration-300 shadow-dropdown',
           'lg:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-        {/* Left gradient border - uses accent color */}
-        <div 
-          className="absolute left-0 top-0 bottom-0 w-[1px] opacity-60"
-          style={{ 
-            background: `linear-gradient(to bottom, ${currentAccentColor}50, ${currentAccentColor}30, transparent)` 
-          }} 
-        />
-        
         <div className="flex h-full flex-col">
-          {/* Header with logo and theme toggle */}
-          <div className="px-6 pt-6 pb-4 border-b border-border/30">
-            <div className="flex items-center justify-between mb-4">
+          {/* Header: logo + theme toggle */}
+          <div className="px-5 pt-6 pb-5 border-b border-border/50">
+            <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
-                {/* Logo - uses accent color */}
-                <div 
-                  className="w-10 h-10 rounded-full flex items-center justify-center"
-                  style={{ 
-                    background: `linear-gradient(135deg, ${currentAccentColor}, ${currentAccentColor}CC)` 
-                  }}
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-semibold text-sm"
+                  style={{ background: currentAccentColor }}
                 >
-                  <span className="text-white font-bold text-lg">
-                    {settings.name ? settings.name.charAt(0).toUpperCase() : 'A'}
-                  </span>
+                  {settings.name ? settings.name.charAt(0).toUpperCase() : 'A'}
                 </div>
-                <h1 className="text-lg font-semibold text-foreground">
+                <h1 className="text-base font-semibold text-foreground tracking-tight">
                   {settings.name || 'Appraisals'}
-                  <span className="text-xs text-muted-foreground ml-1">®</span>
                 </h1>
               </div>
-              {/* Theme toggle */}
               <button
                 onClick={toggleTheme}
-                className="p-1.5 rounded-lg hover:bg-muted transition-colors"
+                className="p-2 rounded-lg bg-surface hover:bg-muted text-muted-foreground hover:text-foreground transition-colors duration-200"
                 aria-label="Toggle theme"
               >
                 {resolvedTheme === 'dark' ? (
-                  <Moon size={18} weight="duotone" className="text-foreground" />
+                  <Moon size={18} weight="duotone" />
                 ) : (
-                  <Sun size={18} weight="duotone" className="text-foreground" />
+                  <Sun size={18} weight="duotone" />
                 )}
               </button>
             </div>
-            {/* User info */}
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               <div className="text-sm font-medium text-foreground">{userName}</div>
-              <div className="text-xs text-muted-foreground">{userEmail}</div>
+              <div className="text-xs text-muted-foreground truncate">{userEmail}</div>
               {isAdmin ? (
                 <div className="text-xs font-medium" style={{ color: currentAccentColor }}>
                   Administrator
                 </div>
               ) : linkedEmployee ? (
                 <div className="text-xs text-muted-foreground">
-                  {linkedEmployee.hierarchy.charAt(0).toUpperCase() + linkedEmployee.hierarchy.slice(1)} • {linkedEmployee.role}
+                  {linkedEmployee.hierarchy.charAt(0).toUpperCase() + linkedEmployee.hierarchy.slice(1)} · {linkedEmployee.role}
                 </div>
               ) : null}
             </div>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
+          {/* Navigation – active: left bar + tint like Holo/Finvero */}
+          <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-thin">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
@@ -183,26 +167,25 @@ export function Sidebar() {
                   to={item.path}
                   onClick={(e) => handleNavClick(item.path, e)}
                   className={cn(
-                    'group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative',
+                    'group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 relative',
                     isActive
                       ? 'text-foreground'
-                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                      : 'text-muted-foreground hover:bg-surface hover:text-foreground'
                   )}
-                  style={isActive ? { 
-                    backgroundColor: `${currentAccentColor}20`
+                  style={isActive ? {
+                    backgroundColor: `${currentAccentColor}18`,
                   } : undefined}
                 >
-                  {/* Active indicator bar - uses accent color */}
                   {isActive && (
-                    <div 
-                      className="absolute left-0 top-1 bottom-1 w-1 rounded-r"
+                    <div
+                      className="absolute left-0 top-2 bottom-2 w-0.5 rounded-full"
                       style={{ backgroundColor: currentAccentColor }}
                     />
                   )}
-                  <Icon 
-                    size={20} 
+                  <Icon
+                    size={20}
                     weight={isActive ? 'duotone' : 'regular'}
-                    className="relative z-10"
+                    className="relative z-10 ml-0.5"
                     style={isActive ? { color: currentAccentColor } : undefined}
                   />
                   <span className="relative z-10">{item.label}</span>
@@ -210,12 +193,12 @@ export function Sidebar() {
               );
             })}
           </nav>
-          
-          {/* Logout Button */}
-          <div className="px-4 py-4 border-t border-border/30">
+
+          {/* Logout */}
+          <div className="px-3 py-4 border-t border-border/50">
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-red-500/10 hover:text-red-500 transition-colors"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-200"
             >
               <SignOut size={20} weight="duotone" />
               <span>Sign Out</span>
@@ -224,10 +207,10 @@ export function Sidebar() {
         </div>
       </aside>
 
-      {/* Overlay for mobile */}
+      {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/40 backdrop-blur-sm lg:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}

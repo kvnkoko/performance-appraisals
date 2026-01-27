@@ -114,13 +114,11 @@ export function TeamsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header – award-worthy hierarchy */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Teams</h1>
-          <p className="text-muted-foreground mt-2">
-            Organize employees into teams. Edit a team to assign Executives or Leaders as department heads.
-          </p>
+          <h1 className="page-title text-foreground">Teams</h1>
+          <p className="page-subtitle">Organize employees into teams. Edit a team to assign Executives or Leaders as department heads.</p>
         </div>
         <div className="flex gap-3">
           <Button 

@@ -90,7 +90,7 @@ export function PeriodsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Review Periods</h1>
+          <h1 className="page-title text-foreground">Review Periods</h1>
           <p className="text-muted-foreground mt-2">Manage quarterly, semi-annual, and annual review periods</p>
         </div>
         <Button type="button" onClick={() => { setEditingPeriod(null); setDialogOpen(true); }}>
