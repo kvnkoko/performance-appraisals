@@ -26,7 +26,7 @@ interface TeamDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   teamId: string | null;
-  onSuccess: () => void;
+  onSuccess: () => void | Promise<void>;
 }
 
 export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialogProps) {
@@ -61,7 +61,7 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
       }
       await saveEmployee({ ...emp, teamId });
       window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId } }));
-      onSuccess();
+      await Promise.resolve(onSuccess());
       setAddLeaderId('');
       toast({
         title: 'Leader assigned',
@@ -83,7 +83,7 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
       if (!emp) return;
       await saveEmployee({ ...emp, teamId: undefined });
       window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId } }));
-      onSuccess();
+      await Promise.resolve(onSuccess());
       toast({
         title: 'Removed as leader',
         description: `${emp.name} is no longer a leader of this department.`,

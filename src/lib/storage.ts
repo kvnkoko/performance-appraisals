@@ -312,27 +312,24 @@ export async function getEmployee(id: string): Promise<Employee | undefined> {
 }
 
 export async function saveEmployee(employee: Employee): Promise<void> {
-  // ALWAYS save to IndexedDB first to ensure data persistence
   const database = await initDB();
+
+  const { isSupabaseConfigured } = await import('./supabase');
+  if (isSupabaseConfigured()) {
+    // Supabase is source of truth: write there first; surface errors so UI doesn't show false success
+    const { saveEmployeeToSupabase } = await import('./supabase-storage');
+    await saveEmployeeToSupabase(employee);
+    console.log('Employee saved to Supabase:', employee.id, 'teamId:', employee.teamId);
+    // Sync to IndexedDB for read-your-writes / offline fallback
+    if (database.objectStoreNames.contains('employees')) {
+      await database.put('employees', employee);
+    }
+    return;
+  }
+
+  // IndexedDB-only: persist locally
   await database.put('employees', employee);
   console.log('Employee saved to IndexedDB:', employee.id, 'teamId:', employee.teamId);
-
-  // Try Supabase if configured (but don't let Supabase errors prevent IndexedDB save)
-  try {
-    const { isSupabaseConfigured } = await import('./supabase');
-    if (isSupabaseConfigured()) {
-      const { saveEmployeeToSupabase } = await import('./supabase-storage');
-      try {
-        await saveEmployeeToSupabase(employee);
-        console.log('Employee saved to Supabase:', employee.id);
-      } catch (supabaseError: any) {
-        console.warn('Failed to save employee to Supabase (but saved to IndexedDB):', supabaseError);
-        // Don't re-throw - IndexedDB save is sufficient
-      }
-    }
-  } catch (error) {
-    console.log('Supabase not available, data saved to IndexedDB only:', error);
-  }
 }
 
 export async function deleteEmployee(id: string): Promise<void> {
