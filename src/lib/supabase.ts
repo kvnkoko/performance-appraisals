@@ -58,7 +58,6 @@ export async function getUsersFromSupabase(): Promise<User[]> {
     const { data, error } = await supabase
       .from(TABLES.USERS)
       .select('*')
-      .eq('active', true)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -98,17 +97,16 @@ export async function getUserByUsernameFromSupabase(username: string): Promise<U
       return undefined;
     }
     
+    // Exact match on lowercase username (stored that way in saveUser).
+    // maybeSingle() avoids 406 when 0 rows; .single() would throw 406.
+    const normalized = username.trim().toLowerCase();
     const { data, error } = await supabase
       .from(TABLES.USERS)
       .select('*')
-      .ilike('username', username.trim().toLowerCase())
-      .single();
+      .eq('username', normalized)
+      .maybeSingle();
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        // No rows returned
-        return undefined;
-      }
       console.error('Error fetching user from Supabase:', error);
       return undefined;
     }
@@ -146,16 +144,14 @@ export async function getUserFromSupabase(id: string): Promise<User | undefined>
       return undefined;
     }
 
+    // maybeSingle() avoids 406 when 0 rows; .single() would throw 406.
     const { data, error } = await supabase
       .from(TABLES.USERS)
       .select('*')
       .eq('id', id)
-      .single();
+      .maybeSingle();
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        return undefined;
-      }
       console.error('Error fetching user from Supabase:', error);
       return undefined;
     }
@@ -275,4 +271,14 @@ export async function updateUserLastLogin(id: string): Promise<void> {
 // Check if Supabase is configured
 export function isSupabaseConfigured(): boolean {
   return !!(supabaseUrl && supabaseAnonKey);
+}
+
+// One-time diagnostic: redacted project hint (hostname only) for debugging "0 users" across devices
+export function getSupabaseProjectHint(): string {
+  const u = import.meta.env.VITE_SUPABASE_URL || '';
+  try {
+    return u ? new URL(u).hostname : '(not set)';
+  } catch {
+    return '(invalid url)';
+  }
 }

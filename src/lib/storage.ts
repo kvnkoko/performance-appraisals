@@ -42,6 +42,7 @@ interface AppraisalDB extends DBSchema {
 }
 
 let db: IDBPDatabase<AppraisalDB> | null = null;
+let _supabaseUsersDiagnosticLogged = false;
 
 export async function initDB(): Promise<IDBPDatabase<AppraisalDB>> {
   if (db) return db;
@@ -155,52 +156,35 @@ export async function initDB(): Promise<IDBPDatabase<AppraisalDB>> {
   return db;
 }
 
-// Templates - Hybrid: Supabase (if configured) or IndexedDB (fallback)
+// Templates - Supabase as single source of truth when configured; else IndexedDB
 export async function getTemplates(): Promise<Template[]> {
   const database = await initDB();
-  let indexedDBTemplates: Template[] = [];
-  
-  // Always get templates from IndexedDB as backup/cache
-  try {
-    if (database.objectStoreNames.contains('templates')) {
-      indexedDBTemplates = await database.getAll('templates');
-      console.log('getTemplates: Found', indexedDBTemplates.length, 'templates in IndexedDB');
-    }
-  } catch (error) {
-    console.error('Error getting templates from IndexedDB:', error);
-  }
-  
-  // Try Supabase first if configured
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { getTemplatesFromSupabase } = await import('./supabase-storage');
       const supabaseTemplates = await getTemplatesFromSupabase();
-      console.log('getTemplates: Found', supabaseTemplates.length, 'templates in Supabase');
-      
-      // Merge Supabase and IndexedDB templates, prioritizing Supabase
-      const templatesMap = new Map<string, Template>();
-      
-      // Add IndexedDB templates first (as backup)
-      for (const template of indexedDBTemplates) {
-        templatesMap.set(template.id, template);
+      if (import.meta.env.DEV) console.log('getTemplates: Found', supabaseTemplates.length, 'templates in Supabase');
+      // Overwrite IndexedDB with Supabase result so local cache stays in sync
+      if (database.objectStoreNames.contains('templates')) {
+        const tx = database.transaction('templates', 'readwrite');
+        const store = tx.objectStore('templates');
+        await store.clear();
+        for (const t of supabaseTemplates) await store.put(t);
       }
-      
-      // Add/override with Supabase templates (as source of truth)
-      for (const template of supabaseTemplates) {
-        templatesMap.set(template.id, template);
-      }
-      
-      const mergedTemplates = Array.from(templatesMap.values());
-      console.log('getTemplates: Returning', mergedTemplates.length, 'merged templates');
-      return mergedTemplates;
+      return supabaseTemplates;
     }
   } catch (error) {
-    console.log('Supabase not available or error occurred, using IndexedDB fallback:', error);
+    if (import.meta.env.DEV) console.log('getTemplates: Supabase not available, using IndexedDB:', error);
   }
-
-  // Fallback to IndexedDB only
-  return indexedDBTemplates;
+  try {
+    if (database.objectStoreNames.contains('templates')) {
+      return database.getAll('templates');
+    }
+  } catch (error) {
+    console.error('Error getting templates from IndexedDB:', error);
+  }
+  return [];
 }
 
 export async function getTemplate(id: string): Promise<Template | undefined> {
@@ -267,53 +251,34 @@ export async function deleteTemplate(id: string): Promise<void> {
   await database.delete('templates', id);
 }
 
-// Employees - Hybrid: Supabase (if configured) or IndexedDB (fallback)
+// Employees - Supabase as single source of truth when configured; else IndexedDB
 export async function getEmployees(): Promise<Employee[]> {
   const database = await initDB();
-  let indexedDBEmployees: Employee[] = [];
-  
-  // Always get employees from IndexedDB as backup/cache
-  try {
-    if (database.objectStoreNames.contains('employees')) {
-      indexedDBEmployees = await database.getAll('employees');
-      console.log('getEmployees: Found', indexedDBEmployees.length, 'employees in IndexedDB');
-    }
-  } catch (error) {
-    console.error('Error getting employees from IndexedDB:', error);
-  }
-  
-  // Try Supabase first if configured
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { getEmployeesFromSupabase } = await import('./supabase-storage');
       const supabaseEmployees = await getEmployeesFromSupabase();
-      console.log('getEmployees: Found', supabaseEmployees.length, 'employees in Supabase');
-      
-      // Merge Supabase and IndexedDB employees, prioritizing Supabase
-      // Create a map of employees by ID to avoid duplicates
-      const employeesMap = new Map<string, Employee>();
-      
-      // Add IndexedDB employees first (as backup)
-      for (const employee of indexedDBEmployees) {
-        employeesMap.set(employee.id, employee);
+      if (import.meta.env.DEV) console.log('getEmployees: Found', supabaseEmployees.length, 'employees in Supabase');
+      if (database.objectStoreNames.contains('employees')) {
+        const tx = database.transaction('employees', 'readwrite');
+        const store = tx.objectStore('employees');
+        await store.clear();
+        for (const e of supabaseEmployees) await store.put(e);
       }
-      
-      // Add/override with Supabase employees (as source of truth)
-      for (const employee of supabaseEmployees) {
-        employeesMap.set(employee.id, employee);
-      }
-      
-      const mergedEmployees = Array.from(employeesMap.values());
-      console.log('getEmployees: Returning', mergedEmployees.length, 'merged employees');
-      return mergedEmployees;
+      return supabaseEmployees;
     }
   } catch (error) {
-    console.log('Supabase not available or error occurred, using IndexedDB fallback:', error);
+    if (import.meta.env.DEV) console.log('getEmployees: Supabase not available, using IndexedDB:', error);
   }
-
-  // Fallback to IndexedDB only
-  return indexedDBEmployees;
+  try {
+    if (database.objectStoreNames.contains('employees')) {
+      return database.getAll('employees');
+    }
+  } catch (error) {
+    console.error('Error getting employees from IndexedDB:', error);
+  }
+  return [];
 }
 
 export async function getEmployee(id: string): Promise<Employee | undefined> {
@@ -379,52 +344,34 @@ export async function deleteEmployee(id: string): Promise<void> {
   await database.delete('employees', id);
 }
 
-// Appraisals - Hybrid: Supabase (if configured) or IndexedDB (fallback)
+// Appraisals - Supabase as single source of truth when configured; else IndexedDB
 export async function getAppraisals(): Promise<Appraisal[]> {
   const database = await initDB();
-  let indexedDBAppraisals: Appraisal[] = [];
-  
-  // Always get appraisals from IndexedDB as backup/cache
-  try {
-    if (database.objectStoreNames.contains('appraisals')) {
-      indexedDBAppraisals = await database.getAll('appraisals');
-      console.log('getAppraisals: Found', indexedDBAppraisals.length, 'appraisals in IndexedDB');
-    }
-  } catch (error) {
-    console.error('Error getting appraisals from IndexedDB:', error);
-  }
-  
-  // Try Supabase first if configured
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { getAppraisalsFromSupabase } = await import('./supabase-storage');
       const supabaseAppraisals = await getAppraisalsFromSupabase();
-      console.log('getAppraisals: Found', supabaseAppraisals.length, 'appraisals in Supabase');
-      
-      // Merge Supabase and IndexedDB appraisals, prioritizing Supabase
-      const appraisalsMap = new Map<string, Appraisal>();
-      
-      // Add IndexedDB appraisals first (as backup)
-      for (const appraisal of indexedDBAppraisals) {
-        appraisalsMap.set(appraisal.id, appraisal);
+      if (import.meta.env.DEV) console.log('getAppraisals: Found', supabaseAppraisals.length, 'appraisals in Supabase');
+      if (database.objectStoreNames.contains('appraisals')) {
+        const tx = database.transaction('appraisals', 'readwrite');
+        const store = tx.objectStore('appraisals');
+        await store.clear();
+        for (const a of supabaseAppraisals) await store.put(a);
       }
-      
-      // Add/override with Supabase appraisals (as source of truth)
-      for (const appraisal of supabaseAppraisals) {
-        appraisalsMap.set(appraisal.id, appraisal);
-      }
-      
-      const mergedAppraisals = Array.from(appraisalsMap.values());
-      console.log('getAppraisals: Returning', mergedAppraisals.length, 'merged appraisals');
-      return mergedAppraisals;
+      return supabaseAppraisals;
     }
   } catch (error) {
-    console.log('Supabase not available or error occurred, using IndexedDB fallback:', error);
+    if (import.meta.env.DEV) console.log('getAppraisals: Supabase not available, using IndexedDB:', error);
   }
-
-  // Fallback to IndexedDB only
-  return indexedDBAppraisals;
+  try {
+    if (database.objectStoreNames.contains('appraisals')) {
+      return database.getAll('appraisals');
+    }
+  } catch (error) {
+    console.error('Error getting appraisals from IndexedDB:', error);
+  }
+  return [];
 }
 
 export async function getAppraisal(id: string): Promise<Appraisal | undefined> {
@@ -484,52 +431,34 @@ export async function deleteAppraisal(id: string): Promise<void> {
   await database.delete('appraisals', id);
 }
 
-// Links - Hybrid: Supabase (if configured) or IndexedDB (fallback)
+// Links - Supabase as single source of truth when configured; else IndexedDB
 export async function getLinks(): Promise<AppraisalLink[]> {
   const database = await initDB();
-  let indexedDBLinks: AppraisalLink[] = [];
-  
-  // Always get links from IndexedDB as backup/cache
-  try {
-    if (database.objectStoreNames.contains('links')) {
-      indexedDBLinks = await database.getAll('links');
-      console.log('getLinks: Found', indexedDBLinks.length, 'links in IndexedDB');
-    }
-  } catch (error) {
-    console.error('Error getting links from IndexedDB:', error);
-  }
-  
-  // Try Supabase first if configured
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { getLinksFromSupabase } = await import('./supabase-storage');
       const supabaseLinks = await getLinksFromSupabase();
-      console.log('getLinks: Found', supabaseLinks.length, 'links in Supabase');
-      
-      // Merge Supabase and IndexedDB links, prioritizing Supabase
-      const linksMap = new Map<string, AppraisalLink>();
-      
-      // Add IndexedDB links first (as backup)
-      for (const link of indexedDBLinks) {
-        linksMap.set(link.id, link);
+      if (import.meta.env.DEV) console.log('getLinks: Found', supabaseLinks.length, 'links in Supabase');
+      if (database.objectStoreNames.contains('links')) {
+        const tx = database.transaction('links', 'readwrite');
+        const store = tx.objectStore('links');
+        await store.clear();
+        for (const link of supabaseLinks) await store.put(link);
       }
-      
-      // Add/override with Supabase links (as source of truth)
-      for (const link of supabaseLinks) {
-        linksMap.set(link.id, link);
-      }
-      
-      const mergedLinks = Array.from(linksMap.values());
-      console.log('getLinks: Returning', mergedLinks.length, 'merged links');
-      return mergedLinks;
+      return supabaseLinks;
     }
   } catch (error) {
-    console.log('Supabase not available or error occurred, using IndexedDB fallback:', error);
+    if (import.meta.env.DEV) console.log('getLinks: Supabase not available, using IndexedDB:', error);
   }
-
-  // Fallback to IndexedDB only
-  return indexedDBLinks;
+  try {
+    if (database.objectStoreNames.contains('links')) {
+      return database.getAll('links');
+    }
+  } catch (error) {
+    console.error('Error getting links from IndexedDB:', error);
+  }
+  return [];
 }
 
 export async function getLinkByToken(token: string): Promise<AppraisalLink | undefined> {
@@ -599,26 +528,34 @@ export async function deleteLink(id: string): Promise<void> {
   await database.delete('links', id);
 }
 
-// Settings - Hybrid: Supabase (if configured) or IndexedDB (fallback)
+// Settings - Supabase as single source of truth when configured; else IndexedDB
+const defaultSettings: CompanySettings = {
+  name: 'Your Company',
+  adminPin: '1234',
+  accentColor: '#3B82F6',
+  theme: 'system',
+};
+
 export async function getSettings(): Promise<CompanySettings> {
+  const database = await initDB();
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { getSettingsFromSupabase } = await import('./supabase-storage');
       const settings = await getSettingsFromSupabase();
-      if (settings) return settings;
+      if (settings) {
+        const toStore = { ...settings, key: 'company' } as CompanySettings & { key: string };
+        if (database.objectStoreNames.contains('settings')) {
+          await database.put('settings', toStore as any);
+        }
+        return settings;
+      }
     }
   } catch (error) {
-    console.log('Supabase not available, using IndexedDB fallback');
+    if (import.meta.env.DEV) console.log('getSettings: Supabase not available, using IndexedDB:', error);
   }
-  const database = await initDB();
-  const settings = await database.get('settings', 'company');
-  return settings || {
-    name: 'Your Company',
-    adminPin: '1234',
-    accentColor: '#3B82F6',
-    theme: 'system',
-  } as CompanySettings;
+  const stored = await database.get('settings', 'company');
+  return (stored as CompanySettings) || defaultSettings;
 }
 
 export async function saveSettings(settings: CompanySettings): Promise<void> {
@@ -679,52 +616,34 @@ export async function saveSummary(summary: PerformanceSummary): Promise<void> {
   await database.put('summaries', summary);
 }
 
-// Review Periods - Hybrid: Supabase (if configured) or IndexedDB (fallback)
+// Review Periods - Supabase as single source of truth when configured; else IndexedDB
 export async function getReviewPeriods(): Promise<ReviewPeriod[]> {
   const database = await initDB();
-  let indexedDBPeriods: ReviewPeriod[] = [];
-  
-  // Always get periods from IndexedDB as backup/cache
-  try {
-    if (database.objectStoreNames.contains('reviewPeriods')) {
-      indexedDBPeriods = await database.getAll('reviewPeriods');
-      console.log('getReviewPeriods: Found', indexedDBPeriods.length, 'periods in IndexedDB');
-    }
-  } catch (error) {
-    console.error('Error getting review periods from IndexedDB:', error);
-  }
-  
-  // Try Supabase first if configured
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { getReviewPeriodsFromSupabase } = await import('./supabase-storage');
       const supabasePeriods = await getReviewPeriodsFromSupabase();
-      console.log('getReviewPeriods: Found', supabasePeriods.length, 'periods in Supabase');
-      
-      // Merge Supabase and IndexedDB periods, prioritizing Supabase
-      const periodsMap = new Map<string, ReviewPeriod>();
-      
-      // Add IndexedDB periods first (as backup)
-      for (const period of indexedDBPeriods) {
-        periodsMap.set(period.id, period);
+      if (import.meta.env.DEV) console.log('getReviewPeriods: Found', supabasePeriods.length, 'periods in Supabase');
+      if (database.objectStoreNames.contains('reviewPeriods')) {
+        const tx = database.transaction('reviewPeriods', 'readwrite');
+        const store = tx.objectStore('reviewPeriods');
+        await store.clear();
+        for (const p of supabasePeriods) await store.put(p);
       }
-      
-      // Add/override with Supabase periods (as source of truth)
-      for (const period of supabasePeriods) {
-        periodsMap.set(period.id, period);
-      }
-      
-      const mergedPeriods = Array.from(periodsMap.values());
-      console.log('getReviewPeriods: Returning', mergedPeriods.length, 'merged periods');
-      return mergedPeriods;
+      return supabasePeriods;
     }
   } catch (error) {
-    console.log('Supabase not available or error occurred, using IndexedDB fallback:', error);
+    if (import.meta.env.DEV) console.log('getReviewPeriods: Supabase not available, using IndexedDB:', error);
   }
-
-  // Fallback to IndexedDB only
-  return indexedDBPeriods;
+  try {
+    if (database.objectStoreNames.contains('reviewPeriods')) {
+      return database.getAll('reviewPeriods');
+    }
+  } catch (error) {
+    console.error('Error getting review periods from IndexedDB:', error);
+  }
+  return [];
 }
 
 export async function getReviewPeriod(id: string): Promise<ReviewPeriod | undefined> {
@@ -817,53 +736,34 @@ export async function deleteReviewPeriod(id: string): Promise<void> {
   await database.delete('reviewPeriods', id);
 }
 
-// Teams - Hybrid: Supabase (if configured) or IndexedDB (fallback)
+// Teams - Supabase as single source of truth when configured; else IndexedDB
 export async function getTeams(): Promise<Team[]> {
   const database = await initDB();
-  let indexedDBTeams: Team[] = [];
-  
-  // Always get teams from IndexedDB as backup/cache
-  try {
-    if (database.objectStoreNames.contains('teams')) {
-      indexedDBTeams = await database.getAll('teams');
-      console.log('getTeams: Found', indexedDBTeams.length, 'teams in IndexedDB');
-    }
-  } catch (error) {
-    console.error('Error getting teams from IndexedDB:', error);
-  }
-  
-  // Try Supabase first if configured
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { getTeamsFromSupabase } = await import('./supabase-storage');
       const supabaseTeams = await getTeamsFromSupabase();
-      console.log('getTeams: Found', supabaseTeams.length, 'teams in Supabase');
-      
-      // Merge Supabase and IndexedDB teams, prioritizing Supabase
-      // Create a map of teams by ID to avoid duplicates
-      const teamsMap = new Map<string, Team>();
-      
-      // Add IndexedDB teams first (as backup)
-      for (const team of indexedDBTeams) {
-        teamsMap.set(team.id, team);
+      if (import.meta.env.DEV) console.log('getTeams: Found', supabaseTeams.length, 'teams in Supabase');
+      if (database.objectStoreNames.contains('teams')) {
+        const tx = database.transaction('teams', 'readwrite');
+        const store = tx.objectStore('teams');
+        await store.clear();
+        for (const t of supabaseTeams) await store.put(t);
       }
-      
-      // Add/override with Supabase teams (as source of truth)
-      for (const team of supabaseTeams) {
-        teamsMap.set(team.id, team);
-      }
-      
-      const mergedTeams = Array.from(teamsMap.values());
-      console.log('getTeams: Returning', mergedTeams.length, 'merged teams');
-      return mergedTeams;
+      return supabaseTeams;
     }
   } catch (error) {
-    console.log('Supabase not available or error occurred, using IndexedDB fallback:', error);
+    if (import.meta.env.DEV) console.log('getTeams: Supabase not available, using IndexedDB:', error);
   }
-
-  // Fallback to IndexedDB only
-  return indexedDBTeams;
+  try {
+    if (database.objectStoreNames.contains('teams')) {
+      return database.getAll('teams');
+    }
+  } catch (error) {
+    console.error('Error getting teams from IndexedDB:', error);
+  }
+  return [];
 }
 
 export async function getTeam(id: string): Promise<Team | undefined> {
@@ -923,43 +823,128 @@ export async function deleteTeam(id: string): Promise<void> {
   await database.delete('teams', id);
 }
 
-// Get user by employee ID
+// Get user by employee ID - Supabase as single source of truth when configured
 export async function getUserByEmployeeId(employeeId: string): Promise<User | undefined> {
-  const database = await initDB();
-  let indexedDBUser: User | undefined;
-  
-  // Always check IndexedDB as backup/cache
-  try {
-    if (database.objectStoreNames.contains('users')) {
-      const allUsers = await database.getAll('users');
-      indexedDBUser = allUsers.find((u) => u.employeeId === employeeId);
-      if (indexedDBUser) {
-        console.log('getUserByEmployeeId: Found user in IndexedDB:', indexedDBUser.id);
-      }
-    }
-  } catch (error) {
-    console.error('Error getting user from IndexedDB:', error);
-  }
-  
-  // Try Supabase first if configured
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { getUserByEmployeeIdFromSupabase } = await import('./supabase-storage');
       const supabaseUser = await getUserByEmployeeIdFromSupabase(employeeId);
-      
-      if (supabaseUser) {
-        console.log('getUserByEmployeeId: Found user in Supabase:', supabaseUser.id);
-        // Supabase is source of truth, return it
-        return supabaseUser;
-      }
+      return supabaseUser;
     }
   } catch (error) {
-    console.log('Supabase not available or error occurred, using IndexedDB fallback:', error);
+    if (import.meta.env.DEV) console.log('getUserByEmployeeId: Supabase not available, using IndexedDB:', error);
   }
+  const database = await initDB();
+  try {
+    if (database.objectStoreNames.contains('users')) {
+      const allUsers = await database.getAll('users');
+      return allUsers.find((u) => u.employeeId === employeeId);
+    }
+  } catch (error) {
+    console.error('Error getting user from IndexedDB:', error);
+  }
+  return undefined;
+}
 
-  // Fallback to IndexedDB
-  return indexedDBUser;
+/**
+ * Reset local IndexedDB from Supabase and overwrite with cloud data.
+ * Use when Supabase is configured to force all browsers to see the same data.
+ * @returns true if sync succeeded, false if Supabase not configured or sync failed
+ */
+export async function syncFromSupabase(): Promise<boolean> {
+  try {
+    const { isSupabaseConfigured, getUsersFromSupabase } = await import('./supabase');
+    if (!isSupabaseConfigured()) {
+      return false;
+    }
+    const {
+      getTemplatesFromSupabase,
+      getEmployeesFromSupabase,
+      getAppraisalsFromSupabase,
+      getLinksFromSupabase,
+      getSettingsFromSupabase,
+      getReviewPeriodsFromSupabase,
+      getTeamsFromSupabase,
+    } = await import('./supabase-storage');
+
+    const database = await initDB();
+
+    const [templates, employees, appraisals, links, settings, periods, teams, users] = await Promise.all([
+      getTemplatesFromSupabase(),
+      getEmployeesFromSupabase(),
+      getAppraisalsFromSupabase(),
+      getLinksFromSupabase(),
+      getSettingsFromSupabase(),
+      getReviewPeriodsFromSupabase(),
+      getTeamsFromSupabase(),
+      getUsersFromSupabase(),
+    ]);
+
+    if (database.objectStoreNames.contains('templates')) {
+      const tx = database.transaction('templates', 'readwrite');
+      const store = tx.objectStore('templates');
+      await store.clear();
+      for (const t of templates) await store.put(t);
+    }
+    if (database.objectStoreNames.contains('employees')) {
+      const tx = database.transaction('employees', 'readwrite');
+      const store = tx.objectStore('employees');
+      await store.clear();
+      for (const e of employees) await store.put(e);
+    }
+    if (database.objectStoreNames.contains('appraisals')) {
+      const tx = database.transaction('appraisals', 'readwrite');
+      const store = tx.objectStore('appraisals');
+      await store.clear();
+      for (const a of appraisals) await store.put(a);
+    }
+    if (database.objectStoreNames.contains('links')) {
+      const tx = database.transaction('links', 'readwrite');
+      const store = tx.objectStore('links');
+      await store.clear();
+      for (const link of links) await store.put(link);
+    }
+    if (database.objectStoreNames.contains('settings') && settings) {
+      await database.put('settings', { ...settings, key: 'company' } as any);
+    }
+    if (database.objectStoreNames.contains('reviewPeriods')) {
+      const tx = database.transaction('reviewPeriods', 'readwrite');
+      const store = tx.objectStore('reviewPeriods');
+      await store.clear();
+      for (const p of periods) await store.put(p);
+    }
+    if (database.objectStoreNames.contains('teams')) {
+      const tx = database.transaction('teams', 'readwrite');
+      const store = tx.objectStore('teams');
+      await store.clear();
+      for (const t of teams) await store.put(t);
+    }
+    if (database.objectStoreNames.contains('users')) {
+      const tx = database.transaction('users', 'readwrite');
+      const store = tx.objectStore('users');
+      await store.clear();
+      for (const u of users) {
+        await store.put({ ...u, username: (u.username || '').toLowerCase() });
+      }
+    }
+
+    if (import.meta.env.DEV) {
+      console.log('syncFromSupabase: completed', {
+        templates: templates.length,
+        employees: employees.length,
+        appraisals: appraisals.length,
+        links: links.length,
+        periods: periods.length,
+        teams: teams.length,
+        users: users.length,
+      });
+    }
+    return true;
+  } catch (error) {
+    console.error('syncFromSupabase failed:', error);
+    return false;
+  }
 }
 
 // Export/Import
@@ -989,52 +974,39 @@ export async function exportData(): Promise<string> {
   }, null, 2);
 }
 
-// Users - Hybrid: Supabase (if configured) or IndexedDB (fallback)
+// Users - Supabase as single source of truth when configured; else IndexedDB
 export async function getUsers(): Promise<User[]> {
   const database = await initDB();
-  let indexedDBUsers: User[] = [];
-  
-  // Always get users from IndexedDB as backup/cache
+  try {
+    const { isSupabaseConfigured, getUsersFromSupabase, getSupabaseProjectHint } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const supabaseUsers = await getUsersFromSupabase();
+      if (!_supabaseUsersDiagnosticLogged) {
+        _supabaseUsersDiagnosticLogged = true;
+        console.log('Supabase: configured, users count =', supabaseUsers.length, `(${getSupabaseProjectHint()})`);
+      }
+      if (import.meta.env.DEV) console.log('getUsers: Found', supabaseUsers.length, 'users in Supabase');
+      if (database.objectStoreNames.contains('users')) {
+        const tx = database.transaction('users', 'readwrite');
+        const store = tx.objectStore('users');
+        await store.clear();
+        for (const u of supabaseUsers) {
+          await store.put({ ...u, username: (u.username || '').toLowerCase() });
+        }
+      }
+      return supabaseUsers;
+    }
+  } catch (error) {
+    if (import.meta.env.DEV) console.log('getUsers: Supabase not available, using IndexedDB:', error);
+  }
   try {
     if (database.objectStoreNames.contains('users')) {
-      indexedDBUsers = await database.getAll('users');
-      console.log('getUsers: Found', indexedDBUsers.length, 'users in IndexedDB');
+      return database.getAll('users');
     }
   } catch (error) {
     console.error('Error getting users from IndexedDB:', error);
   }
-  
-  // Try Supabase first if configured
-  try {
-    const { isSupabaseConfigured, getUsersFromSupabase } = await import('./supabase');
-    if (isSupabaseConfigured()) {
-      const supabaseUsers = await getUsersFromSupabase();
-      console.log('getUsers: Found', supabaseUsers.length, 'users in Supabase');
-      
-      // Merge Supabase and IndexedDB users, prioritizing Supabase
-      // Create a map of users by ID to avoid duplicates
-      const usersMap = new Map<string, User>();
-      
-      // Add IndexedDB users first (as backup)
-      for (const user of indexedDBUsers) {
-        usersMap.set(user.id, user);
-      }
-      
-      // Add/override with Supabase users (as source of truth)
-      for (const user of supabaseUsers) {
-        usersMap.set(user.id, user);
-      }
-      
-      const mergedUsers = Array.from(usersMap.values());
-      console.log('getUsers: Returning', mergedUsers.length, 'merged users');
-      return mergedUsers;
-    }
-  } catch (error) {
-    console.log('Supabase not available or error occurred, using IndexedDB fallback:', error);
-  }
-
-  // Fallback to IndexedDB only
-  return indexedDBUsers;
+  return [];
 }
 
 export async function getUser(id: string): Promise<User | undefined> {
@@ -1043,25 +1015,20 @@ export async function getUser(id: string): Promise<User | undefined> {
     if (isSupabaseConfigured()) {
       const user = await getUserFromSupabase(id);
       if (user) {
-        // Optionally cache in IndexedDB for offline/local consistency
         try {
           const database = await initDB();
           if (database.objectStoreNames.contains('users')) {
-            await database.put('users', {
-              ...user,
-              username: user.username.toLowerCase(),
-            });
+            await database.put('users', { ...user, username: (user.username || '').toLowerCase() });
           }
         } catch (_) {
-          // Ignore cache write errors
+          /* ignore cache write errors */
         }
-        return user;
       }
+      return user;
     }
   } catch (error) {
-    console.log('Supabase not available, using IndexedDB fallback');
+    if (import.meta.env.DEV) console.log('getUser: Supabase not available, using IndexedDB:', error);
   }
-
   const database = await initDB();
   return database.get('users', id);
 }

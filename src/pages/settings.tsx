@@ -4,8 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Download, Moon, Sun, Monitor, SignOut, Check } from 'phosphor-react';
-import { saveSettings, exportData, importData } from '@/lib/storage';
+import { Download, Moon, Sun, Monitor, SignOut, Check, CloudArrowDown } from 'phosphor-react';
+import { saveSettings, exportData, importData, syncFromSupabase } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { useTheme } from '@/hooks/use-theme';
 import { applyAccentColor } from '@/lib/utils';
@@ -34,6 +34,7 @@ export function SettingsPage() {
     accentColor: settings.accentColor,
   });
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     setFormData({
@@ -99,6 +100,23 @@ export function SettingsPage() {
       toast({ title: 'Import successful', description: 'Data imported successfully.', variant: 'success' });
     } catch (error) {
       toast({ title: 'Error', description: 'Failed to import data. Please check the file format.', variant: 'error' });
+    }
+  };
+
+  const handleSyncFromCloud = async () => {
+    setSyncing(true);
+    try {
+      const ok = await syncFromSupabase();
+      if (ok) {
+        await refresh();
+        toast({ title: 'Synced from cloud', description: 'Local data has been reset from Supabase.', variant: 'success' });
+      } else {
+        toast({ title: 'Sync unavailable', description: 'Supabase is not configured or sync failed.', variant: 'error' });
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to sync from cloud.', variant: 'error' });
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -285,9 +303,16 @@ export function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Data Management</CardTitle>
-            <CardDescription>Export or import your data</CardDescription>
+            <CardDescription>Export, import, or sync from cloud</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <Button type="button" onClick={handleSyncFromCloud} variant="secondary" className="w-full" disabled={syncing}>
+              <CloudArrowDown size={18} weight="duotone" className="mr-2" />
+              {syncing ? 'Syncing...' : 'Sync from cloud'}
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Resets local data from Supabase so all devices see the same data. Only available when Supabase is configured.
+            </p>
             <Button type="button" onClick={handleExport} variant="secondary" className="w-full">
               <Download size={18} weight="duotone" className="mr-2" />
               Export Data
