@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Plus, Pencil, Trash, UsersThree, MagnifyingGlass, User, ArrowClockwise } from 'phosphor-react';
+import { Plus, Pencil, Trash, UsersThree, MagnifyingGlass, User, ArrowClockwise, Crown, UserPlus } from 'phosphor-react';
 import { TeamDialog } from '@/components/teams/team-dialog';
 import { deleteTeam } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
@@ -21,46 +21,46 @@ export function TeamsPage() {
     name: '',
   });
   const [deleting, setDeleting] = useState(false);
+  const wasHiddenRef = useRef(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    // Listen for team creation/update events
     const handleTeamEvent = () => {
-      console.log('Team event received, refreshing teams list...');
+      if (import.meta.env.DEV) console.log('Team event received, refreshing teams list...');
       refresh();
     };
     
-    // Listen for employee creation/update events (employees can be added to teams)
     const handleEmployeeEvent = () => {
-      console.log('Employee event received, refreshing teams list...');
+      if (import.meta.env.DEV) console.log('Employee event received, refreshing teams list...');
       refresh();
     };
     
-    // Listen for window focus to refresh when user returns to the page
-    const handleFocus = () => {
-      console.log('Window focused, refreshing teams list...');
-      refresh();
-    };
-    
-    // Poll for updates every 10 seconds (as a fallback, only when page is visible)
-    const pollInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        wasHiddenRef.current = true;
+      } else if (document.visibilityState === 'visible' && wasHiddenRef.current) {
+        wasHiddenRef.current = false;
+        if (import.meta.env.DEV) console.log('Tab visible, refreshing teams list...');
         refresh();
       }
-    }, 10000);
+    };
+    
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') refresh();
+    }, 60000);
     
     window.addEventListener('teamCreated', handleTeamEvent);
     window.addEventListener('teamUpdated', handleTeamEvent);
     window.addEventListener('employeeCreated', handleEmployeeEvent);
     window.addEventListener('employeeUpdated', handleEmployeeEvent);
-    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     
     return () => {
       window.removeEventListener('teamCreated', handleTeamEvent);
       window.removeEventListener('teamUpdated', handleTeamEvent);
       window.removeEventListener('employeeCreated', handleEmployeeEvent);
       window.removeEventListener('employeeUpdated', handleEmployeeEvent);
-      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(pollInterval);
     };
   }, [refresh]);
@@ -100,9 +100,11 @@ export function TeamsPage() {
     return employees.filter((e) => e.teamId === teamId).length;
   };
 
-  // Get team leaders
+  // Get department leaders (leaders + executives who lead this department)
   const getTeamLeaders = (teamId: string) => {
-    return employees.filter((e) => e.teamId === teamId && e.hierarchy === 'leader');
+    return employees.filter(
+      (e) => e.teamId === teamId && (e.hierarchy === 'leader' || e.hierarchy === 'executive')
+    );
   };
 
   // Get team members (non-leaders)
@@ -116,7 +118,9 @@ export function TeamsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Teams</h1>
-          <p className="text-muted-foreground mt-2">Organize employees into teams for reviews</p>
+          <p className="text-muted-foreground mt-2">
+            Organize employees into teams. Edit a team to assign Executives or Leaders as department heads.
+          </p>
         </div>
         <div className="flex gap-3">
           <Button 
@@ -207,30 +211,47 @@ export function TeamsPage() {
                     </p>
                   )}
                   
-                  {/* Team Leaders */}
-                  {leaders.length > 0 && (
-                    <div className="space-y-1">
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Leaders
-                      </span>
+                  {/* Department leaders (Executives + Leaders who lead this team) */}
+                  <div className="space-y-1">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                      <UserPlus size={12} weight="duotone" />
+                      Leaders & department heads
+                    </span>
+                    {leaders.length > 0 ? (
                       <div className="flex flex-wrap gap-1">
-                        {leaders.slice(0, 3).map((leader) => (
-                          <span 
+                        {leaders.slice(0, 5).map((leader) => (
+                          <span
                             key={leader.id}
-                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ${
+                              leader.hierarchy === 'executive'
+                                ? 'bg-purple-500/10 text-purple-700 dark:text-purple-300'
+                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                            }`}
+                            title={leader.hierarchy === 'executive' ? 'Executive (department head)' : 'Leader'}
                           >
-                            <User size={12} weight="duotone" className="mr-1" />
+                            {leader.hierarchy === 'executive' ? (
+                              <Crown size={12} weight="duotone" className="mr-1" />
+                            ) : (
+                              <User size={12} weight="duotone" className="mr-1" />
+                            )}
                             {leader.name}
+                            {leader.hierarchy === 'executive' && (
+                              <span className="ml-1 opacity-80">(Exec)</span>
+                            )}
                           </span>
                         ))}
-                        {leaders.length > 3 && (
+                        {leaders.length > 5 && (
                           <span className="text-xs text-muted-foreground">
-                            +{leaders.length - 3} more
+                            +{leaders.length - 5} more
                           </span>
                         )}
                       </div>
-                    </div>
-                  )}
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic">
+                        No leaders yet. Edit team to add Executives or Leaders.
+                      </p>
+                    )}
+                  </div>
                   
                   {/* Team Members */}
                   {members.length > 0 && (
@@ -271,9 +292,10 @@ export function TeamsPage() {
                         setEditingTeam(team.id);
                         setDialogOpen(true);
                       }}
+                      title="Edit team details and manage department leaders"
                     >
                       <Pencil size={16} weight="duotone" className="mr-1.5" />
-                      Edit
+                      Edit & leaders
                     </Button>
                     <Button
                       type="button"

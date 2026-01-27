@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,11 +10,11 @@ import { HIERARCHY_LABELS } from '@/types';
 import { deleteEmployee, getUserByEmployeeId } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { formatDate } from '@/lib/utils';
-import { useEffect } from 'react';
 
 export function EmployeesPage() {
   const { employees, teams, refresh } = useApp();
   const [linkedUsers, setLinkedUsers] = useState<Record<string, { name: string; username: string }>>({});
+  const wasHiddenRef = useRef(false);
   
   // Helper to get team name
   const getTeamName = (teamId?: string) => {
@@ -80,44 +80,42 @@ export function EmployeesPage() {
     };
     
     const handleUserEvent = () => {
-      console.log('User event received, refreshing linked users...');
+      if (import.meta.env.DEV) console.log('User event received, refreshing linked users...');
       loadLinkedUsers();
     };
     
     const handleEmployeeEvent = () => {
-      console.log('Employee event received, refreshing employees and linked users...');
-      refresh(); // Refresh employees list from context
-      // Also reload linked users after a short delay to ensure employees are refreshed
-      setTimeout(() => {
-        loadLinkedUsers();
-      }, 300);
+      if (import.meta.env.DEV) console.log('Employee event received, refreshing employees and linked users...');
+      refresh();
+      setTimeout(() => loadLinkedUsers(), 300);
     };
     
-    // Listen for window focus to refresh when user returns to the page
-    const handleFocus = () => {
-      console.log('Window focused, refreshing linked users...');
-      loadLinkedUsers();
-    };
-    
-    // Poll for updates every 10 seconds (as a fallback, only when page is visible)
-    const pollInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        wasHiddenRef.current = true;
+      } else if (document.visibilityState === 'visible' && wasHiddenRef.current) {
+        wasHiddenRef.current = false;
+        if (import.meta.env.DEV) console.log('Tab visible, refreshing linked users...');
         loadLinkedUsers();
       }
-    }, 10000);
+    };
+    
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') loadLinkedUsers();
+    }, 60000);
     
     window.addEventListener('userCreated', handleUserEvent);
     window.addEventListener('userUpdated', handleUserEvent);
     window.addEventListener('employeeCreated', handleEmployeeEvent);
     window.addEventListener('employeeUpdated', handleEmployeeEvent);
-    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     
     return () => {
       window.removeEventListener('userCreated', handleUserEvent);
       window.removeEventListener('userUpdated', handleUserEvent);
       window.removeEventListener('employeeCreated', handleEmployeeEvent);
       window.removeEventListener('employeeUpdated', handleEmployeeEvent);
-      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(pollInterval);
     };
   }, [employees, refresh]);

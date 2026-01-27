@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS employees (
 );
 CREATE INDEX IF NOT EXISTS idx_employees_hierarchy ON employees(hierarchy);
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS team_id TEXT;
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS reports_to TEXT;
 
 -- 3. Teams table
 CREATE TABLE IF NOT EXISTS teams (

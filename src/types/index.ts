@@ -63,8 +63,9 @@ export interface Employee {
   name: string;
   email?: string;
   role: string;
+  /** Primary role. Executives can also lead departments (set teamId) and have direct reports like leaders. */
   hierarchy: 'executive' | 'leader' | 'member';
-  teamId?: string; // department/team
+  teamId?: string; // department/team; executives with teamId lead that department
   reportsTo?: string; // employeeId of direct manager (Leader or Executive) – for auto-assignment
   createdAt: string;
 }

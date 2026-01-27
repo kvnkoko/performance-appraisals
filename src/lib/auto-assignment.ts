@@ -41,53 +41,55 @@ export function previewAutoAssignments(
   const leaderToLeader: AutoAssignmentPreview['leaderToLeader'] = [];
   const execToLeader: AutoAssignmentPreview['execToLeader'] = [];
 
+  // "Managers" = anyone who can have direct reports (leaders + executives who can lead departments)
+  const isManager = (e: Employee) => e.hierarchy === 'leader' || e.hierarchy === 'executive';
+
   const membersWithoutReportsTo = employees.filter((e) => e.hierarchy === 'member' && !e.reportsTo);
   if (membersWithoutReportsTo.length > 0) {
     warnings.push(`${membersWithoutReportsTo.length} member(s) have no "Reports To" set – skipped for Leader→Member and Member→Leader.`);
   }
 
-  const leadersWithNoReports = employees.filter((e) => e.hierarchy === 'leader');
-  const leadersWithNoMembers = leadersWithNoReports.filter((leader) => !employees.some((m) => m.reportsTo === leader.id));
-  if (leadersWithNoMembers.length > 0) {
-    warnings.push(`${leadersWithNoMembers.length} leader(s) have no members reporting to them.`);
+  const managersWithNoReports = employees.filter((e) => isManager(e) && !employees.some((m) => m.reportsTo === e.id));
+  if (managersWithNoReports.length > 0) {
+    warnings.push(`${managersWithNoReports.length} manager(s) (leaders/executives) have no direct reports.`);
   }
 
-  // RULE 1: Leader → Member (only if reportsTo is set)
+  // RULE 1: Leader → Member (manager appraises direct report; manager = leader OR executive)
   if (opts.includeLeaderToMember) {
     for (const member of employees) {
       if (member.hierarchy !== 'member' || !member.reportsTo) continue;
-      const leader = byId.get(member.reportsTo);
-      if (!leader || leader.hierarchy !== 'leader') continue;
+      const manager = byId.get(member.reportsTo);
+      if (!manager || !isManager(manager)) continue;
       leaderToMember.push({
-        appraiserId: leader.id,
-        appraiserName: leader.name,
+        appraiserId: manager.id,
+        appraiserName: manager.name,
         employeeId: member.id,
         employeeName: member.name,
       });
     }
   }
 
-  // RULE 2: Member → Leader (upward feedback)
+  // RULE 2: Member → Leader (upward feedback; manager = leader OR executive)
   if (opts.includeMemberToLeader) {
     for (const member of employees) {
       if (member.hierarchy !== 'member' || !member.reportsTo) continue;
-      const leader = byId.get(member.reportsTo);
-      if (!leader) continue;
+      const manager = byId.get(member.reportsTo);
+      if (!manager) continue;
       memberToLeader.push({
         appraiserId: member.id,
         appraiserName: member.name,
-        employeeId: leader.id,
-        employeeName: leader.name,
+        employeeId: manager.id,
+        employeeName: manager.name,
       });
     }
   }
 
-  // RULE 3: Leader → Leader (peer, same team)
+  // RULE 3: Leader → Leader (peer review in same department; includes executives who lead that department)
   if (opts.includeLeaderToLeader) {
-    const leaders = employees.filter((e) => e.hierarchy === 'leader');
+    const departmentLeaders = employees.filter((e) => isManager(e) && e.teamId);
     const sameTeam = (a: Employee, b: Employee) => (a.teamId && b.teamId && a.teamId === b.teamId) || (!a.teamId && !b.teamId);
-    for (const appraiser of leaders) {
-      for (const target of leaders) {
+    for (const appraiser of departmentLeaders) {
+      for (const target of departmentLeaders) {
         if (appraiser.id === target.id) continue;
         if (!sameTeam(appraiser, target)) continue;
         leaderToLeader.push({
@@ -100,9 +102,9 @@ export function previewAutoAssignments(
     }
   }
 
-  // RULE 4: Executive → Leader (downward from exec)
+  // RULE 4: Executive → Leader (exec appraises leaders in same department; execs who lead a dept are in leader peer pool above)
   if (opts.includeExecToLeader) {
-    const execs = employees.filter((e) => e.hierarchy === 'executive');
+    const execs = employees.filter((e) => e.hierarchy === 'executive' && e.teamId);
     const leaders = employees.filter((e) => e.hierarchy === 'leader');
     for (const exec of execs) {
       for (const leader of leaders) {

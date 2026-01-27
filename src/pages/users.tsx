@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -545,6 +545,7 @@ export function UsersPage() {
     name: '',
   });
   const [deleting, setDeleting] = useState(false);
+  const wasHiddenRef = useRef(false);
   const { toast } = useToast();
   const { employees } = useApp();
   
@@ -578,42 +579,39 @@ export function UsersPage() {
     
     // Listen for user creation/update events
     const handleUserEvent = () => {
-      console.log('User event received, refreshing users list...');
+      if (import.meta.env.DEV) console.log('User event received, refreshing users list...');
       loadUsers();
     };
     
-    // Listen for employee updates to refresh linked employees
     const handleEmployeeEvent = () => {
-      console.log('Employee event received, refreshing users list to update linked employees...');
+      if (import.meta.env.DEV) console.log('Employee event received, refreshing users list...');
       loadUsers();
     };
     
-    // Listen for window focus to refresh when user returns to the page
-    const handleFocus = () => {
-      console.log('Window focused, refreshing users list...');
-      loadUsers();
+    // Refresh only when tab becomes visible (return from another tab), not on every focus
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        wasHiddenRef.current = true;
+      } else if (document.visibilityState === 'visible' && wasHiddenRef.current) {
+        wasHiddenRef.current = false;
+        if (import.meta.env.DEV) console.log('Tab visible, refreshing users list...');
+        loadUsers();
+      }
     };
     
-    // Listen for storage events as backup
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'users-updated') {
-        console.log('Storage event received, refreshing users list...');
-        loadUsers();
-      }
+      if (e.key === 'users-updated') loadUsers();
     };
     
-    // Poll for updates every 10 seconds (as a fallback, only when page is visible)
     const pollInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        loadUsers();
-      }
-    }, 10000);
+      if (document.visibilityState === 'visible') loadUsers();
+    }, 60000);
     
     window.addEventListener('userCreated', handleUserEvent);
     window.addEventListener('userUpdated', handleUserEvent);
     window.addEventListener('employeeCreated', handleEmployeeEvent);
     window.addEventListener('employeeUpdated', handleEmployeeEvent);
-    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('storage', handleStorage);
     
     return () => {
@@ -621,7 +619,7 @@ export function UsersPage() {
       window.removeEventListener('userUpdated', handleUserEvent);
       window.removeEventListener('employeeCreated', handleEmployeeEvent);
       window.removeEventListener('employeeUpdated', handleEmployeeEvent);
-      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('storage', handleStorage);
       clearInterval(pollInterval);
     };

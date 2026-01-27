@@ -100,6 +100,9 @@ VITE_SUPABASE_ANON_KEY=YOUR_ANON_KEY_HERE
 - Check browser console for errors
 - Verify environment variables are set correctly
 
+**Users created on one computer don't sign in on another / "0 users in Supabase"?**
+- See [SUPABASE_SYNC_CHECKLIST.md](SUPABASE_SYNC_CHECKLIST.md) for env, RLS, and project checks.
+
 ## 🎯 That's It!
 
 Once you complete these steps, your app will:

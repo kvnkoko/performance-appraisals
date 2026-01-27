@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { X, Info, Copy, Check, Eye, EyeSlash } from 'phosphor-react';
+import { X, Info, Copy, Check, Eye, EyeSlash, Crown, Briefcase, Buildings } from 'phosphor-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -281,7 +281,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         email: data.email || undefined,
         role: data.role,
         hierarchy: data.hierarchy,
-        teamId: data.hierarchy !== 'executive' && data.teamId ? data.teamId : undefined,
+        teamId: data.teamId ? data.teamId : undefined,
         reportsTo: data.reportsTo || undefined,
         createdAt: existingEmployee?.createdAt || new Date().toISOString(),
       };
@@ -877,10 +877,66 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
             {errors.hierarchy && <p className="text-sm text-destructive">{errors.hierarchy.message}</p>}
           </div>
 
-          {/* Team selector - only show for non-executives */}
-          {selectedHierarchy !== 'executive' && (
+          {/* Team / Department — prominent "Assign as department head" for Executives */}
+          {selectedHierarchy === 'executive' ? (
+            <div className="space-y-2 rounded-xl border-2 border-purple-500/20 bg-purple-500/5 p-4">
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-500/20">
+                  <Crown size={20} weight="duotone" className="text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <Label htmlFor="teamId" className="text-base font-semibold">
+                    Assign as department head
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Optional. When set, this executive leads the chosen department and appears as a leader there.
+                  </p>
+                </div>
+              </div>
+              <Select id="teamId" {...register('teamId')} className="bg-background">
+                <option value="">No department — executive only</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                You can also assign leaders from the Teams tab: open a team → Edit → add Executives or Leaders under “Department Leaders”.
+              </p>
+              {errors.teamId && <p className="text-sm text-destructive">{errors.teamId.message}</p>}
+            </div>
+          ) : selectedHierarchy === 'leader' ? (
+            <div className="space-y-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/20">
+                  <Briefcase size={20} weight="duotone" className="text-amber-600 dark:text-amber-400" />
+                </div>
+                <div>
+                  <Label htmlFor="teamId" className="text-base font-semibold">
+                    Team this leader manages
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    The department or team this leader is responsible for.
+                  </p>
+                </div>
+              </div>
+              <Select id="teamId" {...register('teamId')} className="bg-background">
+                <option value="">Select a team (optional)</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </Select>
+              {errors.teamId && <p className="text-sm text-destructive">{errors.teamId.message}</p>}
+            </div>
+          ) : (
             <div className="space-y-2">
-              <Label htmlFor="teamId">Team</Label>
+              <div className="flex items-center gap-2">
+                <Buildings size={18} weight="duotone" className="text-muted-foreground" />
+                <Label htmlFor="teamId">Team / Department</Label>
+              </div>
               <Select id="teamId" {...register('teamId')}>
                 <option value="">Select a team (optional)</option>
                 {teams.map((team) => (
@@ -890,9 +946,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
                 ))}
               </Select>
               <p className="text-xs text-muted-foreground">
-                {selectedHierarchy === 'leader' 
-                  ? 'The team this leader manages' 
-                  : 'The team this member belongs to'}
+                The team or department this member belongs to.
               </p>
               {errors.teamId && <p className="text-sm text-destructive">{errors.teamId.message}</p>}
             </div>
@@ -913,7 +967,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
                   ))}
               </Select>
               <p className="text-xs text-muted-foreground">
-                Direct manager. Used for auto-assignment of appraisals (Leader→Member, Member→Leader).
+                Direct manager (Leader or Executive). Executives who lead a department can have direct reports and appear in auto-assignment like leaders.
               </p>
               {errors.reportsTo && <p className="text-sm text-destructive">{errors.reportsTo.message}</p>}
             </div>

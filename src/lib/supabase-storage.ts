@@ -194,6 +194,7 @@ export async function getEmployeesFromSupabase(): Promise<Employee[]> {
       role: e.role,
       hierarchy: e.hierarchy,
       teamId: e.team_id,
+      reportsTo: e.reports_to,
       createdAt: e.created_at,
     }));
   } catch (error) {
@@ -224,6 +225,7 @@ export async function getEmployeeFromSupabase(id: string): Promise<Employee | un
       role: data.role,
       hierarchy: data.hierarchy,
       teamId: data.team_id,
+      reportsTo: data.reports_to,
       createdAt: data.created_at,
     };
   } catch (error) {
@@ -248,6 +250,7 @@ export async function saveEmployeeToSupabase(employee: Employee): Promise<void> 
         role: employee.role,
         hierarchy: employee.hierarchy,
         team_id: employee.teamId || null,
+        reports_to: (employee as { reportsTo?: string }).reportsTo ?? null,
         created_at: employee.createdAt,
       }, { onConflict: 'id' });
     
