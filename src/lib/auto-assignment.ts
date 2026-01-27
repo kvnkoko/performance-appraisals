@@ -115,7 +115,7 @@ export function previewAutoAssignments(
     }
   }
 
-  // RULE 3: Leader → Leader (peer review same department)
+  // RULE 3: Leader → Leader (peer review same department; leaders and execs in same team)
   if (opts.includeLeaderToLeader) {
     const departmentLeaders = employees.filter((e) => isManager(e) && e.teamId);
     for (const appraiser of departmentLeaders) {
@@ -130,15 +130,22 @@ export function previewAutoAssignments(
         });
       }
     }
+    if (departmentLeaders.length > 0 && leaderToLeader.length === 0) {
+      warnings.push('Leader→Leader needs at least 2 leaders or executives in the same team (assign same department to multiple).');
+    }
   }
 
-  // RULE 4: Executive → Leader — execs who lead a department appraise leaders in that department
+  // RULE 4: Executive → Leader
+  // - Execs who lead a department appraise leaders in that department.
+  // - Execs without a department (no teamId) appraise all leaders (org-wide).
   if (opts.includeExecToLeader) {
-    const execsWithDept = employees.filter((e) => e.hierarchy === 'executive' && e.teamId);
+    const execs = employees.filter((e) => e.hierarchy === 'executive');
     const leaders = employees.filter((e) => e.hierarchy === 'leader');
-    for (const exec of execsWithDept) {
+    for (const exec of execs) {
       for (const leader of leaders) {
-        if (leader.teamId && exec.teamId === leader.teamId) {
+        const sameDept = exec.teamId && leader.teamId && exec.teamId === leader.teamId;
+        const execNoDeptAppraisesAll = !exec.teamId;
+        if (sameDept || execNoDeptAppraisesAll) {
           execToLeader.push({
             appraiserId: exec.id,
             appraiserName: exec.name,
@@ -148,8 +155,8 @@ export function previewAutoAssignments(
         }
       }
     }
-    if (execsWithDept.length > 0 && leaders.length > 0 && execToLeader.length === 0) {
-      warnings.push('No Executive→Leader pairs: assign leaders to a department (Teams/Employees) that an executive leads.');
+    if (execs.length > 0 && leaders.length > 0 && execToLeader.length === 0) {
+      warnings.push('No Executive→Leader pairs: add at least one Leader and one Executive.');
     }
   }
 
