@@ -251,7 +251,7 @@ export async function deleteTemplate(id: string): Promise<void> {
   await database.delete('templates', id);
 }
 
-// Employees - Supabase as single source of truth when configured; else IndexedDB
+// Employees - Supabase as single source of truth when configured; fallback to IndexedDB for read-your-writes
 export async function getEmployees(): Promise<Employee[]> {
   const database = await initDB();
   try {
@@ -266,7 +266,8 @@ export async function getEmployees(): Promise<Employee[]> {
         await store.clear();
         for (const e of supabaseEmployees) await store.put(e);
       }
-      return supabaseEmployees;
+      if (supabaseEmployees.length > 0) return supabaseEmployees;
+      // Supabase returned empty — fall back to IndexedDB so creating browser sees its just-written employee
     }
   } catch (error) {
     if (import.meta.env.DEV) console.log('getEmployees: Supabase not available, using IndexedDB:', error);
@@ -282,19 +283,18 @@ export async function getEmployees(): Promise<Employee[]> {
 }
 
 export async function getEmployee(id: string): Promise<Employee | undefined> {
-  // Try Supabase first if configured
+  const database = await initDB();
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { getEmployeeFromSupabase } = await import('./supabase-storage');
-      return await getEmployeeFromSupabase(id);
+      const supabaseEmployee = await getEmployeeFromSupabase(id);
+      if (supabaseEmployee) return supabaseEmployee;
+      // Supabase returned nothing — fall back to IndexedDB for read-your-writes
     }
   } catch (error) {
-    console.log('Supabase not available, using IndexedDB fallback');
+    if (import.meta.env.DEV) console.log('getEmployee: Supabase not available, using IndexedDB:', error);
   }
-
-  // Fallback to IndexedDB
-  const database = await initDB();
   return database.get('employees', id);
 }
 
@@ -306,19 +306,18 @@ export async function saveEmployee(employee: Employee): Promise<void> {
 
   // Try Supabase if configured (but don't let Supabase errors prevent IndexedDB save)
   try {
-    const { isSupabaseConfigured, saveEmployeeToSupabase } = await import('./supabase');
+    const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
+      const { saveEmployeeToSupabase } = await import('./supabase-storage');
       try {
         await saveEmployeeToSupabase(employee);
         console.log('Employee saved to Supabase:', employee.id);
       } catch (supabaseError: any) {
-        // Log Supabase errors but don't throw - IndexedDB save already succeeded
         console.warn('Failed to save employee to Supabase (but saved to IndexedDB):', supabaseError);
         // Don't re-throw - IndexedDB save is sufficient
       }
     }
   } catch (error) {
-    // If Supabase import or config check fails, that's fine - IndexedDB save already succeeded
     console.log('Supabase not available, data saved to IndexedDB only:', error);
   }
 }
