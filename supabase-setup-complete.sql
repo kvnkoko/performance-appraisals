@@ -12,11 +12,17 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT,
   role TEXT NOT NULL CHECK (role IN ('admin', 'staff')),
   active BOOLEAN DEFAULT true,
+  employee_id TEXT,
+  must_change_password BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   last_login_at TIMESTAMPTZ
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(LOWER(username));
+
+-- Migrations: ensure columns exist for existing installs (no-op if already present)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_id TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT false;
 
 -- ============================================
 -- 2. TEMPLATES TABLE

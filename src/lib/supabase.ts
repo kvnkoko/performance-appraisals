@@ -134,6 +134,53 @@ export async function getUserByUsernameFromSupabase(username: string): Promise<U
   }
 }
 
+export async function getUserFromSupabase(id: string): Promise<User | undefined> {
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn('Supabase not configured, falling back to IndexedDB');
+    return undefined;
+  }
+
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) {
+      return undefined;
+    }
+
+    const { data, error } = await supabase
+      .from(TABLES.USERS)
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return undefined;
+      }
+      console.error('Error fetching user from Supabase:', error);
+      return undefined;
+    }
+
+    if (!data) return undefined;
+
+    return {
+      id: data.id,
+      username: data.username,
+      passwordHash: data.password_hash,
+      name: data.name,
+      email: data.email,
+      role: data.role,
+      active: data.active,
+      employeeId: data.employee_id,
+      mustChangePassword: data.must_change_password,
+      createdAt: data.created_at,
+      lastLoginAt: data.last_login_at,
+    };
+  } catch (error) {
+    console.error('Error in getUserFromSupabase:', error);
+    return undefined;
+  }
+}
+
 export async function saveUserToSupabase(user: User): Promise<void> {
   if (!supabaseUrl || !supabaseAnonKey) {
     console.warn('Supabase not configured, cannot save user');

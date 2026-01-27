@@ -742,28 +742,32 @@ export async function getReviewPeriod(id: string): Promise<ReviewPeriod | undefi
 }
 
 export async function getActiveReviewPeriods(): Promise<ReviewPeriod[]> {
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const periods = await getReviewPeriods();
+      return periods.filter((p) => p.status === 'active');
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+
   const database = await initDB();
   try {
-    // Check if the object store exists
     if (!database.objectStoreNames.contains('reviewPeriods')) {
       return [];
     }
     const tx = database.transaction('reviewPeriods', 'readonly');
     const store = tx.objectStore('reviewPeriods');
-    
-    // Check if the index exists, otherwise filter manually
     // @ts-ignore - idb library type issue
     if (store.indexNames.contains('status')) {
-      // @ts-ignore - idb library type issue
       // @ts-ignore - idb library type issue
       const index = store.index('status');
       // @ts-ignore - idb library type issue
       return index.getAll('active');
-    } else {
-      // Fallback: get all and filter
-      const allPeriods = await store.getAll();
-      return allPeriods.filter((p) => p.status === 'active');
     }
+    const allPeriods = await store.getAll();
+    return allPeriods.filter((p) => p.status === 'active');
   } catch (error) {
     console.error('Error getting active review periods:', error);
     return [];
@@ -1034,6 +1038,30 @@ export async function getUsers(): Promise<User[]> {
 }
 
 export async function getUser(id: string): Promise<User | undefined> {
+  try {
+    const { isSupabaseConfigured, getUserFromSupabase } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const user = await getUserFromSupabase(id);
+      if (user) {
+        // Optionally cache in IndexedDB for offline/local consistency
+        try {
+          const database = await initDB();
+          if (database.objectStoreNames.contains('users')) {
+            await database.put('users', {
+              ...user,
+              username: user.username.toLowerCase(),
+            });
+          }
+        } catch (_) {
+          // Ignore cache write errors
+        }
+        return user;
+      }
+    }
+  } catch (error) {
+    console.log('Supabase not available, using IndexedDB fallback');
+  }
+
   const database = await initDB();
   return database.get('users', id);
 }
