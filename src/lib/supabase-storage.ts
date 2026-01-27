@@ -193,6 +193,7 @@ export async function getEmployeesFromSupabase(): Promise<Employee[]> {
       email: e.email,
       role: e.role,
       hierarchy: e.hierarchy,
+      teamId: e.team_id,
       createdAt: e.created_at,
     }));
   } catch (error) {
@@ -222,6 +223,7 @@ export async function getEmployeeFromSupabase(id: string): Promise<Employee | un
       email: data.email,
       role: data.role,
       hierarchy: data.hierarchy,
+      teamId: data.team_id,
       createdAt: data.created_at,
     };
   } catch (error) {
@@ -245,6 +247,7 @@ export async function saveEmployeeToSupabase(employee: Employee): Promise<void> 
         email: employee.email || null,
         role: employee.role,
         hierarchy: employee.hierarchy,
+        team_id: employee.teamId || null,
         created_at: employee.createdAt,
       }, { onConflict: 'id' });
     

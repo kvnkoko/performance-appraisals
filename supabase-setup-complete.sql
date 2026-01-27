@@ -54,6 +54,19 @@ CREATE TABLE IF NOT EXISTS employees (
 );
 
 CREATE INDEX IF NOT EXISTS idx_employees_hierarchy ON employees(hierarchy);
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS team_id TEXT;
+
+-- ============================================
+-- 3b. TEAMS TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS teams (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_teams_created ON teams(created_at);
 
 -- ============================================
 -- 4. REVIEW PERIODS TABLE
@@ -142,6 +155,7 @@ CREATE TABLE IF NOT EXISTS performance_summaries (
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE employees ENABLE ROW LEVEL SECURITY;
+ALTER TABLE teams ENABLE ROW LEVEL SECURITY;
 ALTER TABLE review_periods ENABLE ROW LEVEL SECURITY;
 ALTER TABLE appraisals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE appraisal_links ENABLE ROW LEVEL SECURITY;
@@ -157,7 +171,7 @@ DO $$
 DECLARE
   r RECORD;
 BEGIN
-  FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename IN ('users', 'templates', 'employees', 'review_periods', 'appraisals', 'appraisal_links', 'settings', 'performance_summaries')) LOOP
+  FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename IN ('users', 'templates', 'employees', 'teams', 'review_periods', 'appraisals', 'appraisal_links', 'settings', 'performance_summaries')) LOOP
     EXECUTE format('DROP POLICY IF EXISTS "Allow all operations" ON %I', r.tablename);
     EXECUTE format('DROP POLICY IF EXISTS "Users can read all" ON %I', r.tablename);
     EXECUTE format('DROP POLICY IF EXISTS "Users can manage" ON %I', r.tablename);
@@ -168,6 +182,7 @@ END $$;
 CREATE POLICY "Allow all operations" ON users FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all operations" ON templates FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all operations" ON employees FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all operations" ON teams FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all operations" ON review_periods FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all operations" ON appraisals FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Allow all operations" ON appraisal_links FOR ALL USING (true) WITH CHECK (true);
