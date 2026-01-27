@@ -31,7 +31,7 @@ interface UserDialogProps {
   open: boolean;
   onClose: () => void;
   user?: UserType | null;
-  onSave: () => void;
+  onSave: (optimisticUser?: UserType) => void | Promise<void>;
 }
 
 function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
@@ -197,27 +197,20 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
       
       await saveUser(updatedUser);
       
-      // Verify the user was saved correctly by reloading it
       const { getUser } = await import('@/lib/storage');
       const savedUser = await getUser(updatedUser.id);
+      setLinkedEmployee(null);
       if (savedUser && !savedUser.employeeId) {
-        console.log('Employee unlink verified - employeeId removed');
-        setLinkedEmployee(null);
-      } else {
-        console.warn('Employee unlink verification failed - reloading from storage');
-        // Force reload
-        await loadLinkedEmployee();
+        // Persisted; parent will refresh editingUser via onSave
+      } else if (import.meta.env.DEV) {
+        console.warn('Unlink: verification showed employeeId still set; list will refresh from source of truth.');
       }
       
       await loadAvailableEmployees();
-      
-      // Dispatch events to notify both Users and Employees pages to refresh
       window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: undefined } }));
       if (employeeId) {
         window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
       }
-      
-      // Also dispatch after delays to ensure pages catch it
       setTimeout(() => {
         window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: undefined } }));
         if (employeeId) {
@@ -225,15 +218,8 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
         }
       }, 500);
       
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: undefined } }));
-        if (employeeId) {
-          window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
-        }
-      }, 2000);
-      
+      await onSave(updatedUser);
       toast({ title: 'Success', description: 'Employee unlinked from user successfully.', variant: 'success' });
-      onSave(); // Refresh the list
     } catch (error) {
       console.error('Error unlinking employee:', error);
       toast({ title: 'Error', description: 'Failed to unlink employee.', variant: 'error' });
@@ -549,12 +535,11 @@ export function UsersPage() {
   const { toast } = useToast();
   const { employees } = useApp();
   
-  const loadUsers = async () => {
+  const loadUsers = async (): Promise<UserType[]> => {
     try {
       setLoading(true);
       const allUsers = await getUsers();
       setUsers(allUsers);
-      
       // Load linked employees
       const employeesMap: Record<string, { name: string; role: string }> = {};
       for (const user of allUsers) {
@@ -566,11 +551,23 @@ export function UsersPage() {
         }
       }
       setLinkedEmployees(employeesMap);
+      return allUsers;
     } catch (error) {
       console.error('Error loading users:', error);
       toast({ title: 'Error', description: 'Failed to load users', variant: 'error' });
+      return [];
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUserSave = async (optimisticUser?: UserType) => {
+    const list = await loadUsers();
+    if (optimisticUser) {
+      setEditingUser(optimisticUser);
+    } else if (editingUser && list?.length) {
+      const updated = list.find(u => u.id === editingUser.id);
+      if (updated) setEditingUser(updated);
     }
   };
 
@@ -898,7 +895,7 @@ export function UsersPage() {
         open={dialogOpen}
         onClose={() => { setDialogOpen(false); setEditingUser(null); }}
         user={editingUser}
-        onSave={loadUsers}
+        onSave={handleUserSave}
       />
 
       <ConfirmDialog
