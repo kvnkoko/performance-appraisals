@@ -251,35 +251,73 @@ export async function updateEmployeeTeamInSupabase(employeeId: string, teamId: s
   }
 }
 
+function isMissingColumnError(err: unknown): boolean {
+  const msg = typeof (err as any)?.message === 'string' ? (err as any).message : '';
+  return /reports_to|team_id|schema cache|column.*employees/i.test(msg);
+}
+
 export async function saveEmployeeToSupabase(employee: Employee): Promise<void> {
   if (!isSupabaseConfigured()) throw new Error('Supabase not configured');
 
-  try {
-    const supabase = await getSupabaseClient();
-    if (!supabase) throw new Error('Supabase client not available');
+  const supabase = await getSupabaseClient();
+  if (!supabase) throw new Error('Supabase client not available');
 
-    const payload = {
+  const fullPayload = {
+    id: employee.id,
+    name: employee.name,
+    email: employee.email ?? null,
+    role: employee.role,
+    hierarchy: employee.hierarchy,
+    team_id: employee.teamId ?? null,
+    reports_to: (employee as { reportsTo?: string }).reportsTo ?? null,
+    created_at: employee.createdAt || new Date().toISOString(),
+  };
+
+  let result = await supabase
+    .from(TABLES.EMPLOYEES)
+    .upsert(fullPayload, { onConflict: 'id' });
+
+  if (result.error && isMissingColumnError(result.error)) {
+    const basePayload = {
       id: employee.id,
       name: employee.name,
       email: employee.email ?? null,
       role: employee.role,
       hierarchy: employee.hierarchy,
-      team_id: employee.teamId ?? null,
-      reports_to: (employee as { reportsTo?: string }).reportsTo ?? null,
-      created_at: employee.createdAt || new Date().toISOString(),
+      created_at: fullPayload.created_at,
     };
-
-    const { error } = await supabase
+    result = await supabase
       .from(TABLES.EMPLOYEES)
-      .upsert(payload, { onConflict: 'id' });
-
-    if (error) {
-      console.error('Error in saveEmployeeToSupabase:', error.message, error.details, payload);
-      throw error;
+      .upsert(basePayload, { onConflict: 'id' });
+    if (result.error) {
+      console.error('Error in saveEmployeeToSupabase (minimal):', result.error.message, result.error.details);
+      throw result.error;
     }
-  } catch (error) {
-    console.error('Error in saveEmployeeToSupabase:', error);
-    throw error;
+    if (employee.teamId != null || (employee as { reportsTo?: string }).reportsTo != null) {
+      const patch: Record<string, string | null> = {};
+      if (employee.teamId !== undefined) patch.team_id = employee.teamId ?? null;
+      if ((employee as { reportsTo?: string }).reportsTo !== undefined) {
+        patch.reports_to = (employee as { reportsTo?: string }).reportsTo ?? null;
+      }
+      if (Object.keys(patch).length) {
+        const patchResult = await supabase
+          .from(TABLES.EMPLOYEES)
+          .update(patch)
+          .eq('id', employee.id);
+        if (patchResult.error) {
+          console.warn(
+            'Employee saved but team_id/reports_to could not be set. Run supabase-add-teams.sql in Supabase SQL Editor:',
+            patchResult.error.message
+          );
+        }
+      }
+    }
+    return;
+  }
+
+  if (result.error) {
+    console.error('Error in saveEmployeeToSupabase:', result.error.message, result.error.details, fullPayload);
+    throw result.error;
   }
 }
 

@@ -1,7 +1,8 @@
 -- Production schema fix: run in Supabase SQL Editor if you get
 -- "Could not find the table 'public.teams'", "Could not find the 'employee_id' column of 'users'",
--- or employees not appearing after creation.
--- Adds: users.employee_id, users.must_change_password, employees table (if missing), teams, employees.team_id
+-- "Could not find the 'reports_to' column of 'employees'", or employees not saving.
+-- Adds: users.employee_id, users.must_change_password, employees table (if missing), teams,
+--       employees.team_id, employees.reports_to
 
 -- 1. Users table: add columns required by the app (no-op if already present)
 ALTER TABLE users ADD COLUMN IF NOT EXISTS employee_id TEXT;
