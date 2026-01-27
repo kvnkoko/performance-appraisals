@@ -39,7 +39,7 @@ export function LinksPage() {
   // Auto-assignment wizard state
   const [autoStep, setAutoStep] = useState<AutoWizardStep>(1);
   const [autoPreview, setAutoPreview] = useState<AutoAssignmentPreview | null>(null);
-  const [includeLeaderToLeader, setIncludeLeaderToLeader] = useState(false);
+  const [includeLeaderToLeader, setIncludeLeaderToLeader] = useState(true);
   const [includeExecToLeader, setIncludeExecToLeader] = useState(true);
   const [autoTemplateMap, setAutoTemplateMap] = useState<TemplateMapping>({
     leaderToMember: '',
@@ -531,7 +531,7 @@ export function LinksPage() {
                       checked={includeLeaderToLeader}
                       onChange={(e) => setIncludeLeaderToLeader(e.target.checked)}
                     />
-                    <span className="text-sm">Leader → Leader peer reviews (same team)</span>
+                    <span className="text-sm">Leader → Leader (department heads peer, same or different departments)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -539,7 +539,7 @@ export function LinksPage() {
                       checked={includeExecToLeader}
                       onChange={(e) => setIncludeExecToLeader(e.target.checked)}
                     />
-                    <span className="text-sm">Executive → Leader (department head appraises leaders in that department)</span>
+                    <span className="text-sm">Executive → Leader (every executive appraises every leader)</span>
                   </label>
                 </div>
                 {livePreview && (
@@ -558,12 +558,12 @@ export function LinksPage() {
                       <div className="rounded-lg border bg-card p-3">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Leader → Leader</p>
                         <p className="text-2xl font-bold mt-0.5">{livePreview.leaderToLeader.length}</p>
-                        <p className="text-xs text-muted-foreground">Peer (same team)</p>
+                        <p className="text-xs text-muted-foreground">Dept heads peer</p>
                       </div>
                       <div className="rounded-lg border bg-card p-3">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Executive → Leader</p>
                         <p className="text-2xl font-bold mt-0.5">{livePreview.execToLeader.length}</p>
-                        <p className="text-xs text-muted-foreground">Dept head appraises leaders</p>
+                        <p className="text-xs text-muted-foreground">Every exec appraises every leader</p>
                       </div>
                     </div>
                     {livePreview.warnings.length > 0 && (
@@ -625,7 +625,7 @@ export function LinksPage() {
                     </CardHeader>
                     <CardContent className="py-2">
                       <p className="text-2xl font-bold">{autoPreview.leaderToLeader.length}</p>
-                      <p className="text-xs text-muted-foreground">Peer (same team)</p>
+                      <p className="text-xs text-muted-foreground">Dept heads peer</p>
                     </CardContent>
                   </Card>
                   <Card>
@@ -634,7 +634,7 @@ export function LinksPage() {
                     </CardHeader>
                     <CardContent className="py-2">
                       <p className="text-2xl font-bold">{autoPreview.execToLeader.length}</p>
-                      <p className="text-xs text-muted-foreground">Department head</p>
+                      <p className="text-xs text-muted-foreground">Every exec appraises every leader</p>
                     </CardContent>
                   </Card>
                 </div>

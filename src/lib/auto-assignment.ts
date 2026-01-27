@@ -115,13 +115,13 @@ export function previewAutoAssignments(
     }
   }
 
-  // RULE 3: Leader → Leader (peer review same department; leaders and execs in same team)
+  // RULE 3: Leader → Leader — peer review among department heads (any manager with a team)
+  // Includes same-team peers AND cross-department: e.g. Stephanie (A&R) and Min Khant (YouTube) appraise each other
   if (opts.includeLeaderToLeader) {
-    const departmentLeaders = employees.filter((e) => isManager(e) && e.teamId);
-    for (const appraiser of departmentLeaders) {
-      for (const target of departmentLeaders) {
+    const departmentHeads = employees.filter((e) => isManager(e) && e.teamId);
+    for (const appraiser of departmentHeads) {
+      for (const target of departmentHeads) {
         if (appraiser.id === target.id) continue;
-        if (appraiser.teamId !== target.teamId) continue;
         leaderToLeader.push({
           appraiserId: appraiser.id,
           appraiserName: appraiser.name,
@@ -130,29 +130,24 @@ export function previewAutoAssignments(
         });
       }
     }
-    if (departmentLeaders.length > 0 && leaderToLeader.length === 0) {
-      warnings.push('Leader→Leader needs at least 2 leaders or executives in the same team (assign same department to multiple).');
+    if (departmentHeads.length > 0 && leaderToLeader.length === 0) {
+      warnings.push('Leader→Leader needs at least 2 people who lead a department (Leader or Executive with team set).');
     }
   }
 
-  // RULE 4: Executive → Leader
-  // - Execs who lead a department appraise leaders in that department.
-  // - Execs without a department (no teamId) appraise all leaders (org-wide).
+  // RULE 4: Executive → Leader — every executive appraises every leader (org-wide)
+  // So Stephanie (Executive, A&R) appraises Min Khant (Leader, YouTube), and vice-type pairs
   if (opts.includeExecToLeader) {
     const execs = employees.filter((e) => e.hierarchy === 'executive');
     const leaders = employees.filter((e) => e.hierarchy === 'leader');
     for (const exec of execs) {
       for (const leader of leaders) {
-        const sameDept = exec.teamId && leader.teamId && exec.teamId === leader.teamId;
-        const execNoDeptAppraisesAll = !exec.teamId;
-        if (sameDept || execNoDeptAppraisesAll) {
-          execToLeader.push({
-            appraiserId: exec.id,
-            appraiserName: exec.name,
-            employeeId: leader.id,
-            employeeName: leader.name,
-          });
-        }
+        execToLeader.push({
+          appraiserId: exec.id,
+          appraiserName: exec.name,
+          employeeId: leader.id,
+          employeeName: leader.name,
+        });
       }
     }
     if (execs.length > 0 && leaders.length > 0 && execToLeader.length === 0) {

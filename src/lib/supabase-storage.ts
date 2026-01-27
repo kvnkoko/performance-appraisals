@@ -293,23 +293,20 @@ export async function saveEmployeeToSupabase(employee: Employee): Promise<void> 
       console.error('Error in saveEmployeeToSupabase (minimal):', result.error.message, result.error.details);
       throw result.error;
     }
-    if (employee.teamId != null || (employee as { reportsTo?: string }).reportsTo != null) {
-      const patch: Record<string, string | null> = {};
-      if (employee.teamId !== undefined) patch.team_id = employee.teamId ?? null;
-      if ((employee as { reportsTo?: string }).reportsTo !== undefined) {
-        patch.reports_to = (employee as { reportsTo?: string }).reportsTo ?? null;
+    // Patch team_id and reports_to separately so department (team_id) still saves when reports_to column is missing
+    if (employee.teamId !== undefined) {
+      const r = await supabase.from(TABLES.EMPLOYEES).update({ team_id: employee.teamId ?? null }).eq('id', employee.id);
+      if (r.error) {
+        console.warn('Employee saved but team_id could not be set. Run supabase-add-teams.sql:', r.error.message);
       }
-      if (Object.keys(patch).length) {
-        const patchResult = await supabase
-          .from(TABLES.EMPLOYEES)
-          .update(patch)
-          .eq('id', employee.id);
-        if (patchResult.error) {
-          console.warn(
-            'Employee saved but team_id/reports_to could not be set. Run supabase-add-teams.sql in Supabase SQL Editor:',
-            patchResult.error.message
-          );
-        }
+    }
+    if ((employee as { reportsTo?: string }).reportsTo !== undefined) {
+      const r = await supabase
+        .from(TABLES.EMPLOYEES)
+        .update({ reports_to: (employee as { reportsTo?: string }).reportsTo ?? null })
+        .eq('id', employee.id);
+      if (r.error) {
+        console.warn('Employee saved but reports_to could not be set. Run supabase-add-teams.sql:', r.error.message);
       }
     }
     return;
