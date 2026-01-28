@@ -318,18 +318,51 @@ export async function saveEmployeeToSupabase(employee: Employee): Promise<void> 
   }
 }
 
+/** Delete all appraisals where employee is subject or appraiser (used before deleting employee) */
+export async function deleteAppraisalsForEmployeeFromSupabase(employeeId: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return;
+    const { error } = await supabase
+      .from(TABLES.APPRAISALS)
+      .delete()
+      .or(`employee_id.eq.${employeeId},appraiser_id.eq.${employeeId}`);
+    if (error) {
+      console.warn('deleteAppraisalsForEmployeeFromSupabase:', error);
+    }
+  } catch (e) {
+    console.warn('deleteAppraisalsForEmployeeFromSupabase:', e);
+  }
+}
+
+/** Delete all appraisal links where employee is subject or appraiser (used before deleting employee) */
+export async function deleteLinksForEmployeeFromSupabase(employeeId: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return;
+    const { error } = await supabase
+      .from(TABLES.APPRAISAL_LINKS)
+      .delete()
+      .or(`employee_id.eq.${employeeId},appraiser_id.eq.${employeeId}`);
+    if (error) {
+      console.warn('deleteLinksForEmployeeFromSupabase:', error);
+    }
+  } catch (e) {
+    console.warn('deleteLinksForEmployeeFromSupabase:', e);
+  }
+}
+
 export async function deleteEmployeeFromSupabase(id: string): Promise<void> {
   if (!isSupabaseConfigured()) throw new Error('Supabase not configured');
-  
   try {
     const supabase = await getSupabaseClient();
     if (!supabase) throw new Error('Supabase client not available');
-    
     const { error } = await supabase
       .from(TABLES.EMPLOYEES)
       .delete()
       .eq('id', id);
-    
     if (error) throw error;
   } catch (error) {
     console.error('Error in deleteEmployeeFromSupabase:', error);

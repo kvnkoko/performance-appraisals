@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Download, Moon, Sun, Monitor, SignOut, Check, CloudArrowDown } from 'phosphor-react';
+import { Download, Moon, Sun, Monitor, SignOut, Check, CloudArrowDown, Buildings } from 'phosphor-react';
 import { saveSettings, exportData, importData, syncFromSupabase } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { useUser } from '@/contexts/user-context';
@@ -27,13 +27,15 @@ const PRESET_COLORS = [
 
 export function SettingsPage() {
   const { settings, refresh } = useApp();
-  const { logout } = useUser();
+  const { logout, isAdmin } = useUser();
   const { theme, setTheme, setAccentColor } = useTheme();
   const { toast } = useToast();
   const [formData, setFormData] = useState({
     name: settings.name,
     adminPin: settings.adminPin,
     accentColor: settings.accentColor,
+    hrScoreWeight: settings.hrScoreWeight ?? 30,
+    requireHrForRanking: settings.requireHrForRanking ?? false,
   });
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -43,6 +45,8 @@ export function SettingsPage() {
       name: settings.name,
       adminPin: settings.adminPin,
       accentColor: settings.accentColor,
+      hrScoreWeight: settings.hrScoreWeight ?? 30,
+      requireHrForRanking: settings.requireHrForRanking ?? false,
     });
   }, [settings]);
 
@@ -52,13 +56,18 @@ export function SettingsPage() {
     applyAccentColor(color); // Apply immediately for live preview
   };
 
-  const handleSave = async () => {
+  const handleSave = async (overrides?: Partial<typeof formData>) => {
     setLoading(true);
     try {
+      const data = overrides ? { ...formData, ...overrides } : formData;
       await saveSettings({
         ...settings,
-        ...formData,
+        name: data.name,
+        adminPin: data.adminPin,
+        accentColor: data.accentColor,
         theme: settings.theme,
+        hrScoreWeight: data.hrScoreWeight,
+        requireHrForRanking: data.requireHrForRanking,
       });
       await refresh();
       toast({ title: 'Settings saved', variant: 'success' });
@@ -295,6 +304,47 @@ export function SettingsPage() {
             </Button>
           </CardContent>
         </Card>
+
+        {isAdmin() && (
+          <Card className="border-teal-500/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Buildings size={20} weight="duotone" className="text-teal-500" />
+                Employee of the Month
+              </CardTitle>
+              <CardDescription>HR score weight and final ranking</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="hrScoreWeight">HR Score Weight: {formData.hrScoreWeight}%</Label>
+                <input
+                  id="hrScoreWeight"
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={formData.hrScoreWeight}
+                  onChange={(e) => setFormData({ ...formData, hrScoreWeight: Number(e.target.value) })}
+                  className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-teal-500"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Base: {100 - formData.hrScoreWeight}%, HR: {formData.hrScoreWeight}%. Final score = base × (100 − HR%) + HR score × HR%.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.requireHrForRanking}
+                  onChange={(e) => setFormData({ ...formData, requireHrForRanking: e.target.checked })}
+                  className="rounded w-4 h-4"
+                />
+                <span className="text-sm">Require HR scores for final ranking</span>
+              </label>
+              <Button onClick={() => handleSave()} disabled={loading}>
+                {loading ? 'Saving...' : 'Save HR Settings'}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

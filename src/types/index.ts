@@ -3,7 +3,8 @@ export type AppraisalType =
   | 'leaders-to-members'
   | 'members-to-leaders'
   | 'leaders-to-leaders'
-  | 'members-to-members';
+  | 'members-to-members'
+  | 'hr-to-all';
 
 export type QuestionType = 'rating-1-5' | 'text' | 'multiple-choice';
 
@@ -63,8 +64,8 @@ export interface Employee {
   name: string;
   email?: string;
   role: string;
-  /** Primary role. Executives can also lead departments (set teamId) and have direct reports like leaders. */
-  hierarchy: 'executive' | 'leader' | 'member';
+  /** Primary role. Executives can also lead departments (set teamId) and have direct reports like leaders. HR appraises all employees company-wide. */
+  hierarchy: 'executive' | 'leader' | 'member' | 'hr';
   teamId?: string; // department/team; executives with teamId lead that department
   reportsTo?: string; // employeeId of direct manager (Leader or Executive) – for auto-assignment
   createdAt: string;
@@ -76,6 +77,7 @@ export type AssignmentRelationshipType =
   | 'leader-to-member'
   | 'member-to-leader'
   | 'leader-to-leader'
+  | 'hr-to-all'
   | 'custom';
 
 /** Single appraisal assignment (auto or manual); used alongside AppraisalLink for unified dashboard */
@@ -153,6 +155,10 @@ export interface CompanySettings {
   adminPin: string;
   accentColor: string;
   theme: 'light' | 'dark' | 'system';
+  /** Weight of HR scores in Employee of the Month / final ranking (0–100). Base score weight = 100 - hrScoreWeight. Default 30. */
+  hrScoreWeight?: number;
+  /** When true, include HR scores in final ranking; when false, HR is optional. Default false. */
+  requireHrForRanking?: boolean;
 }
 
 export interface PerformanceSummary {
@@ -177,12 +183,14 @@ export const APPRAISAL_TYPE_LABELS: Record<AppraisalType, string> = {
   'members-to-leaders': 'Members → Leaders',
   'leaders-to-leaders': 'Leaders → Leaders',
   'members-to-members': 'Members → Members',
+  'hr-to-all': 'HR → All Employees',
 };
 
 export const HIERARCHY_LABELS: Record<Employee['hierarchy'], string> = {
   executive: 'Executive',
   leader: 'Leader',
   member: 'Member',
+  hr: 'HR',
 };
 
 export interface User {

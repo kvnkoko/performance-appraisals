@@ -18,7 +18,7 @@ const employeeSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   email: z.string().email('Invalid email').optional().or(z.literal('')),
   role: z.string().min(1, 'Role is required'),
-  hierarchy: z.enum(['executive', 'leader', 'member']),
+  hierarchy: z.enum(['executive', 'leader', 'member', 'hr']),
   teamId: z.string().optional(),
   reportsTo: z.string().optional(),
 });
@@ -734,15 +734,15 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
   if (createdCredentials) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div className="bg-background rounded-lg border shadow-lg w-full max-w-md">
-          <div className="flex items-center justify-between p-6 border-b">
+        <div className="bg-background rounded-lg border shadow-lg w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
             <h2 className="text-2xl font-bold text-green-600">Employee Created</h2>
             <Button type="button" variant="ghost" size="sm" onClick={handleClose}>
               <X size={18} weight="duotone" />
             </Button>
           </div>
           
-          <div className="p-6 space-y-4">
+          <div className="flex-1 overflow-y-auto min-h-0 p-6 space-y-4">
             <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
               <Info size={20} weight="duotone" className="text-amber-600 mt-0.5 flex-shrink-0" />
               <div className="text-sm text-amber-800 dark:text-amber-200">
@@ -812,24 +812,24 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
                 <p className="text-xs text-muted-foreground">You can edit the password before saving (minimum 6 characters)</p>
               </div>
             </div>
-            
-            <div className="flex justify-end gap-3 pt-4 border-t">
-              <Button 
-                type="button" 
-                variant="outline"
-                onClick={handleDone}
-                disabled={savingCredentials}
-              >
-                Skip & Done
-              </Button>
-              <Button 
-                type="button" 
-                onClick={handleSaveCredentials}
-                disabled={savingCredentials || !editableUsername.trim() || editablePassword.trim().length < 6}
-              >
-                {savingCredentials ? 'Saving...' : 'Save Credentials'}
-              </Button>
-            </div>
+          </div>
+          
+          <div className="flex justify-end gap-3 p-6 pt-4 border-t flex-shrink-0 bg-background">
+            <Button 
+              type="button" 
+              variant="outline"
+              onClick={handleDone}
+              disabled={savingCredentials}
+            >
+              Skip & Done
+            </Button>
+            <Button 
+              type="button" 
+              onClick={handleSaveCredentials}
+              disabled={savingCredentials || !editableUsername.trim() || editablePassword.trim().length < 6}
+            >
+              {savingCredentials ? 'Saving...' : 'Save Credentials'}
+            </Button>
           </div>
         </div>
       </div>
@@ -838,8 +838,8 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-background rounded-lg border shadow-lg w-full max-w-md">
-        <div className="flex items-center justify-between p-6 border-b">
+      <div className="bg-background rounded-lg border shadow-lg w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
           <h2 className="text-2xl font-bold">
             {employeeId ? 'Edit Employee' : 'Add Employee'}
           </h2>
@@ -848,7 +848,8 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           </Button>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0">
           <div className="space-y-2">
             <Label htmlFor="name">Full Name</Label>
             <Input id="name" {...register('name')} placeholder="John Doe" />
@@ -873,7 +874,11 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
               <option value="executive">Executive</option>
               <option value="leader">Leader</option>
               <option value="member">Member</option>
+              <option value="hr">HR</option>
             </Select>
+            <p className="text-xs text-muted-foreground">
+              HR personnel can appraise all employees company-wide.
+            </p>
             {errors.hierarchy && <p className="text-sm text-destructive">{errors.hierarchy.message}</p>}
           </div>
 
@@ -1123,8 +1128,9 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
               </div>
             )}
           </div>
+          </div>
 
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="flex justify-end gap-3 pt-4 px-6 pb-6 border-t flex-shrink-0 bg-background">
             <Button type="button" variant="ghost" onClick={handleClose}>
               Cancel
             </Button>

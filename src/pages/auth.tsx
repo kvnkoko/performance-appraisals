@@ -96,10 +96,7 @@ export function AuthPage() {
     e.preventDefault();
     e.stopPropagation();
     
-    if (initializing || loading) {
-      console.log('Form submission blocked: initializing=', initializing, 'loading=', loading);
-      return;
-    }
+    if (initializing || loading) return;
     
     if (!username.trim() || !password.trim()) {
       toast({ title: 'Error', description: 'Please enter both username and password.', variant: 'error' });
@@ -107,27 +104,10 @@ export function AuthPage() {
     }
     
     setLoading(true);
-    console.log('Starting authentication for user:', username);
 
     try {
       await initDB();
-      console.log('Database initialized');
-      
-      // Debug: Check if users store exists and list all users
-      try {
-        const { getUsers } = await import('@/lib/storage');
-        const allUsers = await getUsers();
-        console.log('Total users in database:', allUsers.length);
-        console.log('All users:', allUsers.map(u => ({ username: u.username, name: u.name, active: u.active })));
-      } catch (debugError) {
-        console.warn('Could not list users for debugging:', debugError);
-      }
-      
       const user = await getUserByUsername(username.trim());
-      console.log('User found:', user ? 'yes' : 'no');
-      if (user) {
-        console.log('User details:', { username: user.username, name: user.name, active: user.active, role: user.role });
-      }
       
       if (!user) {
         toast({ 
@@ -154,7 +134,6 @@ export function AuthPage() {
       if (isValid) {
         // Check if user must change password
         if (user.mustChangePassword) {
-          console.log('User must change password on first login');
           setCurrentUser(user);
           setShowPasswordChange(true);
           setLoading(false);
@@ -174,7 +153,6 @@ export function AuthPage() {
         localStorage.setItem('userEmail', user.email || user.username);
         localStorage.setItem('userRole', user.role);
         localStorage.setItem('employeeId', user.employeeId || '');
-        console.log('Session stored in localStorage');
         
         // Update last login - ensure user has all required fields (non-blocking)
         try {
@@ -198,25 +176,14 @@ export function AuthPage() {
             };
             await saveUser(updatedUser);
           }
-          console.log('Last login updated');
-        } catch (error) {
-          // If saving last login fails, log but don't block login
-          console.warn('Failed to update last login time:', error);
+        } catch {
+          // If saving last login fails, don't block login
         }
 
-        console.log('Session stored, showing toast and navigating...');
         toast({ title: 'Welcome!', description: `Successfully logged in as ${user.name}`, variant: 'success' });
-        
-        // Redirect based on user role
         const redirectUrl = user.role === 'admin' ? '/dashboard' : '/my-dashboard';
-        
-        // Use window.location for more reliable navigation
-        setTimeout(() => {
-          console.log('Navigating to', redirectUrl, 'via window.location...');
-          window.location.href = redirectUrl;
-        }, 300);
+        setTimeout(() => { window.location.href = redirectUrl; }, 300);
       } else {
-        console.log('Password invalid');
         toast({ title: 'Invalid credentials', description: 'Username or password is incorrect.', variant: 'error' });
         setPassword('');
         setLoading(false);
@@ -236,10 +203,7 @@ export function AuthPage() {
     e.preventDefault();
     e.stopPropagation();
     
-    if (initializing || loading) {
-      console.log('PIN submission blocked: initializing=', initializing, 'loading=', loading);
-      return;
-    }
+    if (initializing || loading) return;
     
     if (!pin.trim()) {
       toast({ title: 'Error', description: 'Please enter a PIN.', variant: 'error' });
@@ -247,37 +211,21 @@ export function AuthPage() {
     }
     
     setLoading(true);
-    console.log('Starting PIN authentication');
 
     try {
       await initDB();
-      console.log('Database initialized for PIN');
-      
       const settings = await getSettings();
-      console.log('Settings loaded, PIN from settings:', settings.adminPin);
-      console.log('Entered PIN (trimmed):', pin.trim());
-      console.log('PIN match:', pin.trim() === settings.adminPin);
       
       if (pin.trim() === settings.adminPin) {
-        console.log('PIN matches, setting authentication...');
         localStorage.setItem('authenticated', 'true');
         localStorage.setItem('userRole', 'admin');
         localStorage.setItem('userId', 'pin-admin');
         localStorage.setItem('username', 'admin');
         localStorage.setItem('userName', 'Administrator');
         localStorage.setItem('userEmail', 'admin@example.com');
-        console.log('Session stored in localStorage');
-        
-        console.log('Session stored, showing toast and navigating...');
         toast({ title: 'Welcome!', description: 'Successfully authenticated.', variant: 'success' });
-        
-        // Use window.location for more reliable navigation
-        setTimeout(() => {
-          console.log('Navigating to dashboard via window.location...');
-          window.location.href = '/dashboard';
-        }, 300);
+        setTimeout(() => { window.location.href = '/dashboard'; }, 300);
       } else {
-        console.log('PIN does not match');
         toast({ title: 'Invalid PIN', description: 'Please check your PIN and try again.', variant: 'error' });
         setPin('');
         setLoading(false);

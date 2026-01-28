@@ -36,22 +36,15 @@ export function EmployeesPage() {
   // Load linked users for all employees
   useEffect(() => {
     const loadLinkedUsers = async () => {
-      console.log('Loading linked users for', employees.length, 'employees');
       const usersMap: Record<string, { name: string; username: string }> = {};
       for (const employee of employees) {
         try {
           const user = await getUserByEmployeeId(employee.id);
-          if (user) {
-            usersMap[employee.id] = { name: user.name, username: user.username };
-            console.log('Found linked user for employee', employee.id, ':', user.username);
-          } else {
-            console.log('No linked user found for employee', employee.id);
-          }
-        } catch (error) {
-          console.error('Error loading linked user for employee', employee.id, ':', error);
+          if (user) usersMap[employee.id] = { name: user.name, username: user.username };
+        } catch {
+          /* ignore */
         }
       }
-      console.log('Loaded', Object.keys(usersMap).length, 'linked users');
       setLinkedUsers(usersMap);
     };
     
@@ -244,7 +237,9 @@ export function EmployeesPage() {
               <CardContent className="space-y-3">
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-muted-foreground min-w-[80px]">Hierarchy:</span>
-                  <span className="font-semibold">{HIERARCHY_LABELS[employee.hierarchy]}</span>
+                  <span className={employee.hierarchy === 'hr' ? 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300 border border-teal-200 dark:border-teal-700' : 'font-semibold'}>
+                    {HIERARCHY_LABELS[employee.hierarchy]}
+                  </span>
                 </div>
                 {employee.teamId && getTeamName(employee.teamId) && (
                   <div className="flex items-center gap-2 text-sm">

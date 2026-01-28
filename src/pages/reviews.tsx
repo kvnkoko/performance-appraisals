@@ -50,11 +50,17 @@ export function ReviewsPage() {
     }
   };
 
-  // Calculate leaderboard
+  // Only use completed appraisals whose employee and appraiser still exist (keeps metrics correct after deletions)
+  const employeeIds = new Set(employees.map((e) => e.id));
+  const validAppraisals = appraisals.filter(
+    (a) =>
+      a.completedAt &&
+      employeeIds.has(a.employeeId) &&
+      employeeIds.has(a.appraiserId)
+  );
+
   const employeeScores = employees.map((employee) => {
-    const employeeAppraisals = appraisals.filter(
-      (a) => a.employeeId === employee.id && a.completedAt
-    );
+    const employeeAppraisals = validAppraisals.filter((a) => a.employeeId === employee.id);
     const totalScore = employeeAppraisals.reduce((sum, a) => sum + a.score, 0);
     const totalMaxScore = employeeAppraisals.reduce((sum, a) => sum + a.maxScore, 0);
     const percentage = totalMaxScore > 0 ? (totalScore / totalMaxScore) * 100 : 0;

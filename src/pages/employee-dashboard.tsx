@@ -9,13 +9,14 @@ import {
   Clock, 
   ArrowRight,
   ChartLineUp,
-  Calendar
+  Calendar,
+  Buildings
 } from 'phosphor-react';
 import { formatDate } from '@/lib/utils';
 import type { AppraisalLink, Employee } from '@/types';
 
 export function EmployeeDashboardPage() {
-  const { links, employees, appraisals, reviewPeriods, loading } = useApp();
+  const { links, employees, appraisals, reviewPeriods, assignments, loading } = useApp();
   const [employeeId, setEmployeeId] = useState<string | null>(null);
   const [employee, setEmployee] = useState<Employee | null>(null);
 
@@ -44,6 +45,15 @@ export function EmployeeDashboardPage() {
     if (!employeeId) return false;
     return link.appraiserId === employeeId && link.used;
   });
+
+  // Assignments where I am the appraiser (pending/in-progress count toward "pending", completed count toward "completed")
+  const myAssignments = employeeId ? assignments.filter(a => a.appraiserId === employeeId) : [];
+  const myPendingAssignments = myAssignments.filter(a => a.status === 'pending' || a.status === 'in-progress');
+  const myCompletedAssignments = myAssignments.filter(a => a.status === 'completed');
+  const myHRAssignments = myAssignments.filter(a => a.relationshipType === 'hr-to-all');
+  const myHRComplete = myHRAssignments.filter(a => a.status === 'completed').length;
+  const myHRTotal = myHRAssignments.length;
+  const isHR = employee?.hierarchy === 'hr';
 
   // Get active review periods
   const activePeriods = reviewPeriods.filter(p => p.status === 'active');
@@ -83,8 +93,8 @@ export function EmployeeDashboardPage() {
             </div>
           </CardHeader>
           <CardContent className="px-5 pb-5 pt-0">
-            <div className="text-3xl font-bold tracking-tight text-foreground">{myPendingLinks.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">{myPendingLinks.length === 1 ? 'appraisal' : 'appraisals'} waiting for you</p>
+            <div className="text-3xl font-bold tracking-tight text-foreground">{myPendingLinks.length + myPendingAssignments.length}</div>
+            <p className="text-xs text-muted-foreground mt-1">{(myPendingLinks.length + myPendingAssignments.length) === 1 ? 'appraisal' : 'appraisals'} waiting for you</p>
           </CardContent>
         </Card>
 
@@ -98,7 +108,7 @@ export function EmployeeDashboardPage() {
             </div>
           </CardHeader>
           <CardContent className="px-5 pb-5 pt-0">
-            <div className="text-3xl font-bold tracking-tight text-foreground">{myCompletedLinks.length}</div>
+            <div className="text-3xl font-bold tracking-tight text-foreground">{myCompletedLinks.length + myCompletedAssignments.length}</div>
             <p className="text-xs text-muted-foreground mt-1">reviews you've submitted</p>
           </CardContent>
         </Card>
@@ -117,6 +127,35 @@ export function EmployeeDashboardPage() {
             <p className="text-xs text-muted-foreground mt-1">performance reviews received</p>
           </CardContent>
         </Card>
+
+        {isHR && myHRTotal > 0 && (
+          <Card className="overflow-hidden border-teal-500/30 hover:shadow-dropdown transition-shadow duration-200 bg-teal-500/5 md:col-span-3">
+            <CardHeader className="pb-2 pt-5 px-5">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold text-teal-700 dark:text-teal-300 uppercase tracking-wider flex items-center gap-2">
+                  <Buildings size={16} weight="duotone" />
+                  My HR Review Progress
+                </CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="px-5 pb-5 pt-0">
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="text-3xl font-bold tracking-tight text-teal-700 dark:text-teal-300">{myHRComplete} / {myHRTotal}</div>
+                <div className="flex-1 min-w-[120px]">
+                  <div className="h-2 rounded-full bg-teal-200 dark:bg-teal-800 overflow-hidden">
+                    <div 
+                      className="h-full bg-teal-600 dark:bg-teal-400 transition-all" 
+                      style={{ width: `${myHRTotal ? Math.round((myHRComplete / myHRTotal) * 100) : 0}%` }} 
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {myHRTotal ? Math.round((myHRComplete / myHRTotal) * 100) : 0}% complete · {myHRTotal - myHRComplete} employees remaining
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Active Review Period */}

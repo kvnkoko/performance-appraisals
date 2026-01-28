@@ -13,6 +13,7 @@ interface UserContextType {
   isExecutive: () => boolean;
   isLeader: () => boolean;
   isMember: () => boolean;
+  isHR: () => boolean;
   getTeamIds: () => string[];
 }
 
@@ -151,6 +152,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return employee?.hierarchy === 'member';
   };
   
+  const isHR = () => {
+    return employee?.hierarchy === 'hr';
+  };
+  
   const getTeamIds = () => {
     if (!employee?.teamId) return [];
     return [employee.teamId];
@@ -199,6 +204,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       isExecutive,
       isLeader,
       isMember,
+      isHR,
       getTeamIds
     }}>
       {children}

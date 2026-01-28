@@ -353,14 +353,73 @@ export async function updateEmployeeTeam(employeeId: string, teamId: string | nu
   }
 }
 
+/** Cascade-delete all data referencing this employee (appraisals, assignments, links, summaries). Call before deleting the employee or when deleting a user linked to this employee. */
+export async function cascadeDeleteForEmployee(employeeId: string): Promise<void> {
+  const database = await initDB();
+
+  // IndexedDB: appraisals where employee is subject or appraiser
+  if (database.objectStoreNames.contains('appraisals')) {
+    const all = await database.getAll('appraisals');
+    for (const a of all) {
+      if (a.employeeId === employeeId || a.appraiserId === employeeId) {
+        await database.delete('appraisals', a.id);
+      }
+    }
+  }
+
+  // IndexedDB: assignments where employee is subject or appraiser
+  if (database.objectStoreNames.contains('appraisalAssignments')) {
+    const all = await database.getAll('appraisalAssignments');
+    for (const a of all) {
+      if (a.employeeId === employeeId || a.appraiserId === employeeId) {
+        await database.delete('appraisalAssignments', a.id);
+      }
+    }
+  }
+
+  // IndexedDB: links where employee is subject or appraiser
+  if (database.objectStoreNames.contains('links')) {
+    const all = await database.getAll('links');
+    for (const l of all) {
+      if (l.employeeId === employeeId || l.appraiserId === employeeId) {
+        await database.delete('links', l.id);
+      }
+    }
+  }
+
+  // IndexedDB: performance summaries for this employee
+  if (database.objectStoreNames.contains('summaries')) {
+    try {
+      await database.delete('summaries', employeeId);
+    } catch {
+      // summaries keyPath is employeeId; ignore if missing
+    }
+  }
+
+  // Supabase: appraisals and links for this employee
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const {
+        deleteAppraisalsForEmployeeFromSupabase,
+        deleteLinksForEmployeeFromSupabase,
+      } = await import('./supabase-storage');
+      await deleteAppraisalsForEmployeeFromSupabase(employeeId);
+      await deleteLinksForEmployeeFromSupabase(employeeId);
+    }
+  } catch {
+    // Supabase not available, IndexedDB cascade is enough
+  }
+}
+
 export async function deleteEmployee(id: string): Promise<void> {
-  // Try Supabase first if configured
+  await cascadeDeleteForEmployee(id);
+
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { deleteEmployeeFromSupabase } = await import('./supabase-storage');
       await deleteEmployeeFromSupabase(id);
-      // Also delete from IndexedDB
       const database = await initDB();
       await database.delete('employees', id);
       return;
@@ -369,7 +428,6 @@ export async function deleteEmployee(id: string): Promise<void> {
     console.log('Supabase not available, using IndexedDB fallback');
   }
 
-  // Fallback to IndexedDB
   const database = await initDB();
   await database.delete('employees', id);
 }
@@ -610,6 +668,8 @@ const defaultSettings: CompanySettings = {
   adminPin: '1234',
   accentColor: '#3B82F6',
   theme: 'system',
+  hrScoreWeight: 30,
+  requireHrForRanking: false,
 };
 
 export async function getSettings(): Promise<CompanySettings> {
@@ -631,7 +691,8 @@ export async function getSettings(): Promise<CompanySettings> {
     if (import.meta.env.DEV) console.log('getSettings: Supabase not available, using IndexedDB:', error);
   }
   const stored = await database.get('settings', 'company');
-  return (stored as CompanySettings) || defaultSettings;
+  const merged = { ...defaultSettings, ...(stored as CompanySettings) };
+  return merged as CompanySettings;
 }
 
 export async function saveSettings(settings: CompanySettings): Promise<void> {
@@ -1245,12 +1306,15 @@ export async function saveUser(user: User): Promise<void> {
 }
 
 export async function deleteUser(id: string): Promise<void> {
-  // Try Supabase first if configured
+  const user = await getUser(id);
+  if (user?.employeeId) {
+    await cascadeDeleteForEmployee(user.employeeId);
+  }
+
   try {
     const { isSupabaseConfigured, deleteUserFromSupabase } = await import('./supabase');
     if (isSupabaseConfigured()) {
       await deleteUserFromSupabase(id);
-      // Also delete from IndexedDB
       const database = await initDB();
       await database.delete('users', id);
       return;
@@ -1259,7 +1323,6 @@ export async function deleteUser(id: string): Promise<void> {
     console.log('Supabase not available, using IndexedDB fallback');
   }
 
-  // Fallback to IndexedDB
   const database = await initDB();
   await database.delete('users', id);
 }

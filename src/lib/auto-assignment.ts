@@ -10,6 +10,7 @@ export interface AutoAssignmentPreview {
   memberToLeader: { appraiserId: string; appraiserName: string; employeeId: string; employeeName: string }[];
   leaderToLeader: { appraiserId: string; appraiserName: string; employeeId: string; employeeName: string }[];
   execToLeader: { appraiserId: string; appraiserName: string; employeeId: string; employeeName: string }[];
+  hrToAll: { appraiserId: string; appraiserName: string; employeeId: string; employeeName: string }[];
   warnings: string[];
 }
 
@@ -18,6 +19,7 @@ export interface AutoAssignmentOptions {
   includeMemberToLeader: boolean;
   includeLeaderToLeader: boolean;
   includeExecToLeader: boolean;
+  includeHrToAll: boolean;
 }
 
 const DEFAULT_OPTIONS: AutoAssignmentOptions = {
@@ -25,6 +27,7 @@ const DEFAULT_OPTIONS: AutoAssignmentOptions = {
   includeMemberToLeader: true,
   includeLeaderToLeader: false,
   includeExecToLeader: true,
+  includeHrToAll: false,
 };
 
 /** Direct reports = has reportsTo→this id, or (member in same team when manager has teamId). */
@@ -48,6 +51,7 @@ export function previewAutoAssignments(
   const memberToLeader: AutoAssignmentPreview['memberToLeader'] = [];
   const leaderToLeader: AutoAssignmentPreview['leaderToLeader'] = [];
   const execToLeader: AutoAssignmentPreview['execToLeader'] = [];
+  const hrToAll: AutoAssignmentPreview['hrToAll'] = [];
 
   const isManager = (e: Employee) => e.hierarchy === 'leader' || e.hierarchy === 'executive';
 
@@ -155,24 +159,48 @@ export function previewAutoAssignments(
     }
   }
 
+  // RULE 5: HR → All — each HR employee appraises ALL non-HR employees (no HR→HR)
+  if (opts.includeHrToAll) {
+    const hrStaff = employees.filter((e) => e.hierarchy === 'hr');
+    const allOthers = employees.filter((e) => e.hierarchy !== 'hr');
+    for (const hrPerson of hrStaff) {
+      for (const employee of allOthers) {
+        hrToAll.push({
+          appraiserId: hrPerson.id,
+          appraiserName: hrPerson.name,
+          employeeId: employee.id,
+          employeeName: employee.name,
+        });
+      }
+    }
+    if (hrStaff.length > 0 && allOthers.length === 0) {
+      warnings.push('HR→All: No non-HR employees to appraise. Add members, leaders, or executives.');
+    }
+    if (hrStaff.length === 0 && opts.includeHrToAll) {
+      warnings.push('HR→All: No HR employees in the system. Add employees with hierarchy "HR" to include HR reviews.');
+    }
+  }
+
   return {
     leaderToMember,
     memberToLeader,
     leaderToLeader,
     execToLeader,
+    hrToAll,
     warnings,
   };
 }
 
 /** Map relationship type to template-type hint. */
 export function relationshipToTemplateType(
-  rel: 'leader-to-member' | 'member-to-leader' | 'leader-to-leader' | 'exec-to-leader' | 'custom'
+  rel: 'leader-to-member' | 'member-to-leader' | 'leader-to-leader' | 'exec-to-leader' | 'hr-to-all' | 'custom'
 ): AssignmentRelationshipType {
   const map: Record<string, AssignmentRelationshipType> = {
     'leader-to-member': 'leader-to-member',
     'member-to-leader': 'member-to-leader',
     'leader-to-leader': 'leader-to-leader',
     'exec-to-leader': 'exec-to-leader',
+    'hr-to-all': 'hr-to-all',
     custom: 'custom',
   };
   return map[rel] ?? 'custom';
@@ -183,6 +211,7 @@ export interface TemplateMapping {
   memberToLeader: string;
   leaderToLeader: string;
   execToLeader: string;
+  hrToAll: string;
 }
 
 /** Turn preview rows into AppraisalAssignment[] with chosen templates and due date. */
@@ -232,6 +261,9 @@ export function buildAssignmentsFromPreview(
   }
   for (const row of preview.execToLeader) {
     push('exec-to-leader', 'auto', row.appraiserId, row.appraiserName, row.employeeId, row.employeeName, templateMapping.execToLeader);
+  }
+  for (const row of preview.hrToAll) {
+    push('hr-to-all', 'auto', row.appraiserId, row.appraiserName, row.employeeId, row.employeeName, templateMapping.hrToAll);
   }
 
   return out;

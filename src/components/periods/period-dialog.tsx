@@ -160,8 +160,8 @@ export function PeriodDialog({ open, onOpenChange, periodId, onSuccess }: Period
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-background rounded-lg border shadow-lg w-full max-w-md">
-        <div className="flex items-center justify-between p-6 border-b">
+      <div className="bg-background rounded-lg border shadow-lg w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
           <h2 className="text-2xl font-bold">
             {periodId ? 'Edit Period' : 'Create Period'}
           </h2>
@@ -170,7 +170,8 @@ export function PeriodDialog({ open, onOpenChange, periodId, onSuccess }: Period
           </Button>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0">
           <div className="space-y-2">
             <Label htmlFor="name">Period Name</Label>
             <Input id="name" {...register('name')} placeholder="Q1 2025" />
@@ -240,8 +241,9 @@ export function PeriodDialog({ open, onOpenChange, periodId, onSuccess }: Period
               rows={3}
             />
           </div>
+          </div>
 
-          <div className="flex justify-end gap-3 pt-4">
+          <div className="flex justify-end gap-3 pt-4 px-6 pb-6 border-t flex-shrink-0 bg-background">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>

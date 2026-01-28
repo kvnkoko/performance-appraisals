@@ -53,7 +53,7 @@ export function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <Card className="w-full max-w-md shadow-2xl border-2 animate-in zoom-in-95 duration-200">
+      <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl border-2 animate-in zoom-in-95 duration-200">
         <CardHeader className="border-b">
           <div className="flex items-center gap-3">
             <div className={`p-2.5 rounded-lg ${styles.bg}`}>

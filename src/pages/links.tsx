@@ -46,7 +46,9 @@ export function LinksPage() {
     memberToLeader: '',
     leaderToLeader: '',
     execToLeader: '',
+    hrToAll: '',
   });
+  const [includeHrToAll, setIncludeHrToAll] = useState(false);
   const [autoDueDate, setAutoDueDate] = useState('');
   const [autoGenerating, setAutoGenerating] = useState(false);
   const [autoDoneCount, setAutoDoneCount] = useState<number | null>(null);
@@ -64,8 +66,9 @@ export function LinksPage() {
       includeMemberToLeader: true,
       includeLeaderToLeader,
       includeExecToLeader,
+      includeHrToAll,
     });
-  }, [employees, selectedPeriod, includeLeaderToLeader, includeExecToLeader, mode]);
+  }, [employees, selectedPeriod, includeLeaderToLeader, includeExecToLeader, includeHrToAll, mode]);
 
   const runAutoPreview = () => {
     if (!selectedPeriod) {
@@ -82,7 +85,8 @@ export function LinksPage() {
     ? autoPreview.leaderToMember.length +
       autoPreview.memberToLeader.length +
       autoPreview.leaderToLeader.length +
-      autoPreview.execToLeader.length
+      autoPreview.execToLeader.length +
+      autoPreview.hrToAll.length
     : 0;
 
   const handleAutoGenerate = async () => {
@@ -97,14 +101,19 @@ export function LinksPage() {
       memberToLeader: autoTemplateMap.memberToLeader || templates[0]?.id || '',
       leaderToLeader: autoTemplateMap.leaderToLeader || templates[0]?.id || '',
       execToLeader: autoTemplateMap.execToLeader || templates[0]?.id || '',
+      hrToAll: autoTemplateMap.hrToAll || '',
     };
     const hasEmpty =
       !templateMapping.leaderToMember ||
       !templateMapping.memberToLeader ||
       (includeLeaderToLeader && !templateMapping.leaderToLeader) ||
-      (includeExecToLeader && !templateMapping.execToLeader);
+      (includeExecToLeader && !templateMapping.execToLeader) ||
+      (includeHrToAll && !templateMapping.hrToAll);
     if (hasEmpty) {
-      toast({ title: 'Select templates', description: 'Choose a template for each relationship type.', variant: 'error' });
+      const msg = includeHrToAll && !templateMapping.hrToAll
+        ? 'Please select an HR template or disable HR assignments.'
+        : 'Choose a template for each relationship type.';
+      toast({ title: 'Select templates', description: msg, variant: 'error' });
       return;
     }
     setAutoGenerating(true);
@@ -541,6 +550,16 @@ export function LinksPage() {
                     />
                     <span className="text-sm">Executive → Leader (every executive appraises every leader)</span>
                   </label>
+                  {employees.some((e) => e.hierarchy === 'hr') && (
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={includeHrToAll}
+                        onChange={(e) => setIncludeHrToAll(e.target.checked)}
+                      />
+                      <span className="text-sm">HR → All (each HR appraises all non-HR employees)</span>
+                    </label>
+                  )}
                 </div>
                 {livePreview && (
                   <>
@@ -565,6 +584,15 @@ export function LinksPage() {
                         <p className="text-2xl font-bold mt-0.5">{livePreview.execToLeader.length}</p>
                         <p className="text-xs text-muted-foreground">Every exec appraises every leader</p>
                       </div>
+                      {includeHrToAll && (
+                        <div className="rounded-lg border border-teal-500/30 bg-teal-500/5 p-3">
+                          <p className="text-xs font-medium text-teal-700 dark:text-teal-300 uppercase tracking-wide">HR → All</p>
+                          <p className="text-2xl font-bold mt-0.5 text-teal-700 dark:text-teal-300">{livePreview.hrToAll.length}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {employees.filter((e) => e.hierarchy === 'hr').length} HR × {employees.filter((e) => e.hierarchy !== 'hr').length} others
+                          </p>
+                        </div>
+                      )}
                     </div>
                     {livePreview.warnings.length > 0 && (
                       <div className="rounded-lg border border-amber-500/50 bg-amber-500/5 p-4">
@@ -589,9 +617,9 @@ export function LinksPage() {
                 )}
                 <div className="flex justify-end">
                   <Button onClick={runAutoPreview} disabled={!selectedPeriod || !livePreview}>
-                    {livePreview && (livePreview.leaderToMember.length + livePreview.memberToLeader.length + livePreview.leaderToLeader.length + livePreview.execToLeader.length) > 0
-                      ? `Continue with ${livePreview.leaderToMember.length + livePreview.memberToLeader.length + livePreview.leaderToLeader.length + livePreview.execToLeader.length} appraisals`
-                      : 'Preview &amp; continue'}
+                    {livePreview && (livePreview.leaderToMember.length + livePreview.memberToLeader.length + livePreview.leaderToLeader.length + livePreview.execToLeader.length + livePreview.hrToAll.length) > 0
+                      ? `Continue with ${livePreview.leaderToMember.length + livePreview.memberToLeader.length + livePreview.leaderToLeader.length + livePreview.execToLeader.length + livePreview.hrToAll.length} appraisals`
+                      : 'Preview & continue'}
                     <CaretRight size={16} className="ml-1" />
                   </Button>
                 </div>
@@ -637,6 +665,17 @@ export function LinksPage() {
                       <p className="text-xs text-muted-foreground">Every exec appraises every leader</p>
                     </CardContent>
                   </Card>
+                  {autoPreview.hrToAll.length > 0 && (
+                    <Card className="border-teal-500/30 bg-teal-500/5">
+                      <CardHeader className="py-3">
+                        <CardTitle className="text-sm text-teal-700 dark:text-teal-300">HR → All</CardTitle>
+                      </CardHeader>
+                      <CardContent className="py-2">
+                        <p className="text-2xl font-bold text-teal-700 dark:text-teal-300">{autoPreview.hrToAll.length}</p>
+                        <p className="text-xs text-muted-foreground">Each HR appraises all non-HR employees</p>
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
                 {autoPreview.warnings.length > 0 && (
                   <div className="rounded-lg border border-amber-500/50 bg-amber-500/5 p-4">
@@ -702,6 +741,23 @@ export function LinksPage() {
                         ))}
                       </Select>
                     </div>
+                    {autoPreview.hrToAll.length > 0 && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">HR → All</Label>
+                        <Select
+                          value={autoTemplateMap.hrToAll}
+                          onChange={(e) => setAutoTemplateMap((m) => ({ ...m, hrToAll: e.target.value }))}
+                        >
+                          <option value="">Select HR template...</option>
+                          {templates.filter((t) => t.type === 'hr-to-all').map((t) => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                          {templates.filter((t) => t.type === 'hr-to-all').length === 0 && (
+                            <option value="" disabled>No HR → All template – create one in Templates</option>
+                          )}
+                        </Select>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Due date (optional)</Label>

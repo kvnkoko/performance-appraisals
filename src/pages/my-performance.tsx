@@ -9,7 +9,8 @@ import {
   Target,
   Calendar,
   Info,
-  Lightning
+  Lightning,
+  Buildings
 } from 'phosphor-react';
 import { generatePerformanceSummary } from '@/lib/ai-summary';
 import type { PerformanceInsight } from '@/lib/ai-summary';
@@ -86,6 +87,14 @@ export function MyPerformancePage() {
       });
     return () => { cancelled = true; };
   }, [employeeId, periodAppraisals]);
+
+  // HR appraisal for this period (template type hr-to-all)
+  const hrAppraisal = useMemo(() => {
+    return periodAppraisals.find(a => {
+      const t = templates.find(tpl => tpl.id === a.templateId);
+      return t?.type === 'hr-to-all';
+    });
+  }, [periodAppraisals, templates]);
 
   // Calculate overall score
   const overallStats = useMemo(() => {
@@ -290,6 +299,35 @@ export function MyPerformancePage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* HR Final Review (when employee has HR appraisal for this period) */}
+      {hrAppraisal && (() => {
+        const hrPct = hrAppraisal.maxScore > 0 ? Math.round((hrAppraisal.score / hrAppraisal.maxScore) * 100) : 0;
+        return (
+          <Card className="border-l-4 border-teal-500 overflow-hidden">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-teal-700 dark:text-teal-300">
+                  <Buildings size={20} weight="duotone" />
+                  HR Final Review
+                </CardTitle>
+                <span className="inline-flex items-center rounded-md px-2.5 py-0.5 text-sm font-medium bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300">
+                  {hrPct}%
+                </span>
+              </div>
+              <CardDescription>
+                Company-wide HR evaluation for this period. This score can contribute to final ranking and Employee of the Month.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-bold text-teal-700 dark:text-teal-300">{hrAppraisal.score} / {hrAppraisal.maxScore}</span>
+                <span className="text-sm text-muted-foreground">points</span>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* AI Narrative Summary */}
       {(narrativeLoading || narrativeSummary?.narrative) && (

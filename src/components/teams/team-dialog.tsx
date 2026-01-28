@@ -173,8 +173,8 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className={`bg-background rounded-xl border shadow-2xl w-full ${teamId ? 'max-w-lg' : 'max-w-md'}`}>
-        <div className="flex items-center justify-between p-6 border-b bg-muted/30">
+      <div className={`bg-background rounded-xl border shadow-2xl w-full max-h-[90vh] flex flex-col overflow-hidden ${teamId ? 'max-w-lg' : 'max-w-md'}`}>
+        <div className="flex items-center justify-between p-6 border-b bg-muted/30 flex-shrink-0">
           <h2 className="text-2xl font-bold tracking-tight">
             {teamId ? 'Edit Team & Leaders' : 'Create Team'}
           </h2>
@@ -183,7 +183,8 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
           </Button>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-6 space-y-5 min-h-0">
           <div className="space-y-2">
             <Label htmlFor="name">Team Name</Label>
             <Input 
@@ -274,8 +275,9 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
               </div>
             </div>
           )}
+          </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex justify-end gap-3 pt-4 px-6 pb-6 border-t flex-shrink-0 bg-background">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>

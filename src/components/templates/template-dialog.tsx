@@ -238,7 +238,7 @@ const categorySchema = z.object({
 const templateSchema = z.object({
   name: z.string().min(1, 'Template name is required'),
   subtitle: z.string().optional(),
-  type: z.enum(['executives-to-leaders', 'leaders-to-members', 'members-to-leaders', 'leaders-to-leaders', 'members-to-members']),
+  type: z.enum(['executives-to-leaders', 'leaders-to-members', 'members-to-leaders', 'leaders-to-leaders', 'members-to-members', 'hr-to-all']),
   categories: z.array(categorySchema).min(1, 'At least one category is required'),
 }).refine(
   (data) => {
@@ -501,7 +501,7 @@ export function TemplateDialog({ open, onOpenChange, templateId, onSuccess }: Te
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-background rounded-lg border shadow-lg w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
+        <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
           <h2 className="text-xl font-bold">
             {templateId ? 'Edit Template' : 'Create Template'}
           </h2>
@@ -545,7 +545,8 @@ export function TemplateDialog({ open, onOpenChange, templateId, onSuccess }: Te
               variant: 'error' 
             });
           }
-        })} className="flex-1 overflow-y-auto">
+        })} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto min-h-0">
           <div className="p-6 space-y-6">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1.5">
@@ -656,8 +657,9 @@ export function TemplateDialog({ open, onOpenChange, templateId, onSuccess }: Te
               </Button>
             </div>
           </div>
+          </div>
 
-          <div className="flex justify-end gap-3 px-6 py-4 border-t bg-muted/30">
+          <div className="flex justify-end gap-3 px-6 py-4 border-t bg-muted/30 flex-shrink-0">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} className="h-9">
               Cancel
             </Button>

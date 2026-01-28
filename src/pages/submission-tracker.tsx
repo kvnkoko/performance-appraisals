@@ -3,7 +3,7 @@ import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { ListChecks, CheckCircle, Clock, Hourglass } from 'phosphor-react';
-import type { AppraisalAssignment, Appraisal, Template, ReviewPeriod } from '@/types';
+import type { AppraisalAssignment, Appraisal, Template, ReviewPeriod, Employee } from '@/types';
 import { formatDate } from '@/lib/utils';
 
 const PAGE_SIZE = 50;
@@ -84,17 +84,63 @@ function buildRows(
   });
 }
 
+/** When there are no assignments, show completed appraisals whose employee and appraiser still exist. */
+function buildRowsFromAppraisals(
+  appraisals: Appraisal[],
+  templates: Template[],
+  reviewPeriods: ReviewPeriod[],
+  employees: Employee[],
+  filterPeriodId: string | null,
+  filterTemplateId: string | null,
+  filterAppraiserId: string | null,
+  filterEmployeeId: string | null
+): Row[] {
+  const employeeIds = new Set(employees.map((e) => e.id));
+  const nameById = employees.reduce((acc, e) => ({ ...acc, [e.id]: e.name }), {} as Record<string, string>);
+
+  let list = appraisals.filter(
+    (a) =>
+      a.completedAt != null &&
+      employeeIds.has(a.employeeId) &&
+      employeeIds.has(a.appraiserId)
+  );
+  if (filterPeriodId) list = list.filter((a) => a.reviewPeriodId === filterPeriodId);
+  if (filterTemplateId) list = list.filter((a) => a.templateId === filterTemplateId);
+  if (filterAppraiserId) list = list.filter((a) => a.appraiserId === filterAppraiserId);
+  if (filterEmployeeId) list = list.filter((a) => a.employeeId === filterEmployeeId);
+
+  return list.map((a) => {
+    const template = templates.find((t) => t.id === a.templateId);
+    const period = reviewPeriods.find((p) => p.id === a.reviewPeriodId);
+    return {
+      assignmentId: a.id,
+      periodId: a.reviewPeriodId,
+      periodName: period?.name ?? a.reviewPeriodName ?? a.reviewPeriodId,
+      templateId: a.templateId,
+      formName: template?.name ?? a.templateId,
+      appraiserId: a.appraiserId,
+      appraiserName: nameById[a.appraiserId] ?? a.appraiserId,
+      employeeId: a.employeeId,
+      employeeName: nameById[a.employeeId] ?? a.employeeId,
+      status: 'completed' as const,
+      score: a.score,
+      maxScore: a.maxScore,
+      submittedAt: a.completedAt,
+    };
+  });
+}
+
 export function SubmissionTrackerPage() {
-  const { assignments, appraisals, templates, reviewPeriods } = useApp();
+  const { assignments, appraisals, templates, reviewPeriods, employees } = useApp();
   const [filterPeriodId, setFilterPeriodId] = useState<string | null>(null);
   const [filterTemplateId, setFilterTemplateId] = useState<string | null>(null);
   const [filterAppraiserId, setFilterAppraiserId] = useState<string | null>(null);
   const [filterEmployeeId, setFilterEmployeeId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
 
-  const rows = useMemo(
-    () =>
-      buildRows(
+  const rows = useMemo(() => {
+    if (assignments.length > 0) {
+      return buildRows(
         assignments,
         appraisals,
         templates,
@@ -103,18 +149,65 @@ export function SubmissionTrackerPage() {
         filterTemplateId,
         filterAppraiserId,
         filterEmployeeId
-      ),
-    [
-      assignments,
+      );
+    }
+    return buildRowsFromAppraisals(
       appraisals,
       templates,
       reviewPeriods,
+      employees,
       filterPeriodId,
       filterTemplateId,
       filterAppraiserId,
-      filterEmployeeId,
-    ]
-  );
+      filterEmployeeId
+    );
+  }, [
+    assignments,
+    appraisals,
+    templates,
+    reviewPeriods,
+    employees,
+    filterPeriodId,
+    filterTemplateId,
+    filterAppraiserId,
+    filterEmployeeId,
+  ]);
+
+  const appraiserOptions = useMemo(() => {
+    if (assignments.length > 0) {
+      return Array.from(
+        new Map(assignments.map((a) => [a.appraiserId, { id: a.appraiserId, name: a.appraiserName }])).values()
+      ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    }
+    const employeeIds = new Set(employees.map((e) => e.id));
+    const nameById = Object.fromEntries(employees.map((e) => [e.id, e.name]));
+    const ids = new Set(
+      appraisals
+        .filter((a) => a.completedAt && employeeIds.has(a.appraiserId))
+        .map((a) => a.appraiserId)
+    );
+    return Array.from(ids)
+      .map((id) => ({ id, name: nameById[id] ?? id }))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [assignments, appraisals, employees]);
+
+  const employeeOptions = useMemo(() => {
+    if (assignments.length > 0) {
+      return Array.from(
+        new Map(assignments.map((a) => [a.employeeId, { id: a.employeeId, name: a.employeeName }])).values()
+      ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    }
+    const employeeIds = new Set(employees.map((e) => e.id));
+    const nameById = Object.fromEntries(employees.map((e) => [e.id, e.name]));
+    const ids = new Set(
+      appraisals
+        .filter((a) => a.completedAt && employeeIds.has(a.employeeId))
+        .map((a) => a.employeeId)
+    );
+    return Array.from(ids)
+      .map((id) => ({ id, name: nameById[id] ?? id }))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [assignments, appraisals, employees]);
 
   const sortedRows = useMemo(() => {
     const byPeriod = [...rows].sort((a, b) =>
@@ -205,17 +298,11 @@ export function SubmissionTrackerPage() {
                 className="w-full"
               >
                 <option value="">All appraisers</option>
-                {Array.from(
-                  new Map(
-                    assignments.map((a) => [a.appraiserId, { id: a.appraiserId, name: a.appraiserName }])
-                  ).values()
-                )
-                  .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-                  .map(({ id, name }) => (
-                    <option key={id} value={id}>
-                      {name}
-                    </option>
-                  ))}
+                {appraiserOptions.map(({ id, name }) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
               </Select>
             </div>
             <div className="space-y-2">
@@ -229,17 +316,11 @@ export function SubmissionTrackerPage() {
                 className="w-full"
               >
                 <option value="">All employees</option>
-                {Array.from(
-                  new Map(
-                    assignments.map((a) => [a.employeeId, { id: a.employeeId, name: a.employeeName }])
-                  ).values()
-                )
-                  .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-                  .map(({ id, name }) => (
-                    <option key={id} value={id}>
-                      {name}
-                    </option>
-                  ))}
+                {employeeOptions.map(({ id, name }) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
               </Select>
             </div>
           </div>
@@ -250,7 +331,7 @@ export function SubmissionTrackerPage() {
         <CardHeader className="pb-4">
           <CardTitle className="text-lg font-semibold">Submissions</CardTitle>
           <CardDescription className="text-sm">
-            {sortedRows.length} assignment{sortedRows.length !== 1 ? 's' : ''}
+            {sortedRows.length} submission{sortedRows.length !== 1 ? 's' : ''}
             {(filterPeriodId || filterTemplateId || filterAppraiserId || filterEmployeeId) &&
               ' (filtered)'}
           </CardDescription>
@@ -259,8 +340,12 @@ export function SubmissionTrackerPage() {
           {paginatedRows.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground">
               <ListChecks size={48} weight="duotone" className="mx-auto mb-3 opacity-30" />
-              <p className="font-medium">No assignments match the current filters.</p>
-              <p className="text-sm mt-1">Adjust filters or add assignments for the selected period.</p>
+              <p className="font-medium">No submissions match the current filters.</p>
+              <p className="text-sm mt-1">
+                {assignments.length === 0
+                  ? 'Complete appraisals or add assignments for the selected period to see them here.'
+                  : 'Adjust filters or add assignments for the selected period.'}
+              </p>
             </div>
           ) : (
             <>

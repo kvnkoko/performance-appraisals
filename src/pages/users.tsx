@@ -147,14 +147,11 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
       const { getUser } = await import('@/lib/storage');
       const savedUser = await getUser(updatedUser.id);
       if (savedUser && savedUser.employeeId === selectedEmployeeId) {
-        console.log('Employee link verified - employeeId persisted:', savedUser.employeeId);
         // Update local user state
         const updatedUserState = { ...user, employeeId: selectedEmployeeId };
         // Reload linked employee
         await loadLinkedEmployee();
       } else {
-        console.warn('Employee link verification failed - reloading from storage');
-        // Force reload
         await loadLinkedEmployee();
       }
       
@@ -276,8 +273,8 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl border-2">
-        <CardHeader className="border-b bg-gradient-to-r from-purple-500/10 to-pink-500/10">
+      <Card className="w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border-2">
+        <CardHeader className="border-b bg-gradient-to-r from-purple-500/10 to-pink-500/10 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-purple-500/20">
               {isEditing ? (
@@ -294,8 +291,9 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="pt-6">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+        <CardContent className="pt-6 flex-1 min-h-0 overflow-hidden flex flex-col p-0">
+          <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0 overflow-hidden flex">
+            <div className="flex-1 overflow-y-auto min-h-0 pt-6 px-6 space-y-5">
             <div className="grid gap-5 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="username" className="text-sm font-semibold">Username *</Label>
@@ -492,8 +490,9 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
                 </div>
               )}
             </div>
+            </div>
 
-            <div className="flex gap-3 pt-6 border-t">
+            <div className="flex gap-3 pt-6 px-6 pb-6 border-t flex-shrink-0 bg-background">
               <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-11">
                 Cancel
               </Button>

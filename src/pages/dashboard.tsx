@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FileText, Users, Link as LinkIcon, CheckCircle, Clock, TrendUp, ChartBar, Activity } from 'phosphor-react';
+import { FileText, Users, Link as LinkIcon, CheckCircle, Clock, TrendUp, ChartBar, Activity, Buildings } from 'phosphor-react';
 import { formatDate } from '@/lib/utils';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
@@ -15,6 +15,8 @@ export function Dashboard() {
     pendingAppraisals: 0,
     completedAppraisals: 0,
     activeLinks: 0,
+    hrTotal: 0,
+    hrComplete: 0,
   });
 
   useEffect(() => {
@@ -33,12 +35,18 @@ export function Dashboard() {
 
       const activeLinks = links.filter((l) => !l.used && (!l.expiresAt || new Date(l.expiresAt) > new Date())).length;
 
+      const hrAssignments = assignments.filter((a) => a.relationshipType === 'hr-to-all');
+      const hrTotal = hrAssignments.length;
+      const hrComplete = hrAssignments.filter((a) => a.status === 'completed').length;
+
       setStats({
         totalTemplates: templates.length,
         totalEmployees: employees.length,
         pendingAppraisals: pending,
         completedAppraisals: completed,
         activeLinks,
+        hrTotal,
+        hrComplete,
       });
     }
   }, [templates, employees, appraisals, links, assignments, loading]);
@@ -162,6 +170,28 @@ export function Dashboard() {
             <p className="text-xs text-muted-foreground mt-1">Awaiting completion</p>
           </CardContent>
         </Card>
+
+        {stats.hrTotal > 0 && (
+          <Card className="overflow-hidden border-teal-500/30 hover:shadow-dropdown transition-shadow duration-200 bg-teal-500/5">
+            <CardHeader className="pb-2 pt-5 px-5">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold text-teal-700 dark:text-teal-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Buildings size={16} weight="duotone" />
+                  HR Reviews
+                </CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="px-5 pb-5 pt-0">
+              <div className="text-3xl font-bold tracking-tight text-teal-700 dark:text-teal-300">{stats.hrComplete} / {stats.hrTotal}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {stats.hrTotal ? Math.round((stats.hrComplete / stats.hrTotal) * 100) : 0}% complete
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {employees.filter((e) => e.hierarchy === 'hr').length} HR reviewer(s)
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Charts and Recent Activity – Proxel/Finvero style */}
