@@ -25,7 +25,7 @@ export interface AutoAssignmentOptions {
 const DEFAULT_OPTIONS: AutoAssignmentOptions = {
   includeLeaderToMember: true,
   includeMemberToLeader: true,
-  includeLeaderToLeader: false,
+  includeLeaderToLeader: true,
   includeExecToLeader: true,
   includeHrToAll: false,
 };
@@ -69,7 +69,8 @@ export function previewAutoAssignments(
   const seenL2M = new Set<string>();
   const seenM2L = new Set<string>();
 
-  // RULE 1: Leader → Member — from Reports To, or same-team fallback when member has no reportsTo
+  // RULE 1: Leader → Member — leaders (and execs leading a dept) see forms for all members of their department
+  // (a) From Reports To or same-team when member has no reportsTo; (b) then ensure every manager with teamId gets every member in that team
   if (opts.includeLeaderToMember) {
     for (const member of employees) {
       if (member.hierarchy !== 'member') continue;
@@ -77,8 +78,10 @@ export function previewAutoAssignments(
       if (member.reportsTo) {
         const m = byId.get(member.reportsTo);
         if (m && isManager(m)) managers = [m];
-      } else if (member.teamId) {
-        managers = employees.filter((e) => isManager(e) && e.teamId === member.teamId);
+      }
+      if (member.teamId) {
+        const teamManagers = employees.filter((e) => isManager(e) && e.teamId === member.teamId);
+        managers = [...new Map([...managers, ...teamManagers].map((e) => [e.id, e])).values()];
       }
       for (const manager of managers) {
         const key = `${manager.id}:${member.id}`;
@@ -92,39 +95,46 @@ export function previewAutoAssignments(
         });
       }
     }
-  }
-
-  // RULE 2: Member → Leader — same pairs as above, reversed
-  if (opts.includeMemberToLeader) {
-    for (const member of employees) {
-      if (member.hierarchy !== 'member') continue;
-      let managers: Employee[] = [];
-      if (member.reportsTo) {
-        const m = byId.get(member.reportsTo);
-        if (m && isManager(m)) managers = [m];
-      } else if (member.teamId) {
-        managers = employees.filter((e) => isManager(e) && e.teamId === member.teamId);
-      }
-      for (const manager of managers) {
-        const key = `${member.id}:${manager.id}`;
-        if (seenM2L.has(key)) continue;
-        seenM2L.add(key);
-        memberToLeader.push({
-          appraiserId: member.id,
-          appraiserName: member.name,
-          employeeId: manager.id,
-          employeeName: manager.name,
+    // Ensure every department head gets all members in their department (even if reportsTo points elsewhere)
+    for (const manager of employees) {
+      if (!isManager(manager) || !manager.teamId) continue;
+      const deptMembers = employees.filter((e) => e.hierarchy === 'member' && e.teamId === manager.teamId);
+      for (const member of deptMembers) {
+        const key = `${manager.id}:${member.id}`;
+        if (seenL2M.has(key)) continue;
+        seenL2M.add(key);
+        leaderToMember.push({
+          appraiserId: manager.id,
+          appraiserName: manager.name,
+          employeeId: member.id,
+          employeeName: member.name,
         });
       }
     }
   }
 
-  // RULE 3: Leader → Leader — peer review among department heads (any manager with a team)
-  // Includes same-team peers AND cross-department: e.g. Stephanie (A&R) and Min Khant (YouTube) appraise each other
+  // RULE 2: Member → Leader — each member sees form(s) for their leader(s) / department head(s) (upward feedback)
+  // Same pairs as Leader→Member reversed: member gives feedback to each manager who appraises them.
+  if (opts.includeMemberToLeader) {
+    for (const pair of leaderToMember) {
+      const key = `${pair.employeeId}:${pair.appraiserId}`;
+      if (seenM2L.has(key)) continue;
+      seenM2L.add(key);
+      memberToLeader.push({
+        appraiserId: pair.employeeId,
+        appraiserName: pair.employeeName,
+        employeeId: pair.appraiserId,
+        employeeName: pair.appraiserName,
+      });
+    }
+  }
+
+  // RULE 3: Leader → Leader — every leader appraises every other leader (company-wide peer review)
+  // All leaders in the company see a form for each other leader.
   if (opts.includeLeaderToLeader) {
-    const departmentHeads = employees.filter((e) => isManager(e) && e.teamId);
-    for (const appraiser of departmentHeads) {
-      for (const target of departmentHeads) {
+    const leaders = employees.filter((e) => e.hierarchy === 'leader');
+    for (const appraiser of leaders) {
+      for (const target of leaders) {
         if (appraiser.id === target.id) continue;
         leaderToLeader.push({
           appraiserId: appraiser.id,
@@ -134,18 +144,18 @@ export function previewAutoAssignments(
         });
       }
     }
-    if (departmentHeads.length > 0 && leaderToLeader.length === 0) {
-      warnings.push('Leader→Leader needs at least 2 people who lead a department (Leader or Executive with team set).');
+    if (leaders.length > 0 && leaderToLeader.length === 0) {
+      warnings.push('Leader→Leader needs at least 2 leaders in the company.');
     }
   }
 
   // RULE 4: Executive → Leader — every executive appraises every leader (org-wide)
-  // So Stephanie (Executive, A&R) appraises Min Khant (Leader, YouTube), and vice-type pairs
+  // Each exec sees one appraisal form per leader in the company (N execs × M leaders = N×M assignments).
   if (opts.includeExecToLeader) {
     const execs = employees.filter((e) => e.hierarchy === 'executive');
-    const leaders = employees.filter((e) => e.hierarchy === 'leader');
+    const leadersForExec = employees.filter((e) => e.hierarchy === 'leader');
     for (const exec of execs) {
-      for (const leader of leaders) {
+      for (const leader of leadersForExec) {
         execToLeader.push({
           appraiserId: exec.id,
           appraiserName: exec.name,
@@ -154,7 +164,7 @@ export function previewAutoAssignments(
         });
       }
     }
-    if (execs.length > 0 && leaders.length > 0 && execToLeader.length === 0) {
+    if (execs.length > 0 && leadersForExec.length > 0 && execToLeader.length === 0) {
       warnings.push('No Executive→Leader pairs: add at least one Leader and one Executive.');
     }
   }

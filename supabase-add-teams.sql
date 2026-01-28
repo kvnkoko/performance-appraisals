@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS employees (
   name TEXT NOT NULL,
   email TEXT,
   role TEXT NOT NULL,
-  hierarchy TEXT NOT NULL CHECK (hierarchy IN ('executive', 'leader', 'member')),
+  hierarchy TEXT NOT NULL CHECK (hierarchy IN ('executive', 'leader', 'member', 'hr')),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_employees_hierarchy ON employees(hierarchy);

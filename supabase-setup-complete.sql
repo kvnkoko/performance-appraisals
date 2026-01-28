@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS employees (
   name TEXT NOT NULL,
   email TEXT,
   role TEXT NOT NULL,
-  hierarchy TEXT NOT NULL CHECK (hierarchy IN ('executive', 'leader', 'member')),
+  hierarchy TEXT NOT NULL CHECK (hierarchy IN ('executive', 'leader', 'member', 'hr')),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
