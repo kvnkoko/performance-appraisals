@@ -4,13 +4,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Download, Moon, Sun, Monitor, SignOut, Check, CloudArrowDown, Buildings, Trash } from 'phosphor-react';
-import { saveSettings, exportData, importData, syncFromSupabase, clearAllAppraisalData } from '@/lib/storage';
+import { Download, Moon, Sun, Monitor, SignOut, Check, CloudArrowDown, Buildings, Trash, UserCircle } from 'phosphor-react';
+import { saveSettings, exportData, importData, syncFromSupabase, clearAllAppraisalData, getUser, saveUser, getUserByUsername } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { useUser } from '@/contexts/user-context';
 import { useTheme } from '@/hooks/use-theme';
-import { applyAccentColor } from '@/lib/utils';
+import { applyAccentColor, hashPassword, verifyPassword } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import type { User } from '@/types';
 
 // Preset accent colors for easy selection
 const PRESET_COLORS = [
@@ -28,7 +29,7 @@ const PRESET_COLORS = [
 
 export function SettingsPage() {
   const { settings, refresh } = useApp();
-  const { logout, isAdmin } = useUser();
+  const { user, logout, isAdmin, refresh: refreshUser } = useUser();
   const { theme, setTheme, setAccentColor } = useTheme();
   const { toast } = useToast();
   const [formData, setFormData] = useState({
@@ -38,7 +39,15 @@ export function SettingsPage() {
     hrScoreWeight: settings.hrScoreWeight ?? 30,
     requireHrForRanking: settings.requireHrForRanking ?? false,
   });
+  const [profileForm, setProfileForm] = useState({
+    username: '',
+    email: '',
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
   const [loading, setLoading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [clearAppraisalDialogOpen, setClearAppraisalDialogOpen] = useState(false);
   const [clearingAppraisals, setClearingAppraisals] = useState(false);
@@ -52,6 +61,17 @@ export function SettingsPage() {
       requireHrForRanking: settings.requireHrForRanking ?? false,
     });
   }, [settings]);
+
+  // Populate staff profile form from current user
+  useEffect(() => {
+    if (user && !isAdmin()) {
+      setProfileForm((prev) => ({
+        ...prev,
+        username: user.username,
+        email: user.email || '',
+      }));
+    }
+  }, [user, isAdmin]);
 
   // Apply accent color preview immediately when changed
   const handleAccentColorChange = (color: string) => {
@@ -139,6 +159,66 @@ export function SettingsPage() {
     window.location.href = '/auth';
   };
 
+  const handleProfileSave = async () => {
+    const userId = localStorage.getItem('userId');
+    if (!userId || userId === 'pin-admin' || !user) return;
+    if (profileForm.username.trim().length < 3) {
+      toast({ title: 'Error', description: 'Username must be at least 3 characters.', variant: 'error' });
+      return;
+    }
+    if (profileForm.newPassword && profileForm.newPassword.length < 6) {
+      toast({ title: 'Error', description: 'New password must be at least 6 characters.', variant: 'error' });
+      return;
+    }
+    if (profileForm.newPassword && profileForm.newPassword !== profileForm.confirmPassword) {
+      toast({ title: 'Error', description: 'New password and confirmation do not match.', variant: 'error' });
+      return;
+    }
+    setProfileSaving(true);
+    try {
+      const currentUser = await getUser(userId) as User | undefined;
+      if (!currentUser) {
+        toast({ title: 'Error', description: 'User not found.', variant: 'error' });
+        setProfileSaving(false);
+        return;
+      }
+      if (profileForm.username.trim() !== currentUser.username) {
+        const existing = await getUserByUsername(profileForm.username.trim());
+        if (existing && existing.id !== currentUser.id) {
+          toast({ title: 'Error', description: 'Username is already in use.', variant: 'error' });
+          setProfileSaving(false);
+          return;
+        }
+      }
+      if (profileForm.newPassword) {
+        const valid = await verifyPassword(profileForm.currentPassword, currentUser.passwordHash);
+        if (!valid) {
+          toast({ title: 'Error', description: 'Current password is incorrect.', variant: 'error' });
+          setProfileSaving(false);
+          return;
+        }
+      }
+      const updated: User = {
+        ...currentUser,
+        username: profileForm.username.trim(),
+        email: profileForm.email.trim() || undefined,
+      };
+      if (profileForm.newPassword) {
+        updated.passwordHash = await hashPassword(profileForm.newPassword);
+      }
+      await saveUser(updated);
+      await refreshUser();
+      window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updated.id } }));
+      setProfileForm((prev) => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
+      toast({ title: 'Profile updated', description: 'Your profile and password have been saved.', variant: 'success' });
+    } catch (error) {
+      console.error('Profile save error:', error);
+      toast({ title: 'Error', description: 'Failed to save profile.', variant: 'error' });
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
   const handleClearAllAppraisalData = async () => {
     setClearingAppraisals(true);
     try {
@@ -173,25 +253,95 @@ export function SettingsPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Company Information</CardTitle>
-            <CardDescription>Update your company details</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Company Name</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
-            </div>
-            <Button type="button" onClick={handleSave} disabled={loading}>
-              {loading ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </CardContent>
-        </Card>
+        {!isAdmin() && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserCircle size={20} weight="duotone" />
+                Profile
+              </CardTitle>
+              <CardDescription>Update your username, email, and password</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="profile-username">Username</Label>
+                <Input
+                  id="profile-username"
+                  value={profileForm.username}
+                  onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value })}
+                  placeholder="e.g., john.doe"
+                />
+                <p className="text-xs text-muted-foreground">Use this to sign in. At least 3 characters.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="profile-email">Email</Label>
+                <Input
+                  id="profile-email"
+                  type="email"
+                  value={profileForm.email}
+                  onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                  placeholder="e.g., you@company.com"
+                />
+                <p className="text-xs text-muted-foreground">Optional; visible to admins in User Management.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="profile-current-password">Current password (only to change password)</Label>
+                <Input
+                  id="profile-current-password"
+                  type="password"
+                  value={profileForm.currentPassword}
+                  onChange={(e) => setProfileForm({ ...profileForm, currentPassword: e.target.value })}
+                  placeholder="Leave blank to keep current password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="profile-new-password">New password</Label>
+                <Input
+                  id="profile-new-password"
+                  type="password"
+                  value={profileForm.newPassword}
+                  onChange={(e) => setProfileForm({ ...profileForm, newPassword: e.target.value })}
+                  placeholder="Min. 6 characters"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="profile-confirm-password">Confirm new password</Label>
+                <Input
+                  id="profile-confirm-password"
+                  type="password"
+                  value={profileForm.confirmPassword}
+                  onChange={(e) => setProfileForm({ ...profileForm, confirmPassword: e.target.value })}
+                  placeholder="Repeat new password"
+                />
+              </div>
+              <Button type="button" onClick={handleProfileSave} disabled={profileSaving}>
+                {profileSaving ? 'Saving...' : 'Save profile'}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {isAdmin() && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Company Information</CardTitle>
+              <CardDescription>Update your company details</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Company Name</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
+              </div>
+              <Button type="button" onClick={handleSave} disabled={loading}>
+                {loading ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {isAdmin() && (
           <Card>
@@ -217,6 +367,7 @@ export function SettingsPage() {
           </Card>
         )}
 
+        {isAdmin() && (
         <Card>
           <CardHeader>
             <CardTitle>Appearance</CardTitle>
@@ -335,6 +486,7 @@ export function SettingsPage() {
             </Button>
           </CardContent>
         </Card>
+        )}
 
         {isAdmin() && (
           <Card className="border-teal-500/20">

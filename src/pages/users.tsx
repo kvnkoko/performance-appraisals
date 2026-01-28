@@ -301,15 +301,14 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
                   id="username"
                   {...register('username')}
                   placeholder="e.g., john.doe"
-                  disabled={isEditing}
                   className="h-11"
                 />
                 {errors.username && (
                   <p className="text-xs text-destructive mt-1">{errors.username.message}</p>
                 )}
-                {!isEditing && (
-                  <p className="text-xs text-muted-foreground">Username cannot be changed after creation</p>
-                )}
+                <p className="text-xs text-muted-foreground">
+                  Used to sign in. Staff can change it in Settings → Profile; admins can edit it here.
+                </p>
               </div>
 
               <div className="space-y-2">
