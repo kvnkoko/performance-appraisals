@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '@/contexts/app-context';
+import { useUser } from '@/contexts/user-context';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,15 +30,11 @@ type UnifiedItem =
 
 export function MyAppraisalsPage() {
   const { links, assignments, employees, templates, reviewPeriods, loading } = useApp();
-  const [employeeId, setEmployeeId] = useState<string | null>(null);
+  const { user, employee: contextEmployee, isAdmin } = useUser();
+  const employeeId = user?.employeeId ?? contextEmployee?.id ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('employeeId') : null) ?? null;
   const [filter, setFilter] = useState<FilterType>('pending');
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
-
-  useEffect(() => {
-    const stored = localStorage.getItem('employeeId');
-    if (stored) setEmployeeId(stored);
-  }, []);
 
   const isLinkExpired = (expiresAt: string | null) => expiresAt != null && new Date(expiresAt) < new Date();
   const isLinkExpiringSoon = (expiresAt: string | null) => {
@@ -120,6 +117,30 @@ export function MyAppraisalsPage() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAdmin() && !employeeId) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="page-title text-foreground">My Appraisals</h1>
+          <p className="page-subtitle text-muted-foreground">View and complete your assigned reviews</p>
+        </div>
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+          <CardContent className="pt-6 pb-6">
+            <div className="flex items-start gap-3">
+              <Warning size={24} weight="duotone" className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <h2 className="font-semibold text-foreground mb-1">Account not linked to employee profile</h2>
+                <p className="text-sm text-muted-foreground">
+                  Your account is not linked to an employee profile. Please ask your administrator to link your user account to your employee record (Users page) so you can see your appraisal forms.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '@/contexts/app-context';
+import { useUser } from '@/contexts/user-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { 
@@ -10,27 +10,17 @@ import {
   ArrowRight,
   ChartLineUp,
   Calendar,
-  Buildings
+  Buildings,
+  Warning
 } from 'phosphor-react';
 import { formatDate } from '@/lib/utils';
 import type { AppraisalLink, Employee } from '@/types';
 
 export function EmployeeDashboardPage() {
   const { links, employees, appraisals, reviewPeriods, assignments, loading } = useApp();
-  const [employeeId, setEmployeeId] = useState<string | null>(null);
-  const [employee, setEmployee] = useState<Employee | null>(null);
-
-  useEffect(() => {
-    // Get employee ID from localStorage (set during login)
-    const storedEmployeeId = localStorage.getItem('employeeId');
-    if (storedEmployeeId) {
-      setEmployeeId(storedEmployeeId);
-      const emp = employees.find(e => e.id === storedEmployeeId);
-      if (emp) {
-        setEmployee(emp);
-      }
-    }
-  }, [employees]);
+  const { user, employee: contextEmployee, isAdmin } = useUser();
+  const employeeId = user?.employeeId ?? contextEmployee?.id ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('employeeId') : null) ?? null;
+  const employee = employeeId ? (employees.find(e => e.id === employeeId) ?? contextEmployee ?? null) : null;
 
   // Get appraisal links assigned to this employee (as appraiser)
   const myPendingLinks = links.filter(link => {
@@ -67,6 +57,30 @@ export function EmployeeDashboardPage() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-muted-foreground">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAdmin() && !employeeId) {
+    return (
+      <div className="space-y-6">
+        <div className="space-y-1">
+          <h1 className="page-title text-foreground">Welcome back, {userName}!</h1>
+          <p className="page-subtitle text-muted-foreground">Your personal appraisal dashboard</p>
+        </div>
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+          <CardContent className="pt-6 pb-6">
+            <div className="flex items-start gap-3">
+              <Warning size={24} weight="duotone" className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <h2 className="font-semibold text-foreground mb-1">Account not linked to employee profile</h2>
+                <p className="text-sm text-muted-foreground">
+                  Your account is not linked to an employee profile. Please ask your administrator to link your user account to your employee record (Users page) so you can see your appraisal forms.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }

@@ -193,6 +193,18 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // When the current user is updated (e.g. admin links user to employee), refresh so this tab gets new user/employeeId.
+  useEffect(() => {
+    const handleUserUpdated = (e: CustomEvent<{ userId?: string; employeeId?: string }>) => {
+      const detail = e.detail;
+      if (detail?.userId && detail.userId === localStorage.getItem('userId')) {
+        refresh();
+      }
+    };
+    window.addEventListener('userUpdated', handleUserUpdated as EventListener);
+    return () => window.removeEventListener('userUpdated', handleUserUpdated as EventListener);
+  }, [refresh]);
+
   return (
     <UserContext.Provider value={{ 
       user, 

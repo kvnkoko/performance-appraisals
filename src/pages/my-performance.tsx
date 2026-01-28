@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useApp } from '@/contexts/app-context';
+import { useUser } from '@/contexts/user-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { 
   ChartLineUp, 
@@ -26,17 +27,11 @@ interface CategoryScore {
 
 export function MyPerformancePage() {
   const { appraisals, templates, reviewPeriods, employees, loading } = useApp();
-  const [employeeId, setEmployeeId] = useState<string | null>(null);
+  const { user, employee: contextEmployee } = useUser();
+  const employeeId = user?.employeeId ?? contextEmployee?.id ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('employeeId') : null) ?? null;
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
   const [narrativeSummary, setNarrativeSummary] = useState<PerformanceInsight | null>(null);
   const [narrativeLoading, setNarrativeLoading] = useState(false);
-
-  useEffect(() => {
-    const storedEmployeeId = localStorage.getItem('employeeId');
-    if (storedEmployeeId) {
-      setEmployeeId(storedEmployeeId);
-    }
-  }, []);
 
   // Get all completed appraisals for this employee (where they were appraised)
   const myAppraisals = useMemo(() => {
