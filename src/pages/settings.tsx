@@ -145,9 +145,17 @@ export function SettingsPage() {
       const counts = await clearAllAppraisalData();
       await refresh();
       setClearAppraisalDialogOpen(false);
+      const parts = [
+        `${counts.assignments} assignment(s)`,
+        `${counts.appraisals} submission(s)`,
+        `${counts.links} link(s)`,
+        `${counts.summaries} performance summary(ies)`,
+      ].filter((_, i) => [counts.assignments, counts.appraisals, counts.links, counts.summaries][i] > 0);
       toast({
         title: 'Appraisal data cleared',
-        description: `Removed ${counts.assignments} assignment(s), ${counts.appraisals} submission(s), and ${counts.links} link(s). Users, employees, teams, templates, and periods are unchanged.`,
+        description: parts.length
+          ? `Removed ${parts.join(', ')}. Users, employees, teams, templates, and periods are unchanged.`
+          : 'All appraisal data was already empty. Users, employees, teams, templates, and periods are unchanged.',
         variant: 'success',
       });
     } catch (error) {
@@ -410,7 +418,7 @@ export function SettingsPage() {
                 Start fresh (appraisal data only)
               </CardTitle>
               <CardDescription>
-                Remove all appraisal forms, completed submissions, and links. Users, employees, teams, templates, and review periods are kept.
+                Remove all appraisal forms, completed submissions, links, and cached performance summaries. Users, employees, teams, templates, and review periods are kept.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -433,7 +441,7 @@ export function SettingsPage() {
         onClose={() => setClearAppraisalDialogOpen(false)}
         onConfirm={handleClearAllAppraisalData}
         title="Clear all appraisal data?"
-        description="This will permanently remove all appraisal assignments, completed submissions, and links. Users, employees, teams, templates, and review periods will not be changed. You can create new forms and links after this."
+        description="This will permanently remove all appraisal assignments, completed submissions, links, and cached performance summaries (e.g. the 76% review view). Users, employees, teams, templates, and review periods will not be changed. You can create new forms and links after this."
         confirmText="Clear appraisal data"
         cancelText="Cancel"
         variant="danger"

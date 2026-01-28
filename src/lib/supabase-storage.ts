@@ -891,6 +891,23 @@ export async function saveSummaryToSupabase(summary: PerformanceSummary): Promis
   }
 }
 
+/** Delete all performance summaries from Supabase. Used when starting fresh. */
+export async function deleteAllSummariesFromSupabase(): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return;
+    const { error } = await supabase
+      .from(TABLES.PERFORMANCE_SUMMARIES)
+      .delete()
+      .neq('employee_id', '00000000-0000-0000-0000-000000000000');
+    if (error) throw error;
+  } catch (e) {
+    console.error('deleteAllSummariesFromSupabase:', e);
+    throw e;
+  }
+}
+
 // ============================================
 // TEAMS
 // ============================================

@@ -674,22 +674,33 @@ export async function deleteAssignmentsByPeriod(reviewPeriodId: string): Promise
 }
 
 /**
- * Clear all appraisal data (assignments, completed appraisals, links) so you can start fresh.
+ * Clear all appraisal data (assignments, completed appraisals, links, performance summaries) so you can start fresh.
  * Does NOT remove users, employees, teams, templates, review periods, or settings.
  */
-export async function clearAllAppraisalData(): Promise<{ assignments: number; appraisals: number; links: number }> {
+export async function clearAllAppraisalData(): Promise<{
+  assignments: number;
+  appraisals: number;
+  links: number;
+  summaries: number;
+}> {
   const [allAssignments, allAppraisals, allLinks] = await Promise.all([
     getAppraisalAssignments(),
     getAppraisals(),
     getLinks(),
   ]);
+  const database = await initDB();
+  let summariesCount = 0;
+  if (database.objectStoreNames.contains('summaries')) {
+    const allSummaries = await database.getAll('summaries');
+    summariesCount = allSummaries.length;
+  }
   const counts = {
     assignments: allAssignments.length,
     appraisals: allAppraisals.length,
     links: allLinks.length,
+    summaries: summariesCount,
   };
 
-  const database = await initDB();
   if (database.objectStoreNames.contains('appraisalAssignments')) {
     for (const a of allAssignments) await database.delete('appraisalAssignments', a.id);
   }
@@ -699,13 +710,22 @@ export async function clearAllAppraisalData(): Promise<{ assignments: number; ap
   if (database.objectStoreNames.contains('links')) {
     for (const l of allLinks) await database.delete('links', l.id);
   }
+  if (database.objectStoreNames.contains('summaries')) {
+    const allSummaries = await database.getAll('summaries');
+    for (const s of allSummaries) await database.delete('summaries', (s as { employeeId: string }).employeeId);
+  }
 
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
-      const { deleteAllAppraisalsFromSupabase, deleteAllLinksFromSupabase } = await import('./supabase-storage');
+      const {
+        deleteAllAppraisalsFromSupabase,
+        deleteAllLinksFromSupabase,
+        deleteAllSummariesFromSupabase,
+      } = await import('./supabase-storage');
       await deleteAllAppraisalsFromSupabase();
       await deleteAllLinksFromSupabase();
+      await deleteAllSummariesFromSupabase();
     }
   } catch (e) {
     console.warn('clearAllAppraisalData: Supabase clear failed', e);
