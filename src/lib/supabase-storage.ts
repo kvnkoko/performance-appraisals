@@ -6,6 +6,7 @@ import type {
   Employee, 
   Appraisal, 
   AppraisalLink, 
+  AppraisalAssignment,
   CompanySettings, 
   PerformanceSummary, 
   ReviewPeriod,
@@ -19,6 +20,7 @@ const TABLES = {
   EMPLOYEES: 'employees',
   APPRAISALS: 'appraisals',
   APPRAISAL_LINKS: 'appraisal_links',
+  APPRAISAL_ASSIGNMENTS: 'appraisal_assignments',
   SETTINGS: 'settings',
   REVIEW_PERIODS: 'review_periods',
   PERFORMANCE_SUMMARIES: 'performance_summaries',
@@ -640,6 +642,116 @@ export async function deleteAllLinksFromSupabase(): Promise<void> {
 }
 
 // ============================================
+// APPRAISAL ASSIGNMENTS
+// ============================================
+export async function getAppraisalAssignmentsFromSupabase(): Promise<AppraisalAssignment[]> {
+  if (!isSupabaseConfigured()) return [];
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return [];
+    const { data, error } = await supabase
+      .from(TABLES.APPRAISAL_ASSIGNMENTS)
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) {
+      if (error.code === '42P01' || error.message?.includes('does not exist')) {
+        return [];
+      }
+      console.error('Error fetching appraisal assignments from Supabase:', error);
+      return [];
+    }
+    return (data || []).map((a: Record<string, unknown>) => ({
+      id: a.id as string,
+      reviewPeriodId: a.review_period_id as string,
+      appraiserId: a.appraiser_id as string,
+      appraiserName: a.appraiser_name as string,
+      employeeId: a.employee_id as string,
+      employeeName: a.employee_name as string,
+      relationshipType: a.relationship_type as AppraisalAssignment['relationshipType'],
+      templateId: a.template_id as string,
+      status: a.status as AppraisalAssignment['status'],
+      assignmentType: a.assignment_type as AppraisalAssignment['assignmentType'],
+      linkToken: a.link_token as string | undefined,
+      createdAt: a.created_at as string,
+      dueDate: a.due_date as string | undefined,
+    }));
+  } catch (e) {
+    console.error('getAppraisalAssignmentsFromSupabase:', e);
+    return [];
+  }
+}
+
+export async function saveAppraisalAssignmentToSupabase(assignment: AppraisalAssignment): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return;
+    const { error } = await supabase
+      .from(TABLES.APPRAISAL_ASSIGNMENTS)
+      .upsert({
+        id: assignment.id,
+        review_period_id: assignment.reviewPeriodId,
+        appraiser_id: assignment.appraiserId,
+        appraiser_name: assignment.appraiserName,
+        employee_id: assignment.employeeId,
+        employee_name: assignment.employeeName,
+        relationship_type: assignment.relationshipType,
+        template_id: assignment.templateId,
+        status: assignment.status,
+        assignment_type: assignment.assignmentType,
+        link_token: assignment.linkToken ?? null,
+        created_at: assignment.createdAt,
+        due_date: assignment.dueDate ?? null,
+      }, { onConflict: 'id' });
+    if (error) throw error;
+  } catch (e) {
+    console.error('saveAppraisalAssignmentToSupabase:', e);
+    throw e;
+  }
+}
+
+export async function deleteAppraisalAssignmentFromSupabase(id: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return;
+    const { error } = await supabase.from(TABLES.APPRAISAL_ASSIGNMENTS).delete().eq('id', id);
+    if (error) throw error;
+  } catch (e) {
+    console.error('deleteAppraisalAssignmentFromSupabase:', e);
+    throw e;
+  }
+}
+
+/** Delete all appraisal assignments for a review period from Supabase. */
+export async function deleteAssignmentsByPeriodFromSupabase(reviewPeriodId: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return;
+    const { error } = await supabase.from(TABLES.APPRAISAL_ASSIGNMENTS).delete().eq('review_period_id', reviewPeriodId);
+    if (error) throw error;
+  } catch (e) {
+    console.error('deleteAssignmentsByPeriodFromSupabase:', e);
+    throw e;
+  }
+}
+
+/** Delete all appraisal assignments from Supabase. Used when starting fresh. */
+export async function deleteAllAssignmentsFromSupabase(): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return;
+    const { error } = await supabase.from(TABLES.APPRAISAL_ASSIGNMENTS).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (error) throw error;
+  } catch (e) {
+    console.error('deleteAllAssignmentsFromSupabase:', e);
+    throw e;
+  }
+}
+
+// ============================================
 // SETTINGS
 // ============================================
 export async function getSettingsFromSupabase(): Promise<CompanySettings | null> {
@@ -800,7 +912,13 @@ export async function deleteReviewPeriodFromSupabase(id: string): Promise<void> 
     const supabase = await getSupabaseClient();
     if (!supabase) throw new Error('Supabase client not available');
     
-    // Cascade: delete links and appraisals for this period first
+    // Cascade: delete assignments, links, and appraisals for this period first
+    const { error: assignmentsErr } = await supabase
+      .from(TABLES.APPRAISAL_ASSIGNMENTS)
+      .delete()
+      .eq('review_period_id', id);
+    if (assignmentsErr) console.warn('deleteReviewPeriodFromSupabase: assignments cascade', assignmentsErr);
+
     const { error: linksErr } = await supabase
       .from(TABLES.APPRAISAL_LINKS)
       .delete()

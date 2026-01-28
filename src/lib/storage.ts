@@ -616,9 +616,37 @@ export async function deleteLink(id: string): Promise<void> {
   await database.delete('links', id);
 }
 
-// Appraisal Assignments (auto + manual) – IndexedDB only for now; Supabase can be added later
+// Appraisal Assignments (auto + manual) – Supabase as source of truth when configured; else IndexedDB
 export async function getAppraisalAssignments(): Promise<AppraisalAssignment[]> {
   const database = await initDB();
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getAppraisalAssignmentsFromSupabase, saveAppraisalAssignmentToSupabase } = await import('./supabase-storage');
+      let list = await getAppraisalAssignmentsFromSupabase();
+      if (database.objectStoreNames.contains('appraisalAssignments')) {
+        const local = await database.getAll('appraisalAssignments');
+        if (list.length === 0 && local.length > 0) {
+          for (const a of local) {
+            try {
+              await saveAppraisalAssignmentToSupabase(a);
+            } catch {
+              // table may not exist yet; ignore
+            }
+          }
+          list = await getAppraisalAssignmentsFromSupabase();
+        }
+        const tx = database.transaction('appraisalAssignments', 'readwrite');
+        const store = tx.objectStore('appraisalAssignments');
+        await store.clear();
+        for (const a of list) await store.put(a);
+      }
+      if (import.meta.env.DEV) console.log('getAppraisalAssignments: Found', list.length, 'assignments in Supabase');
+      return list;
+    }
+  } catch (error) {
+    if (import.meta.env.DEV) console.log('getAppraisalAssignments: Supabase not available, using IndexedDB:', error);
+  }
   if (!database.objectStoreNames.contains('appraisalAssignments')) return [];
   return database.getAll('appraisalAssignments');
 }
@@ -645,14 +673,34 @@ export async function getAppraisalAssignmentsByAppraiser(appraiserId: string): P
 
 export async function saveAppraisalAssignment(assignment: AppraisalAssignment): Promise<void> {
   const database = await initDB();
-  if (!database.objectStoreNames.contains('appraisalAssignments')) return;
-  await database.put('appraisalAssignments', assignment);
+  if (database.objectStoreNames.contains('appraisalAssignments')) {
+    await database.put('appraisalAssignments', assignment);
+  }
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { saveAppraisalAssignmentToSupabase } = await import('./supabase-storage');
+      await saveAppraisalAssignmentToSupabase(assignment);
+    }
+  } catch (e) {
+    if (import.meta.env.DEV) console.warn('saveAppraisalAssignment: Supabase sync failed', e);
+  }
 }
 
 export async function saveAppraisalAssignments(assignments: AppraisalAssignment[]): Promise<void> {
   const database = await initDB();
-  if (!database.objectStoreNames.contains('appraisalAssignments')) return;
-  for (const a of assignments) await database.put('appraisalAssignments', a);
+  if (database.objectStoreNames.contains('appraisalAssignments')) {
+    for (const a of assignments) await database.put('appraisalAssignments', a);
+  }
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { saveAppraisalAssignmentToSupabase } = await import('./supabase-storage');
+      for (const a of assignments) await saveAppraisalAssignmentToSupabase(a);
+    }
+  } catch (e) {
+    if (import.meta.env.DEV) console.warn('saveAppraisalAssignments: Supabase sync failed', e);
+  }
 }
 
 export async function deleteAppraisalAssignment(id: string): Promise<void> {
@@ -660,15 +708,32 @@ export async function deleteAppraisalAssignment(id: string): Promise<void> {
   if (database.objectStoreNames.contains('appraisalAssignments')) {
     await database.delete('appraisalAssignments', id);
   }
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { deleteAppraisalAssignmentFromSupabase } = await import('./supabase-storage');
+      await deleteAppraisalAssignmentFromSupabase(id);
+    }
+  } catch (e) {
+    if (import.meta.env.DEV) console.warn('deleteAppraisalAssignment: Supabase sync failed', e);
+  }
 }
 
 /** Delete all appraisal assignments (forms) for a review period. Use to "start over" for that period. */
 export async function deleteAssignmentsByPeriod(reviewPeriodId: string): Promise<number> {
   const list = await getAppraisalAssignmentsForPeriod(reviewPeriodId);
   const database = await initDB();
-  if (!database.objectStoreNames.contains('appraisalAssignments')) return 0;
-  for (const a of list) {
-    await database.delete('appraisalAssignments', a.id);
+  if (database.objectStoreNames.contains('appraisalAssignments')) {
+    for (const a of list) await database.delete('appraisalAssignments', a.id);
+  }
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { deleteAssignmentsByPeriodFromSupabase } = await import('./supabase-storage');
+      await deleteAssignmentsByPeriodFromSupabase(reviewPeriodId);
+    }
+  } catch (e) {
+    if (import.meta.env.DEV) console.warn('deleteAssignmentsByPeriod: Supabase sync failed', e);
   }
   return list.length;
 }
@@ -722,7 +787,9 @@ export async function clearAllAppraisalData(): Promise<{
         deleteAllAppraisalsFromSupabase,
         deleteAllLinksFromSupabase,
         deleteAllSummariesFromSupabase,
+        deleteAllAssignmentsFromSupabase,
       } = await import('./supabase-storage');
+      await deleteAllAssignmentsFromSupabase();
       await deleteAllAppraisalsFromSupabase();
       await deleteAllLinksFromSupabase();
       await deleteAllSummariesFromSupabase();
