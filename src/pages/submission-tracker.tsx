@@ -173,41 +173,21 @@ export function SubmissionTrackerPage() {
     filterEmployeeId,
   ]);
 
-  const appraiserOptions = useMemo(() => {
-    if (assignments.length > 0) {
-      return Array.from(
-        new Map(assignments.map((a) => [a.appraiserId, { id: a.appraiserId, name: a.appraiserName }])).values()
-      ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    }
-    const employeeIds = new Set(employees.map((e) => e.id));
-    const nameById = Object.fromEntries(employees.map((e) => [e.id, e.name]));
-    const ids = new Set(
-      appraisals
-        .filter((a) => a.completedAt && employeeIds.has(a.appraiserId))
-        .map((a) => a.appraiserId)
-    );
-    return Array.from(ids)
-      .map((id) => ({ id, name: nameById[id] ?? id }))
-      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  }, [assignments, appraisals, employees]);
+  const appraiserOptions = useMemo(
+    () =>
+      [...employees]
+        .map((e) => ({ id: e.id, name: e.name }))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '')),
+    [employees]
+  );
 
-  const employeeOptions = useMemo(() => {
-    if (assignments.length > 0) {
-      return Array.from(
-        new Map(assignments.map((a) => [a.employeeId, { id: a.employeeId, name: a.employeeName }])).values()
-      ).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-    }
-    const employeeIds = new Set(employees.map((e) => e.id));
-    const nameById = Object.fromEntries(employees.map((e) => [e.id, e.name]));
-    const ids = new Set(
-      appraisals
-        .filter((a) => a.completedAt && employeeIds.has(a.employeeId))
-        .map((a) => a.employeeId)
-    );
-    return Array.from(ids)
-      .map((id) => ({ id, name: nameById[id] ?? id }))
-      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  }, [assignments, appraisals, employees]);
+  const employeeOptions = useMemo(
+    () =>
+      [...employees]
+        .map((e) => ({ id: e.id, name: e.name }))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || '')),
+    [employees]
+  );
 
   const sortedRows = useMemo(() => {
     const byPeriod = [...rows].sort((a, b) =>
