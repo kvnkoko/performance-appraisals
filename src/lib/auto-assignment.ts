@@ -1,9 +1,14 @@
 /**
  * Auto-assignment logic: preview and generate appraisal assignments from org structure.
- * Uses Reports To first; falls back to same-team (member's team = leader/exec's department) when Reports To is missing.
+ * Uses Reports To first; falls back to same-team (member's team = leader's department) when Reports To is missing.
+ * Executives are never appraised by anyone. Exec/leads (executives with teamId) only do Exec→Leader.
+ * Only pure leaders (hierarchy='leader') do Leader→Member, Leader→Leader, and are targets of Member→Leader and Exec→Leader.
  */
 import type { Employee, AppraisalAssignment, AssignmentRelationshipType } from '@/types';
 import { generateId } from '@/lib/utils';
+
+const isExecutive = (e: Employee): boolean => e.hierarchy === 'executive';
+const isPureLeader = (e: Employee): boolean => e.hierarchy === 'leader';
 
 export interface AutoAssignmentPreview {
   leaderToMember: { appraiserId: string; appraiserName: string; employeeId: string; employeeName: string }[];
@@ -53,7 +58,13 @@ export function previewAutoAssignments(
   const execToLeader: AutoAssignmentPreview['execToLeader'] = [];
   const hrToAll: AutoAssignmentPreview['hrToAll'] = [];
 
-  const isManager = (e: Employee) => e.hierarchy === 'leader' || e.hierarchy === 'executive';
+  // Only pure leaders do Leader→Member; executives (including exec/leads) do not.
+  const managersWithNoReports = employees.filter(
+    (e) => isPureLeader(e) && countDirectReports(e.id, e.teamId, employees) === 0
+  );
+  if (managersWithNoReports.length > 0) {
+    warnings.push(`${managersWithNoReports.length} leader(s) have no direct reports (set "Reports To" on members, or put members in the same team).`);
+  }
 
   // Members with neither Reports To nor team get skipped
   const membersNoReportNoTeam = employees.filter((e) => e.hierarchy === 'member' && !e.reportsTo && !e.teamId);
@@ -61,26 +72,21 @@ export function previewAutoAssignments(
     warnings.push(`${membersNoReportNoTeam.length} member(s) have no "Reports To" and no team – set one on the Employees tab to include them.`);
   }
 
-  const managersWithNoReports = employees.filter((e) => isManager(e) && countDirectReports(e.id, e.teamId, employees) === 0);
-  if (managersWithNoReports.length > 0) {
-    warnings.push(`${managersWithNoReports.length} manager(s) have no direct reports (set "Reports To" on members, or put members in the same team).`);
-  }
-
   const seenL2M = new Set<string>();
   const seenM2L = new Set<string>();
 
-  // RULE 1: Leader → Member — leaders (and execs leading a dept) see forms for all members of their department
-  // (a) From Reports To or same-team when member has no reportsTo; (b) then ensure every manager with teamId gets every member in that team
+  // RULE 1: Leader → Member — only pure leaders (hierarchy='leader') do this; exec/leads do NOT.
+  // (a) From Reports To or same-team; (b) ensure every pure-leader department head gets every member in that team.
   if (opts.includeLeaderToMember) {
     for (const member of employees) {
       if (member.hierarchy !== 'member') continue;
       let managers: Employee[] = [];
       if (member.reportsTo) {
         const m = byId.get(member.reportsTo);
-        if (m && isManager(m)) managers = [m];
+        if (m && isPureLeader(m)) managers = [m];
       }
       if (member.teamId) {
-        const teamManagers = employees.filter((e) => isManager(e) && e.teamId === member.teamId);
+        const teamManagers = employees.filter((e) => isPureLeader(e) && e.teamId === member.teamId);
         managers = [...new Map([...managers, ...teamManagers].map((e) => [e.id, e])).values()];
       }
       for (const manager of managers) {
@@ -95,9 +101,9 @@ export function previewAutoAssignments(
         });
       }
     }
-    // Ensure every department head gets all members in their department (even if reportsTo points elsewhere)
+    // Ensure every pure-leader department head gets all members in their department
     for (const manager of employees) {
-      if (!isManager(manager) || !manager.teamId) continue;
+      if (!isPureLeader(manager) || !manager.teamId) continue;
       const deptMembers = employees.filter((e) => e.hierarchy === 'member' && e.teamId === manager.teamId);
       for (const member of deptMembers) {
         const key = `${manager.id}:${member.id}`;
@@ -113,10 +119,12 @@ export function previewAutoAssignments(
     }
   }
 
-  // RULE 2: Member → Leader — each member sees form(s) for their leader(s) / department head(s) (upward feedback)
-  // Same pairs as Leader→Member reversed: member gives feedback to each manager who appraises them.
+  // RULE 2: Member → Leader — members only appraise pure leaders (never executives).
+  // Same pairs as Leader→Member reversed; target (employeeId) is always pure leader after RULE 1.
   if (opts.includeMemberToLeader) {
     for (const pair of leaderToMember) {
+      const leader = byId.get(pair.appraiserId);
+      if (!leader || !isPureLeader(leader)) continue; // defensive: never target executives
       const key = `${pair.employeeId}:${pair.appraiserId}`;
       if (seenM2L.has(key)) continue;
       seenM2L.add(key);
@@ -129,10 +137,9 @@ export function previewAutoAssignments(
     }
   }
 
-  // RULE 3: Leader → Leader — every leader appraises every other leader (company-wide peer review)
-  // All leaders in the company see a form for each other leader.
+  // RULE 3: Leader → Leader — only pure leaders; executives (including exec/leads) do NOT participate.
   if (opts.includeLeaderToLeader) {
-    const leaders = employees.filter((e) => e.hierarchy === 'leader');
+    const leaders = employees.filter(isPureLeader);
     for (const appraiser of leaders) {
       for (const target of leaders) {
         if (appraiser.id === target.id) continue;
@@ -149,11 +156,10 @@ export function previewAutoAssignments(
     }
   }
 
-  // RULE 4: Executive → Leader — every executive appraises every leader (org-wide)
-  // Each exec sees one appraisal form per leader in the company (N execs × M leaders = N×M assignments).
+  // RULE 4: Executive → Leader — executives appraise only pure leaders; executives are never targets.
   if (opts.includeExecToLeader) {
-    const execs = employees.filter((e) => e.hierarchy === 'executive');
-    const leadersForExec = employees.filter((e) => e.hierarchy === 'leader');
+    const execs = employees.filter(isExecutive);
+    const leadersForExec = employees.filter(isPureLeader);
     for (const exec of execs) {
       for (const leader of leadersForExec) {
         execToLeader.push({
@@ -164,15 +170,18 @@ export function previewAutoAssignments(
         });
       }
     }
+    if (execs.length > 0 && leadersForExec.length === 0) {
+      warnings.push('Executive→Leader: No pure leaders in the company. Executives have no one to appraise.');
+    }
     if (execs.length > 0 && leadersForExec.length > 0 && execToLeader.length === 0) {
       warnings.push('No Executive→Leader pairs: add at least one Leader and one Executive.');
     }
   }
 
-  // RULE 5: HR → All — each HR employee appraises ALL non-HR employees (no HR→HR)
+  // RULE 5: HR → All — HR appraises non-HR employees; executives are never targets.
   if (opts.includeHrToAll) {
     const hrStaff = employees.filter((e) => e.hierarchy === 'hr');
-    const allOthers = employees.filter((e) => e.hierarchy !== 'hr');
+    const allOthers = employees.filter((e) => e.hierarchy !== 'hr' && !isExecutive(e));
     for (const hrPerson of hrStaff) {
       for (const employee of allOthers) {
         hrToAll.push({
@@ -184,7 +193,7 @@ export function previewAutoAssignments(
       }
     }
     if (hrStaff.length > 0 && allOthers.length === 0) {
-      warnings.push('HR→All: No non-HR employees to appraise. Add members, leaders, or executives.');
+      warnings.push('HR→All: No appraisable employees (only HR and executives). Add members or leaders.');
     }
     if (hrStaff.length === 0 && opts.includeHrToAll) {
       warnings.push('HR→All: No HR employees in the system. Add employees with hierarchy "HR" to include HR reviews.');
