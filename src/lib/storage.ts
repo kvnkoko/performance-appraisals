@@ -827,11 +827,12 @@ export async function getSettings(): Promise<CompanySettings> {
       const { getSettingsFromSupabase } = await import('./supabase-storage');
       const settings = await getSettingsFromSupabase();
       if (settings) {
-        const toStore = { ...settings, key: 'company' } as CompanySettings & { key: string };
+        const merged = { ...defaultSettings, ...settings };
+        const toStore = { ...merged, key: 'company' } as CompanySettings & { key: string };
         if (database.objectStoreNames.contains('settings')) {
           await database.put('settings', toStore as any);
         }
-        return settings;
+        return merged as CompanySettings;
       }
     }
   } catch (error) {

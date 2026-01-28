@@ -71,13 +71,13 @@ export async function generatePerformanceSummary(
           const response = appraisal.responses.find((r) => r.questionId === item.id);
           if (!response) return;
 
-          // Use category name + item text as key, or just item text if no category name
-          const key = item.text.toLowerCase().substring(0, 100); // Limit length for key
-          const displayName = item.categoryName 
-            ? `${category.categoryName}: ${item.categoryName || item.text.substring(0, 50)}`
-            : category.categoryName 
-            ? `${category.categoryName}: ${item.text.substring(0, 50)}`
-            : item.text.substring(0, 50);
+          // Use category name + item text as key for grouping; full names for display (no truncation)
+          const key = item.text.toLowerCase().substring(0, 100);
+          const displayName = item.categoryName
+            ? `${category.categoryName}: ${item.categoryName || item.text}`
+            : category.categoryName
+            ? `${category.categoryName}: ${item.text}`
+            : item.text;
 
           if (!questionScores[key]) {
             questionScores[key] = { total: 0, max: 0, count: 0, categoryName: displayName };
@@ -132,25 +132,23 @@ export async function generatePerformanceSummary(
     }))
     .sort((a, b) => b.percentage - a.percentage);
 
-  // Identify strengths (top 2-3)
+  // Identify strengths (top 2-3) – use full category/item names (no truncation)
   const strengths = questionPercentages
     .filter((q) => q.percentage >= 75)
     .slice(0, 3)
     .map((q) => {
       const phrase = STRENGTH_PHRASES[Math.floor(Math.random() * STRENGTH_PHRASES.length)];
-      const displayName = q.name.length > 60 ? q.name.substring(0, 60) + '...' : q.name;
-      return `${phrase} ${displayName} (${Math.round(q.percentage)}%)`;
+      return `${phrase} ${q.name} (${Math.round(q.percentage)}%)`;
     });
 
-  // Identify improvements (bottom 2-3)
+  // Identify improvements (bottom 2-3) – use full category/item names (no truncation)
   const improvements = questionPercentages
     .filter((q) => q.percentage < 75)
     .slice(-3)
     .reverse()
     .map((q) => {
       const phrase = IMPROVEMENT_PHRASES[Math.floor(Math.random() * IMPROVEMENT_PHRASES.length)];
-      const displayName = q.name.length > 60 ? q.name.substring(0, 60) + '...' : q.name;
-      return `${phrase} ${displayName} (${Math.round(q.percentage)}%)`;
+      return `${phrase} ${q.name} (${Math.round(q.percentage)}%)`;
     });
 
   // Generate narrative

@@ -136,6 +136,8 @@ CREATE TABLE IF NOT EXISTS settings (
   admin_pin TEXT NOT NULL,
   accent_color TEXT NOT NULL,
   theme TEXT NOT NULL CHECK (theme IN ('light', 'dark', 'system')),
+  hr_score_weight INTEGER DEFAULT 30,
+  require_hr_for_ranking BOOLEAN DEFAULT false,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 

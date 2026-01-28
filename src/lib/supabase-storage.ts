@@ -776,6 +776,8 @@ export async function getSettingsFromSupabase(): Promise<CompanySettings | null>
       adminPin: data.admin_pin,
       accentColor: data.accent_color,
       theme: data.theme,
+      hrScoreWeight: data.hr_score_weight ?? 30,
+      requireHrForRanking: data.require_hr_for_ranking ?? false,
     };
   } catch (error) {
     console.error('Error in getSettingsFromSupabase:', error);
@@ -799,6 +801,8 @@ export async function saveSettingsToSupabase(settings: CompanySettings): Promise
         admin_pin: settings.adminPin,
         accent_color: settings.accentColor,
         theme: settings.theme,
+        hr_score_weight: settings.hrScoreWeight ?? 30,
+        require_hr_for_ranking: settings.requireHrForRanking ?? false,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'key' });
     
