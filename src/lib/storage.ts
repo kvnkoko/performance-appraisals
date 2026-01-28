@@ -828,6 +828,11 @@ export async function getSettings(): Promise<CompanySettings> {
       const settings = await getSettingsFromSupabase();
       if (settings) {
         const merged = { ...defaultSettings, ...settings };
+        const stored = await database.get('settings', 'company') as CompanySettings | undefined;
+        if (stored) {
+          merged.hrScoreWeight = stored.hrScoreWeight ?? merged.hrScoreWeight;
+          merged.requireHrForRanking = stored.requireHrForRanking ?? merged.requireHrForRanking;
+        }
         const toStore = { ...merged, key: 'company' } as CompanySettings & { key: string };
         if (database.objectStoreNames.contains('settings')) {
           await database.put('settings', toStore as any);

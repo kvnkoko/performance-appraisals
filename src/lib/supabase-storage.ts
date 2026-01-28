@@ -788,27 +788,47 @@ export async function getSettingsFromSupabase(): Promise<CompanySettings | null>
 export async function saveSettingsToSupabase(settings: CompanySettings): Promise<void> {
   if (!isSupabaseConfigured()) throw new Error('Supabase not configured');
   
-  try {
-    const supabase = await getSupabaseClient();
-    if (!supabase) throw new Error('Supabase client not available');
-    
-    const { error } = await supabase
-      .from(TABLES.SETTINGS)
-      .upsert({
-        key: 'company',
-        name: settings.name,
-        logo: settings.logo || null,
-        admin_pin: settings.adminPin,
-        accent_color: settings.accentColor,
-        theme: settings.theme,
-        hr_score_weight: settings.hrScoreWeight ?? 30,
-        require_hr_for_ranking: settings.requireHrForRanking ?? false,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'key' });
-    
-    if (error) throw error;
-  } catch (error) {
-    console.error('Error in saveSettingsToSupabase:', error);
+  const supabase = await getSupabaseClient();
+  if (!supabase) throw new Error('Supabase client not available');
+
+  const fullPayload = {
+    key: 'company',
+    name: settings.name,
+    logo: settings.logo || null,
+    admin_pin: settings.adminPin,
+    accent_color: settings.accentColor,
+    theme: settings.theme,
+    hr_score_weight: settings.hrScoreWeight ?? 30,
+    require_hr_for_ranking: settings.requireHrForRanking ?? false,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase
+    .from(TABLES.SETTINGS)
+    .upsert(fullPayload, { onConflict: 'key' });
+
+  if (error) {
+    const isMissingColumn =
+      error.code === 'PGRST204' ||
+      (error.message && (error.message.includes('hr_score_weight') || error.message.includes('require_hr_for_ranking')));
+    if (isMissingColumn) {
+      const { error: fallbackError } = await supabase
+        .from(TABLES.SETTINGS)
+        .upsert(
+          {
+            key: 'company',
+            name: settings.name,
+            logo: settings.logo || null,
+            admin_pin: settings.adminPin,
+            accent_color: settings.accentColor,
+            theme: settings.theme,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'key' }
+        );
+      if (fallbackError) throw fallbackError;
+      return;
+    }
     throw error;
   }
 }
