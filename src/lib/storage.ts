@@ -673,6 +673,47 @@ export async function deleteAssignmentsByPeriod(reviewPeriodId: string): Promise
   return list.length;
 }
 
+/**
+ * Clear all appraisal data (assignments, completed appraisals, links) so you can start fresh.
+ * Does NOT remove users, employees, teams, templates, review periods, or settings.
+ */
+export async function clearAllAppraisalData(): Promise<{ assignments: number; appraisals: number; links: number }> {
+  const [allAssignments, allAppraisals, allLinks] = await Promise.all([
+    getAppraisalAssignments(),
+    getAppraisals(),
+    getLinks(),
+  ]);
+  const counts = {
+    assignments: allAssignments.length,
+    appraisals: allAppraisals.length,
+    links: allLinks.length,
+  };
+
+  const database = await initDB();
+  if (database.objectStoreNames.contains('appraisalAssignments')) {
+    for (const a of allAssignments) await database.delete('appraisalAssignments', a.id);
+  }
+  if (database.objectStoreNames.contains('appraisals')) {
+    for (const a of allAppraisals) await database.delete('appraisals', a.id);
+  }
+  if (database.objectStoreNames.contains('links')) {
+    for (const l of allLinks) await database.delete('links', l.id);
+  }
+
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { deleteAllAppraisalsFromSupabase, deleteAllLinksFromSupabase } = await import('./supabase-storage');
+      await deleteAllAppraisalsFromSupabase();
+      await deleteAllLinksFromSupabase();
+    }
+  } catch (e) {
+    console.warn('clearAllAppraisalData: Supabase clear failed', e);
+  }
+
+  return counts;
+}
+
 // Settings - Supabase as single source of truth when configured; else IndexedDB
 const defaultSettings: CompanySettings = {
   name: 'Your Company',

@@ -611,6 +611,34 @@ export async function deleteLinkFromSupabase(id: string): Promise<void> {
   }
 }
 
+/** Delete all appraisals (submissions) from Supabase. Used when starting fresh. */
+export async function deleteAllAppraisalsFromSupabase(): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return;
+    const { error } = await supabase.from(TABLES.APPRAISALS).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (error) throw error;
+  } catch (e) {
+    console.error('deleteAllAppraisalsFromSupabase:', e);
+    throw e;
+  }
+}
+
+/** Delete all appraisal links from Supabase. Used when starting fresh. */
+export async function deleteAllLinksFromSupabase(): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return;
+    const { error } = await supabase.from(TABLES.APPRAISAL_LINKS).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (error) throw error;
+  } catch (e) {
+    console.error('deleteAllLinksFromSupabase:', e);
+    throw e;
+  }
+}
+
 // ============================================
 // SETTINGS
 // ============================================

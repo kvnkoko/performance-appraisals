@@ -4,12 +4,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Download, Moon, Sun, Monitor, SignOut, Check, CloudArrowDown, Buildings } from 'phosphor-react';
-import { saveSettings, exportData, importData, syncFromSupabase } from '@/lib/storage';
+import { Download, Moon, Sun, Monitor, SignOut, Check, CloudArrowDown, Buildings, Trash } from 'phosphor-react';
+import { saveSettings, exportData, importData, syncFromSupabase, clearAllAppraisalData } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { useUser } from '@/contexts/user-context';
 import { useTheme } from '@/hooks/use-theme';
 import { applyAccentColor } from '@/lib/utils';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 // Preset accent colors for easy selection
 const PRESET_COLORS = [
@@ -39,6 +40,8 @@ export function SettingsPage() {
   });
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [clearAppraisalDialogOpen, setClearAppraisalDialogOpen] = useState(false);
+  const [clearingAppraisals, setClearingAppraisals] = useState(false);
 
   useEffect(() => {
     setFormData({
@@ -136,6 +139,24 @@ export function SettingsPage() {
     window.location.href = '/auth';
   };
 
+  const handleClearAllAppraisalData = async () => {
+    setClearingAppraisals(true);
+    try {
+      const counts = await clearAllAppraisalData();
+      await refresh();
+      setClearAppraisalDialogOpen(false);
+      toast({
+        title: 'Appraisal data cleared',
+        description: `Removed ${counts.assignments} assignment(s), ${counts.appraisals} submission(s), and ${counts.links} link(s). Users, employees, teams, templates, and periods are unchanged.`,
+        variant: 'success',
+      });
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to clear appraisal data.', variant: 'error' });
+    } finally {
+      setClearingAppraisals(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div>
@@ -164,27 +185,29 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Security</CardTitle>
-            <CardDescription>Manage admin access</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="pin">Admin PIN</Label>
-              <Input
-                id="pin"
-                type="password"
-                value={formData.adminPin}
-                onChange={(e) => setFormData({ ...formData, adminPin: e.target.value })}
-                placeholder="Enter new PIN"
-              />
-            </div>
-            <Button onClick={handleSave} disabled={loading}>
-              {loading ? 'Saving...' : 'Update PIN'}
-            </Button>
-          </CardContent>
-        </Card>
+        {isAdmin() && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Security</CardTitle>
+              <CardDescription>Manage admin access (admin only)</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="pin">Admin PIN</Label>
+                <Input
+                  id="pin"
+                  type="password"
+                  value={formData.adminPin}
+                  onChange={(e) => setFormData({ ...formData, adminPin: e.target.value })}
+                  placeholder="Enter new PIN"
+                />
+              </div>
+              <Button onClick={handleSave} disabled={loading}>
+                {loading ? 'Saving...' : 'Update PIN'}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>
@@ -378,7 +401,44 @@ export function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {isAdmin() && (
+          <Card className="border-destructive/30">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-destructive">
+                <Trash size={20} weight="duotone" />
+                Start fresh (appraisal data only)
+              </CardTitle>
+              <CardDescription>
+                Remove all appraisal forms, completed submissions, and links. Users, employees, teams, templates, and review periods are kept.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                type="button"
+                variant="outline"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/50"
+                onClick={() => setClearAppraisalDialogOpen(true)}
+              >
+                <Trash size={18} weight="duotone" className="mr-2" />
+                Clear all appraisal data
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
+
+      <ConfirmDialog
+        open={clearAppraisalDialogOpen}
+        onClose={() => setClearAppraisalDialogOpen(false)}
+        onConfirm={handleClearAllAppraisalData}
+        title="Clear all appraisal data?"
+        description="This will permanently remove all appraisal assignments, completed submissions, and links. Users, employees, teams, templates, and review periods will not be changed. You can create new forms and links after this."
+        confirmText="Clear appraisal data"
+        cancelText="Cancel"
+        variant="danger"
+        loading={clearingAppraisals}
+      />
 
       <Card>
         <CardHeader>
