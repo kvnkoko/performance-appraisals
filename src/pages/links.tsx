@@ -247,11 +247,11 @@ export function LinksPage() {
   const existingForPeriod = selectedPeriod ? assignments.filter((a) => a.reviewPeriodId === selectedPeriod).length : 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="page-title text-foreground">Send Appraisals</h1>
-          <p className="text-muted-foreground mt-2">Create appraisal links or auto-assign from org structure</p>
+          <p className="page-subtitle text-muted-foreground">Create appraisal links or auto-assign from org structure</p>
         </div>
         {mode === 'manual' && (
           <Button type="button" onClick={() => setDialogOpen(true)}>

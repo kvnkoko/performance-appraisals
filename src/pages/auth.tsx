@@ -244,7 +244,7 @@ export function AuthPage() {
   // Password change screen
   if (showPasswordChange && currentUser) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="flex min-h-screen items-center justify-center bg-background p-4 pb-10 sm:pb-12">
         <Card className="w-full max-w-md border-border/50 shadow-dropdown">
           <CardHeader className="space-y-1 text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-chart-4/12">
@@ -300,7 +300,7 @@ export function AuthPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="flex min-h-screen items-center justify-center bg-background p-4 pb-10 sm:pb-12">
       <Card className="w-full max-w-md border-border/50 shadow-dropdown">
         <CardHeader className="space-y-1 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-accent/10">

@@ -82,11 +82,11 @@ export function HistoricalReviewsPage() {
   const years = [...new Set(periods.map((p) => p.year))].sort((a, b) => b - a);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="page-title text-foreground">Historical Reviews</h1>
-          <p className="text-muted-foreground mt-2">View performance data across all review periods</p>
+          <p className="page-subtitle text-muted-foreground">View performance data across all review periods</p>
         </div>
       </div>
 

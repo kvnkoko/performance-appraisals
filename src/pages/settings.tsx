@@ -246,10 +246,10 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div>
         <h1 className="page-title text-foreground">Settings</h1>
-        <p className="text-muted-foreground mt-2">Manage your application settings</p>
+        <p className="page-subtitle text-muted-foreground">Manage your application settings</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">

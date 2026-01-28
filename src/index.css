@@ -179,6 +179,21 @@
 }
 
 @layer utilities {
+  /* Page content: ensure adequate footer space when used as wrapper (layout already provides main padding) */
+  .page-content-bottom {
+    padding-bottom: 3rem;
+  }
+  @media (min-width: 640px) {
+    .page-content-bottom {
+      padding-bottom: 4rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    .page-content-bottom {
+      padding-bottom: 5rem;
+    }
+  }
+
   .transition-smooth {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }

@@ -109,11 +109,11 @@ export function TemplatesPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="page-title text-foreground">Templates</h1>
-          <p className="page-subtitle">Manage your appraisal templates</p>
+          <p className="page-subtitle text-muted-foreground">Manage your appraisal templates</p>
         </div>
         <Button type="button" onClick={() => { setEditingTemplate(null); setDialogOpen(true); }}>
           <Plus size={18} weight="duotone" className="mr-2" />
