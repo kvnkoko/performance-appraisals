@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/contexts/app-context';
+import { useUser } from '@/contexts/user-context';
 import { PeriodSelector } from '@/components/periods/period-selector';
 import { getReviewPeriod, saveAppraisalAssignments, deleteAssignmentsByPeriod } from '@/lib/storage';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,7 +9,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { Plus, Copy, Trash, LinkSimple, CheckCircle, Clock, FileText, Lightning, Warning, CaretRight, CaretLeft, ListChecks, TrashSimple } from 'phosphor-react';
+import { Plus, Copy, Trash, LinkSimple, CheckCircle, Clock, FileText, Lightning, Warning, CaretRight, CaretLeft, ListChecks, TrashSimple, Info } from 'phosphor-react';
 import { generateToken, generateId } from '@/lib/utils';
 import { saveLink, deleteLink } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
@@ -22,6 +23,7 @@ type AutoWizardStep = 1 | 2 | 3;
 
 export function LinksPage() {
   const { employees, templates, links, activePeriods, assignments, reviewPeriods, refresh } = useApp();
+  const { isAdmin } = useUser();
   const [mode, setMode] = useState<LinkMode>('manual');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState('');
@@ -258,6 +260,18 @@ export function LinksPage() {
           </Button>
         )}
       </div>
+
+      {isAdmin() && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="py-3 px-4 flex items-center gap-3">
+            <Info size={20} weight="duotone" className="text-primary flex-shrink-0" />
+            <div className="text-sm">
+              <span className="font-medium text-foreground">Sync forms to all staff:</span>
+              <span className="text-muted-foreground ml-1">Run <code className="text-xs bg-muted px-1.5 py-0.5 rounded">supabase-appraisal-assignments.sql</code> in Supabase Dashboard → SQL Editor so execs and staff see their appraisal forms on every device.</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Forms for this period: view all + bulk remove */}
       <Card>

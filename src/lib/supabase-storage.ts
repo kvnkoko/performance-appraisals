@@ -654,8 +654,9 @@ export async function getAppraisalAssignmentsFromSupabase(): Promise<AppraisalAs
       .select('*')
       .order('created_at', { ascending: false });
     if (error) {
-      if (error.code === '42P01' || error.message?.includes('does not exist')) {
-        return [];
+      if (error.code === '42P01' || error.code === 'PGRST205' || error.message?.includes('does not exist') || error.message?.includes('appraisal_assignments')) {
+        if (import.meta.env.DEV) console.info('appraisal_assignments table not in Supabase; run supabase-appraisal-assignments.sql in SQL Editor.');
+        throw new Error('TABLE_MISSING');
       }
       console.error('Error fetching appraisal assignments from Supabase:', error);
       return [];

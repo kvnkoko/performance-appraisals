@@ -619,35 +619,43 @@ export async function deleteLink(id: string): Promise<void> {
 // Appraisal Assignments (auto + manual) – Supabase as source of truth when configured; else IndexedDB
 export async function getAppraisalAssignments(): Promise<AppraisalAssignment[]> {
   const database = await initDB();
+  if (!database.objectStoreNames.contains('appraisalAssignments')) return [];
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { getAppraisalAssignmentsFromSupabase, saveAppraisalAssignmentToSupabase } = await import('./supabase-storage');
-      let list = await getAppraisalAssignmentsFromSupabase();
-      if (database.objectStoreNames.contains('appraisalAssignments')) {
-        const local = await database.getAll('appraisalAssignments');
-        if (list.length === 0 && local.length > 0) {
-          for (const a of local) {
-            try {
-              await saveAppraisalAssignmentToSupabase(a);
-            } catch {
-              // table may not exist yet; ignore
-            }
-          }
-          list = await getAppraisalAssignmentsFromSupabase();
+      let list: AppraisalAssignment[];
+      try {
+        list = await getAppraisalAssignmentsFromSupabase();
+      } catch (e: unknown) {
+        if (e instanceof Error && e.message === 'TABLE_MISSING') {
+          const local = await database.getAll('appraisalAssignments');
+          if (import.meta.env.DEV) console.info('getAppraisalAssignments: appraisal_assignments table missing in Supabase, using local data. Run supabase-appraisal-assignments.sql to sync to all staff.');
+          return local;
         }
-        const tx = database.transaction('appraisalAssignments', 'readwrite');
-        const store = tx.objectStore('appraisalAssignments');
-        await store.clear();
-        for (const a of list) await store.put(a);
+        throw e;
       }
+      const local = await database.getAll('appraisalAssignments');
+      if (list.length === 0 && local.length > 0) {
+        for (const a of local) {
+          try {
+            await saveAppraisalAssignmentToSupabase(a);
+          } catch {
+            // table may not exist or other error; skip
+          }
+        }
+        list = await getAppraisalAssignmentsFromSupabase();
+      }
+      const tx = database.transaction('appraisalAssignments', 'readwrite');
+      const store = tx.objectStore('appraisalAssignments');
+      await store.clear();
+      for (const a of list) await store.put(a);
       if (import.meta.env.DEV) console.log('getAppraisalAssignments: Found', list.length, 'assignments in Supabase');
       return list;
     }
   } catch (error) {
     if (import.meta.env.DEV) console.log('getAppraisalAssignments: Supabase not available, using IndexedDB:', error);
   }
-  if (!database.objectStoreNames.contains('appraisalAssignments')) return [];
   return database.getAll('appraisalAssignments');
 }
 
