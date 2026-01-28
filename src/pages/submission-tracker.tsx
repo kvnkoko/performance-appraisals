@@ -139,17 +139,49 @@ export function SubmissionTrackerPage() {
   const [page, setPage] = useState(0);
 
   const rows = useMemo(() => {
-    if (assignments.length > 0) {
-      return buildRows(
-        assignments,
-        appraisals,
-        templates,
-        reviewPeriods,
-        filterPeriodId,
-        filterTemplateId,
-        filterAppraiserId,
-        filterEmployeeId
+    const assignmentRows =
+      assignments.length > 0
+        ? buildRows(
+            assignments,
+            appraisals,
+            templates,
+            reviewPeriods,
+            filterPeriodId,
+            filterTemplateId,
+            filterAppraiserId,
+            filterEmployeeId
+          )
+        : [];
+
+    const employeeIds = new Set(employees.map((e) => e.id));
+    const hasMatchingAssignment = (a: Appraisal) =>
+      assignments.some(
+        (as) =>
+          as.appraiserId === a.appraiserId &&
+          as.employeeId === a.employeeId &&
+          as.templateId === a.templateId &&
+          as.reviewPeriodId === a.reviewPeriodId
       );
+    const orphanAppraisals = appraisals.filter(
+      (a) =>
+        a.completedAt != null &&
+        employeeIds.has(a.employeeId) &&
+        employeeIds.has(a.appraiserId) &&
+        !hasMatchingAssignment(a)
+    );
+    const orphanRows = buildRowsFromAppraisals(
+      orphanAppraisals,
+      templates,
+      reviewPeriods,
+      employees,
+      filterPeriodId,
+      filterTemplateId,
+      filterAppraiserId,
+      filterEmployeeId
+    );
+
+    if (assignmentRows.length > 0 || orphanRows.length > 0) {
+      return [...assignmentRows, ...orphanRows];
     }
     return buildRowsFromAppraisals(
       appraisals,
