@@ -1,14 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { PeriodSelector } from '@/components/periods/period-selector';
-import { getReviewPeriod, saveAppraisalAssignments } from '@/lib/storage';
+import { getReviewPeriod, saveAppraisalAssignments, deleteAssignmentsByPeriod } from '@/lib/storage';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { Plus, Copy, Trash, LinkSimple, CheckCircle, Clock, FileText, Lightning, Warning, CaretRight, CaretLeft } from 'phosphor-react';
+import { Plus, Copy, Trash, LinkSimple, CheckCircle, Clock, FileText, Lightning, Warning, CaretRight, CaretLeft, ListChecks, TrashSimple } from 'phosphor-react';
 import { generateToken, generateId } from '@/lib/utils';
 import { saveLink, deleteLink } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
@@ -21,7 +21,7 @@ type LinkMode = 'manual' | 'auto';
 type AutoWizardStep = 1 | 2 | 3;
 
 export function LinksPage() {
-  const { employees, templates, links, activePeriods, assignments, refresh } = useApp();
+  const { employees, templates, links, activePeriods, assignments, reviewPeriods, refresh } = useApp();
   const [mode, setMode] = useState<LinkMode>('manual');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState('');
@@ -34,6 +34,12 @@ export function LinksPage() {
     id: null,
   });
   const [deleting, setDeleting] = useState(false);
+  const [bulkRemoveConfirm, setBulkRemoveConfirm] = useState<{ open: boolean; periodId: string | null; periodName: string }>({
+    open: false,
+    periodId: null,
+    periodName: '',
+  });
+  const [bulkRemoving, setBulkRemoving] = useState(false);
   const { toast } = useToast();
 
   // Auto-assignment wizard state
@@ -212,6 +218,28 @@ export function LinksPage() {
     }
   };
 
+  const handleBulkRemoveConfirm = async () => {
+    if (!bulkRemoveConfirm.periodId) return;
+    setBulkRemoving(true);
+    try {
+      const count = await deleteAssignmentsByPeriod(bulkRemoveConfirm.periodId);
+      await refresh();
+      toast({ title: 'Success', description: `${count} appraisal form(s) removed. You can start over for this period.`, variant: 'success' });
+      setBulkRemoveConfirm({ open: false, periodId: null, periodName: '' });
+    } catch (error) {
+      console.error('Bulk remove error:', error);
+      toast({ title: 'Error', description: 'Failed to remove forms. Please try again.', variant: 'error' });
+    } finally {
+      setBulkRemoving(false);
+    }
+  };
+
+  const formsForPeriod = useMemo(
+    () => (selectedPeriod ? assignments.filter((a) => a.reviewPeriodId === selectedPeriod) : []),
+    [assignments, selectedPeriod]
+  );
+  const periodName = selectedPeriod ? reviewPeriods.find((p) => p.id === selectedPeriod)?.name ?? selectedPeriod : '';
+
   const activeLinks = links.filter((l) => !l.used && (!l.expiresAt || new Date(l.expiresAt) > new Date()));
   const usedLinks = links.filter((l) => l.used);
   const existingForPeriod = selectedPeriod ? assignments.filter((a) => a.reviewPeriodId === selectedPeriod).length : 0;
@@ -230,6 +258,109 @@ export function LinksPage() {
           </Button>
         )}
       </div>
+
+      {/* Forms for this period: view all + bulk remove */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <ListChecks size={20} weight="duotone" />
+            Forms for review period
+          </CardTitle>
+          <CardDescription>View all appraisal forms for a period or bulk remove to start over</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-muted-foreground">Period</Label>
+              <PeriodSelector
+                value={selectedPeriod || undefined}
+                onChange={setSelectedPeriod}
+                showActiveOnly={false}
+                showCreateOption={false}
+              />
+            </div>
+            {selectedPeriod && (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-muted-foreground">
+                  {formsForPeriod.length} form{formsForPeriod.length !== 1 ? 's' : ''} for <strong className="text-foreground">{periodName}</strong>
+                </span>
+                {formsForPeriod.length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive hover:border-destructive"
+                    onClick={() => setBulkRemoveConfirm({ open: true, periodId: selectedPeriod, periodName })}
+                  >
+                    <TrashSimple size={16} weight="duotone" className="mr-1.5" />
+                    Bulk remove all
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+          {selectedPeriod && (
+            <div className="rounded-lg border border-border/60 overflow-hidden">
+              {formsForPeriod.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">No appraisal forms for this period yet.</div>
+              ) : (
+                <div className="overflow-x-auto max-h-[320px] overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 sticky top-0">
+                      <tr>
+                        <th className="text-left font-medium py-2.5 px-3">Appraiser</th>
+                        <th className="text-left font-medium py-2.5 px-3">Employee</th>
+                        <th className="text-left font-medium py-2.5 px-3">Template</th>
+                        <th className="text-left font-medium py-2.5 px-3">Type</th>
+                        <th className="text-left font-medium py-2.5 px-3">Status</th>
+                        <th className="text-left font-medium py-2.5 px-3 w-20">Open</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {formsForPeriod.map((a) => {
+                        const template = templates.find((t) => t.id === a.templateId);
+                        const typeLabel =
+                          a.relationshipType === 'exec-to-leader'
+                            ? 'Exec→Leader'
+                            : a.relationshipType === 'leader-to-member'
+                              ? 'Leader→Member'
+                              : a.relationshipType === 'member-to-leader'
+                                ? 'Member→Leader'
+                                : a.relationshipType === 'leader-to-leader'
+                                  ? 'Leader→Leader'
+                                  : a.relationshipType === 'hr-to-all'
+                                    ? 'HR→All'
+                                    : a.relationshipType;
+                        const statusLabel = a.status === 'completed' ? 'Completed' : a.status === 'in-progress' ? 'In progress' : 'Pending';
+                        const formUrl = `/appraisal/assignment/${a.id}`;
+                        return (
+                          <tr key={a.id} className="border-t border-border/40 hover:bg-muted/30">
+                            <td className="py-2 px-3">{a.appraiserName}</td>
+                            <td className="py-2 px-3">{a.employeeName}</td>
+                            <td className="py-2 px-3">{template?.name ?? a.templateId}</td>
+                            <td className="py-2 px-3 text-muted-foreground">{typeLabel}</td>
+                            <td className="py-2 px-3">{statusLabel}</td>
+                            <td className="py-2 px-3">
+                              <a
+                                href={formUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline text-xs"
+                              >
+                                Open
+                              </a>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Mode toggle: Manual vs Auto */}
       <Card>
@@ -540,7 +671,7 @@ export function LinksPage() {
                       checked={includeLeaderToLeader}
                       onChange={(e) => setIncludeLeaderToLeader(e.target.checked)}
                     />
-                    <span className="text-sm">Leader → Leader (department heads peer, same or different departments)</span>
+                    <span className="text-sm">Leader → Leader (every leader appraises every other leader, company-wide)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -548,7 +679,7 @@ export function LinksPage() {
                       checked={includeExecToLeader}
                       onChange={(e) => setIncludeExecToLeader(e.target.checked)}
                     />
-                    <span className="text-sm">Executive → Leader (every executive appraises every leader)</span>
+                    <span className="text-sm">Executive → Leader (each exec sees one form per leader in the company)</span>
                   </label>
                   {employees.some((e) => e.hierarchy === 'hr') && (
                     <label className="flex items-center gap-2 cursor-pointer">
@@ -577,12 +708,12 @@ export function LinksPage() {
                       <div className="rounded-lg border bg-card p-3">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Leader → Leader</p>
                         <p className="text-2xl font-bold mt-0.5">{livePreview.leaderToLeader.length}</p>
-                        <p className="text-xs text-muted-foreground">Dept heads peer</p>
+                        <p className="text-xs text-muted-foreground">Every leader × every other leader</p>
                       </div>
                       <div className="rounded-lg border bg-card p-3">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Executive → Leader</p>
                         <p className="text-2xl font-bold mt-0.5">{livePreview.execToLeader.length}</p>
-                        <p className="text-xs text-muted-foreground">Every exec appraises every leader</p>
+                        <p className="text-xs text-muted-foreground">One form per leader for each exec</p>
                       </div>
                       {includeHrToAll && (
                         <div className="rounded-lg border border-teal-500/30 bg-teal-500/5 p-3">
@@ -653,7 +784,7 @@ export function LinksPage() {
                     </CardHeader>
                     <CardContent className="py-2">
                       <p className="text-2xl font-bold">{autoPreview.leaderToLeader.length}</p>
-                      <p className="text-xs text-muted-foreground">Dept heads peer</p>
+                      <p className="text-xs text-muted-foreground">Every leader × every other leader</p>
                     </CardContent>
                   </Card>
                   <Card>
@@ -662,7 +793,7 @@ export function LinksPage() {
                     </CardHeader>
                     <CardContent className="py-2">
                       <p className="text-2xl font-bold">{autoPreview.execToLeader.length}</p>
-                      <p className="text-xs text-muted-foreground">Every exec appraises every leader</p>
+                      <p className="text-xs text-muted-foreground">One form per leader for each exec</p>
                     </CardContent>
                   </Card>
                   {autoPreview.hrToAll.length > 0 && (
@@ -811,6 +942,18 @@ export function LinksPage() {
         cancelText="Cancel"
         variant="danger"
         loading={deleting}
+      />
+
+      <ConfirmDialog
+        open={bulkRemoveConfirm.open}
+        onClose={() => setBulkRemoveConfirm({ open: false, periodId: null, periodName: '' })}
+        onConfirm={handleBulkRemoveConfirm}
+        title="Bulk remove all forms"
+        description={`Remove all appraisal forms for "${bulkRemoveConfirm.periodName}"? You can start over and re-create links or auto-assign after this. This cannot be undone.`}
+        confirmText="Remove all forms"
+        cancelText="Cancel"
+        variant="danger"
+        loading={bulkRemoving}
       />
     </div>
   );

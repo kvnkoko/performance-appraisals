@@ -662,6 +662,17 @@ export async function deleteAppraisalAssignment(id: string): Promise<void> {
   }
 }
 
+/** Delete all appraisal assignments (forms) for a review period. Use to "start over" for that period. */
+export async function deleteAssignmentsByPeriod(reviewPeriodId: string): Promise<number> {
+  const list = await getAppraisalAssignmentsForPeriod(reviewPeriodId);
+  const database = await initDB();
+  if (!database.objectStoreNames.contains('appraisalAssignments')) return 0;
+  for (const a of list) {
+    await database.delete('appraisalAssignments', a.id);
+  }
+  return list.length;
+}
+
 // Settings - Supabase as single source of truth when configured; else IndexedDB
 const defaultSettings: CompanySettings = {
   name: 'Your Company',
@@ -857,19 +868,31 @@ export async function saveReviewPeriod(period: ReviewPeriod): Promise<void> {
 }
 
 export async function deleteReviewPeriod(id: string): Promise<void> {
+  const database = await initDB();
+
+  // Cascade: delete all assignments and links for this period first
+  if (database.objectStoreNames.contains('appraisalAssignments')) {
+    const assignments = await getAppraisalAssignmentsForPeriod(id);
+    for (const a of assignments) await database.delete('appraisalAssignments', a.id);
+  }
+  if (database.objectStoreNames.contains('links')) {
+    const allLinks = await database.getAll('links');
+    for (const l of allLinks) {
+      if (l.reviewPeriodId === id) await database.delete('links', l.id);
+    }
+  }
+
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { deleteReviewPeriodFromSupabase } = await import('./supabase-storage');
       await deleteReviewPeriodFromSupabase(id);
-      const database = await initDB();
       await database.delete('reviewPeriods', id);
       return;
     }
   } catch (error) {
     console.log('Supabase not available, using IndexedDB fallback');
   }
-  const database = await initDB();
   await database.delete('reviewPeriods', id);
 }
 

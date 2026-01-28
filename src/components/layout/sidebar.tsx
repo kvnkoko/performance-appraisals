@@ -85,9 +85,11 @@ export function Sidebar() {
   };
   
   const handleNavClick = (path: string, e: React.MouseEvent) => {
-    // Prevent navigation to admin routes for non-admin users
+    // Prevent navigation to admin-only routes for non-admin users.
+    // Allow routes that appear in both admin and employee nav (e.g. Settings).
     const isAdminRoute = adminNavItems.some(item => item.path === path);
-    if (isAdminRoute && !isAdmin) {
+    const isEmployeeRoute = employeeNavItems.some(item => item.path === path);
+    if (isAdminRoute && !isEmployeeRoute && !isAdmin) {
       e.preventDefault();
       navigate('/my-dashboard');
       return;

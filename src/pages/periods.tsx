@@ -228,7 +228,7 @@ export function PeriodsPage() {
         onClose={() => setDeleteConfirm({ open: false, id: null, name: '' })}
         onConfirm={handleDeleteConfirm}
         title="Delete Review Period"
-        description={`Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone and will remove all associated data.`}
+        description={`Are you sure you want to delete "${deleteConfirm.name}"? This will also delete all appraisal forms (assignments) and links for this period. This action cannot be undone.`}
         confirmText="Delete Period"
         cancelText="Cancel"
         variant="danger"

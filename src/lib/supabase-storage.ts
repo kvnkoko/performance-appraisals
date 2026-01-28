@@ -772,6 +772,19 @@ export async function deleteReviewPeriodFromSupabase(id: string): Promise<void> 
     const supabase = await getSupabaseClient();
     if (!supabase) throw new Error('Supabase client not available');
     
+    // Cascade: delete links and appraisals for this period first
+    const { error: linksErr } = await supabase
+      .from(TABLES.APPRAISAL_LINKS)
+      .delete()
+      .eq('review_period_id', id);
+    if (linksErr) console.warn('deleteReviewPeriodFromSupabase: links cascade', linksErr);
+    
+    const { error: appraisalsErr } = await supabase
+      .from(TABLES.APPRAISALS)
+      .delete()
+      .eq('review_period_id', id);
+    if (appraisalsErr) console.warn('deleteReviewPeriodFromSupabase: appraisals cascade', appraisalsErr);
+    
     const { error } = await supabase
       .from(TABLES.REVIEW_PERIODS)
       .delete()
