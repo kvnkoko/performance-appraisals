@@ -324,7 +324,7 @@ export function AppraisalFormPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 lg:pt-8 pb-12 lg:pb-16">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 lg:pt-8 pb-6 lg:pb-10">
         {/* Header */}
         <div className="flex items-start justify-between gap-4 mb-6 lg:mb-8">
           <div className="flex-1 text-center space-y-2 min-w-0">

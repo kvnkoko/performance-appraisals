@@ -123,7 +123,7 @@ export function MyAppraisalsPage() {
 
   if (!isAdmin() && !employeeId) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
         <div>
           <h1 className="page-title text-foreground">My Appraisals</h1>
           <p className="page-subtitle text-muted-foreground">View and complete your assigned reviews</p>
@@ -146,7 +146,7 @@ export function MyAppraisalsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
       <div>
         <h1 className="page-title text-foreground">My Appraisals</h1>
         <p className="text-muted-foreground mt-2">Reviews assigned to you (auto-assigned and special requests)</p>

@@ -255,7 +255,7 @@ export function LinksPage() {
   const existingForPeriod = selectedPeriod ? assignments.filter((a) => a.reviewPeriodId === selectedPeriod).length : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="page-title text-foreground">Send Appraisals</h1>

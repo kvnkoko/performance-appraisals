@@ -69,7 +69,7 @@ export function EmployeeDashboardPage() {
 
   if (!isAdmin() && !employeeId) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
         <div className="space-y-1">
           <h1 className="page-title text-foreground">Welcome back, {userName}!</h1>
           <p className="page-subtitle text-muted-foreground">Your personal appraisal dashboard</p>
@@ -92,7 +92,7 @@ export function EmployeeDashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
       {/* Welcome Header – award-worthy hierarchy */}
       <div className="space-y-1">
         <h1 className="page-title text-foreground">Welcome back, {userName}!</h1>

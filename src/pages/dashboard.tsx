@@ -102,7 +102,7 @@ export function Dashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
       {/* Header – award-worthy hierarchy */}
       <div className="space-y-1">
         <h1 className="page-title text-foreground">Dashboard</h1>

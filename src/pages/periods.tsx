@@ -87,7 +87,7 @@ export function PeriodsPage() {
   const years = [...new Set(periods.map((p) => p.year))].sort((a, b) => b - a);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="page-title text-foreground">Review Periods</h1>

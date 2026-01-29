@@ -113,7 +113,7 @@ export function TeamsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
       {/* Header – award-worthy hierarchy */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -263,7 +263,7 @@ export function TeamsPage() {
                         Members
                       </span>
                       <div className="flex flex-wrap gap-1">
-                        {members.slice(0, 3).map((member) => (
+                        {members.map((member) => (
                           <span 
                             key={member.id}
                             className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-muted"
@@ -271,11 +271,6 @@ export function TeamsPage() {
                             {member.name}
                           </span>
                         ))}
-                        {members.length > 3 && (
-                          <span className="text-xs text-muted-foreground">
-                            +{members.length - 3} more
-                          </span>
-                        )}
                       </div>
                     </div>
                   )}

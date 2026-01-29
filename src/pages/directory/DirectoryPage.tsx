@@ -54,7 +54,7 @@ export function DirectoryPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
       <header
         className={cn(
           'relative rounded-2xl overflow-hidden px-6 py-10',

@@ -139,7 +139,7 @@ export function ReviewsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
       {/* Header + Period selector */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>

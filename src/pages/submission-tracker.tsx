@@ -240,7 +240,7 @@ export function SubmissionTrackerPage() {
   const canNext = page < totalPages - 1;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
       <div className="space-y-1">
         <h1 className="page-title text-foreground flex items-center gap-2">
           <ListChecks size={28} weight="duotone" className="text-accent" />

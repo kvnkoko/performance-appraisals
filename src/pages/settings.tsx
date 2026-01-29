@@ -246,7 +246,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
       <div>
         <h1 className="page-title text-foreground">Settings</h1>
         <p className="page-subtitle text-muted-foreground">Manage your application settings</p>

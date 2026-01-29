@@ -187,7 +187,7 @@ export function MyPerformancePage() {
 
   if (myAppraisals.length === 0) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
         <div>
           <h1 className="page-title text-foreground">My Performance</h1>
           <p className="text-muted-foreground mt-2">Your performance review summary</p>
@@ -209,7 +209,7 @@ export function MyPerformancePage() {
   const chartColors = ['#8B5CF6', '#3B82F6', '#22C55E', '#F59E0B', '#EF4444'];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>

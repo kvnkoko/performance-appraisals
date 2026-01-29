@@ -104,7 +104,7 @@ export function OrganizationAnalyticsPage() {
   }, [employees]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-8 sm:pb-10 lg:pb-12">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Organization analytics</h1>
