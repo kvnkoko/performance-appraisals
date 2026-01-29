@@ -62,8 +62,8 @@ export function OrgChartPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-4">
+    <div className="flex-1 flex flex-col min-h-0 gap-6">
+      <header className="flex-shrink-0 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Organization chart</h1>
           <p className="text-muted-foreground text-sm mt-0.5">Company structure and reporting lines</p>
@@ -123,7 +123,14 @@ export function OrgChartPage() {
         <OrgChartFilterPanel config={config} setConfig={setConfig} onClose={() => setFilterPanelOpen(false)} />
       )}
 
-      <div className="rounded-xl border border-border bg-card/80 overflow-hidden min-h-[360px] max-h-[min(72vh,640px)] h-[min(72vh,640px)]">
+      <div
+        className={cn(
+          'rounded-xl border border-border bg-card/80 overflow-hidden flex-shrink-0',
+          viewMode === 'tree'
+            ? 'min-h-[360px] flex-1'
+            : 'min-h-[280px]'
+        )}
+      >
         {viewMode === 'tree' ? (
           <TransformWrapper
             initialScale={1}
@@ -167,7 +174,7 @@ export function OrgChartPage() {
             </TransformComponent>
           </TransformWrapper>
         ) : (
-          <div className="px-6 pt-6 pb-4 overflow-auto h-full min-h-0">
+          <div className="px-6 pt-6 pb-4">
             <DepartmentView onSelectEmployee={setSelectedEmployee} />
           </div>
         )}
