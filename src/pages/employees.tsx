@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Plus, Pencil, Trash, Users, MagnifyingGlass, UsersThree, CheckCircle, ArrowClockwise, List, Buildings } from 'phosphor-react';
 import { EmployeeDialog } from '@/components/employees/employee-dialog';
-import { HIERARCHY_LABELS, isDepartmentLeader } from '@/types';
+import { HIERARCHY_LABELS, EMPLOYMENT_STATUS_LABELS, isDepartmentLeader } from '@/types';
+import type { EmploymentStatus } from '@/types';
 import { deleteEmployee, getUserByEmployeeId } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { formatDate } from '@/lib/utils';
@@ -329,6 +330,16 @@ export function EmployeesPage() {
                             {employee.executiveType === 'operational' ? 'Operational' : 'Advisory'}
                           </span>
                         )}
+                      </div>
+                      <div className="flex items-center gap-2 text-sm flex-wrap">
+                        <span className="text-muted-foreground min-w-[80px]">Status:</span>
+                        <span className={
+                          (employee.employmentStatus ?? 'permanent') === 'terminated' || (employee.employmentStatus ?? 'permanent') === 'resigned'
+                            ? 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300 border border-red-200 dark:border-red-700'
+                            : 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground border border-border'
+                        }>
+                          {EMPLOYMENT_STATUS_LABELS[(employee.employmentStatus ?? 'permanent') as EmploymentStatus]}
+                        </span>
                       </div>
                 {employee.teamId && getTeamName(employee.teamId) && (
                   <div className="flex items-center gap-2 text-sm">

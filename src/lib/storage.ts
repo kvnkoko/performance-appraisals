@@ -323,7 +323,15 @@ export async function getEmployee(id: string): Promise<Employee | undefined> {
       const { getEmployeeFromSupabase } = await import('./supabase-storage');
       const supabaseEmployee = await getEmployeeFromSupabase(id);
       if (supabaseEmployee) return supabaseEmployee;
-      // Supabase returned nothing — fall back to IndexedDB for read-your-writes
+      // Supabase returned nothing – employee was deleted; clear local cache so other devices don't see stale employee
+      try {
+        if (database.objectStoreNames.contains('employees')) {
+          await database.delete('employees', id);
+        }
+      } catch (_) {
+        /* ignore */
+      }
+      return undefined;
     }
   } catch (error) {
     if (import.meta.env.DEV) console.log('getEmployee: Supabase not available, using IndexedDB:', error);
@@ -451,6 +459,19 @@ export async function deleteEmployee(id: string): Promise<void> {
       await deleteEmployeeFromSupabase(id);
       const database = await initDB();
       await database.delete('employees', id);
+      // Lock all users linked to this employee so they cannot sign in again; other devices will log out on next refresh
+      const allUsers = await getUsers();
+      const linkedUsers = allUsers.filter((u) => u.employeeId === id);
+      for (const u of linkedUsers) {
+        await saveUser({ ...u, active: false });
+      }
+      try {
+        const channel = new BroadcastChannel('appraisals-auth');
+        channel.postMessage({ type: 'employeeDeleted', employeeId: id });
+        channel.close();
+      } catch {
+        /* BroadcastChannel not supported */
+      }
       return;
     }
   } catch (error) {
@@ -459,6 +480,19 @@ export async function deleteEmployee(id: string): Promise<void> {
 
   const database = await initDB();
   await database.delete('employees', id);
+  // Lock linked users and broadcast for same-device tabs (IndexedDB-only path)
+  const allUsers = await getUsers();
+  const linkedUsers = allUsers.filter((u) => u.employeeId === id);
+  for (const u of linkedUsers) {
+    await saveUser({ ...u, active: false });
+  }
+  try {
+    const channel = new BroadcastChannel('appraisals-auth');
+    channel.postMessage({ type: 'employeeDeleted', employeeId: id });
+    channel.close();
+  } catch {
+    /* BroadcastChannel not supported */
+  }
 }
 
 // Appraisals - Supabase as single source of truth when configured; else IndexedDB
@@ -1359,7 +1393,15 @@ export async function getUser(id: string): Promise<User | undefined> {
         }
         return user;
       }
-      // Supabase returned nothing – fall back to IndexedDB so the creating browser sees its just-written user
+      // Supabase returned nothing – user was deleted; clear local cache so other devices/sessions don't see stale user
+      try {
+        if (database.objectStoreNames.contains('users')) {
+          await database.delete('users', id);
+        }
+      } catch (_) {
+        /* ignore */
+      }
+      return undefined;
     }
   } catch (error) {
     if (import.meta.env.DEV) console.log('getUser: Supabase not available, using IndexedDB:', error);

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { User, Employee } from '@/types';
+import { LOCKING_STATUSES } from '@/types';
 import { getUser, getEmployee, getTeams } from '@/lib/storage';
 
 interface UserContextType {
@@ -39,6 +40,19 @@ export function UserProvider({ children }: { children: ReactNode }) {
         try {
           const userData = await getUser(userId);
           if (userData) {
+            // Account was locked (e.g. employee deleted or terminated) – invalidate session
+            if (!userData.active) {
+              localStorage.removeItem('authenticated');
+              localStorage.removeItem('userId');
+              localStorage.removeItem('username');
+              localStorage.removeItem('userName');
+              localStorage.removeItem('userEmail');
+              localStorage.removeItem('userRole');
+              localStorage.removeItem('employeeId');
+              setUser(null);
+              setEmployee(null);
+              return;
+            }
             setUser(userData);
             // Update localStorage with latest user data
             localStorage.setItem('username', userData.username);
@@ -50,7 +64,33 @@ export function UserProvider({ children }: { children: ReactNode }) {
             // Load linked employee if exists
             if (userData.employeeId) {
               const employeeData = await getEmployee(userData.employeeId);
-              setEmployee(employeeData || null);
+              // If employee was deleted, invalidate session (staff member removed)
+              if (!employeeData) {
+                localStorage.removeItem('authenticated');
+                localStorage.removeItem('userId');
+                localStorage.removeItem('username');
+                localStorage.removeItem('userName');
+                localStorage.removeItem('userEmail');
+                localStorage.removeItem('userRole');
+                localStorage.removeItem('employeeId');
+                setUser(null);
+                setEmployee(null);
+                return;
+              }
+              // If employee is terminated or resigned, invalidate session (lock account)
+              if (LOCKING_STATUSES.includes(employeeData.employmentStatus ?? 'permanent')) {
+                localStorage.removeItem('authenticated');
+                localStorage.removeItem('userId');
+                localStorage.removeItem('username');
+                localStorage.removeItem('userName');
+                localStorage.removeItem('userEmail');
+                localStorage.removeItem('userRole');
+                localStorage.removeItem('employeeId');
+                setUser(null);
+                setEmployee(null);
+                return;
+              }
+              setEmployee(employeeData);
             } else {
               setEmployee(null);
             }
@@ -165,6 +205,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
     refresh();
   }, []);
 
+  // Re-validate session when user returns to the tab (e.g. from another device we may have deleted the user/employee)
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [refresh]);
+
   // When a user is deleted (e.g. by admin in another tab), broadcast is sent. If this tab
   // is that user, clear session so they are logged out immediately.
   useEffect(() => {
@@ -183,6 +232,31 @@ export function UserProvider({ children }: { children: ReactNode }) {
           localStorage.removeItem('employeeId');
           setUser(null);
           setEmployee(null);
+          window.location.href = '/auth';
+        }
+        if (d?.type === 'employeeTerminatedOrResigned' && d.employeeId && d.employeeId === localStorage.getItem('employeeId')) {
+          localStorage.removeItem('authenticated');
+          localStorage.removeItem('userId');
+          localStorage.removeItem('username');
+          localStorage.removeItem('userName');
+          localStorage.removeItem('userEmail');
+          localStorage.removeItem('userRole');
+          localStorage.removeItem('employeeId');
+          setUser(null);
+          setEmployee(null);
+          window.location.href = '/auth';
+        }
+        if (d?.type === 'employeeDeleted' && d.employeeId && d.employeeId === localStorage.getItem('employeeId')) {
+          localStorage.removeItem('authenticated');
+          localStorage.removeItem('userId');
+          localStorage.removeItem('username');
+          localStorage.removeItem('userName');
+          localStorage.removeItem('userEmail');
+          localStorage.removeItem('userRole');
+          localStorage.removeItem('employeeId');
+          setUser(null);
+          setEmployee(null);
+          window.location.href = '/auth';
         }
       };
     } catch {

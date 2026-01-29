@@ -6,9 +6,11 @@ interface RatingSelectorProps {
   onChange: (value: number) => void;
   disabled?: boolean;
   required?: boolean;
+  /** When true, show "Required field" only after submit attempt (e.g. pass formState.submitCount > 0) */
+  showRequiredError?: boolean;
 }
 
-export function RatingSelector({ value, onChange, disabled, required }: RatingSelectorProps) {
+export function RatingSelector({ value, onChange, disabled, required, showRequiredError = false }: RatingSelectorProps) {
   const ratings = [1, 2, 3, 4, 5] as const;
 
   const getColorClasses = (_rating: number, isSelected: boolean) => {
@@ -19,8 +21,8 @@ export function RatingSelector({ value, onChange, disabled, required }: RatingSe
   };
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-1.5 justify-center">
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-stretch justify-center gap-2 sm:gap-3">
         {ratings.map((rating) => {
           const isSelected = value === rating;
           const label = RATING_LABELS[rating];
@@ -31,20 +33,24 @@ export function RatingSelector({ value, onChange, disabled, required }: RatingSe
               onClick={() => !disabled && onChange(rating)}
               disabled={disabled}
               className={cn(
-                'relative flex flex-col items-center justify-center w-14 h-16 sm:w-16 sm:h-20 border rounded-lg transition-all duration-200',
+                'relative flex flex-col items-center justify-center min-w-[4rem] max-w-[5rem] py-3 px-2 border rounded-lg transition-all duration-200',
                 'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary/50',
                 disabled && 'opacity-50 cursor-not-allowed',
-                !disabled && 'cursor-pointer hover:scale-105 active:scale-95',
+                !disabled && 'cursor-pointer hover:scale-[1.02] active:scale-[0.98]',
                 getColorClasses(rating, isSelected),
-                isSelected && 'scale-105'
+                isSelected && 'scale-[1.02]'
               )}
             >
-              <span className={`text-xl sm:text-2xl font-semibold mb-1 ${isSelected ? 'text-primary-foreground' : ''}`}>
+              <span className={cn(
+                'text-lg sm:text-xl font-semibold mb-1.5',
+                isSelected ? 'text-primary-foreground' : ''
+              )}>
                 {rating}
               </span>
-              <span className={`text-[9px] sm:text-[10px] font-medium text-center leading-tight px-1 ${
-                isSelected ? 'text-primary-foreground/80' : 'text-muted-foreground'
-              }`}>
+              <span className={cn(
+                'text-[9px] sm:text-[10px] font-medium text-center leading-tight break-words w-full px-0.5',
+                isSelected ? 'text-primary-foreground/90' : 'text-muted-foreground'
+              )}>
                 {label.label.split(' ').map((word, i) => (
                   <span key={i}>
                     {word}
@@ -56,8 +62,8 @@ export function RatingSelector({ value, onChange, disabled, required }: RatingSe
           );
         })}
       </div>
-      {required && !value && (
-        <p className="text-xs text-destructive text-center">Required field</p>
+      {required && !value && showRequiredError && (
+        <p className="text-xs text-destructive text-center pt-0.5">Required field</p>
       )}
     </div>
   );

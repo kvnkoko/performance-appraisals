@@ -206,6 +206,7 @@ export async function getEmployeesFromSupabase(): Promise<Employee[]> {
       executiveType: e.executive_type ?? undefined,
       teamId: e.team_id,
       reportsTo: e.reports_to,
+      employmentStatus: (e.employment_status ?? 'permanent') as Employee['employmentStatus'],
       createdAt: e.created_at,
       updatedAt: e.updated_at,
     }));
@@ -239,6 +240,7 @@ export async function getEmployeeFromSupabase(id: string): Promise<Employee | un
       executiveType: data.executive_type ?? undefined,
       teamId: data.team_id,
       reportsTo: data.reports_to,
+      employmentStatus: (data.employment_status ?? 'permanent') as Employee['employmentStatus'],
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
@@ -266,8 +268,11 @@ export async function updateEmployeeTeamInSupabase(employeeId: string, teamId: s
 }
 
 function isMissingColumnError(err: unknown): boolean {
-  const msg = typeof (err as any)?.message === 'string' ? (err as any).message : '';
-  return /reports_to|team_id|schema cache|column.*employees/i.test(msg);
+  const e = err as { message?: string; code?: string };
+  const msg = typeof e?.message === 'string' ? e.message : '';
+  // PostgreSQL 42703 = undefined_column; 400 often means column missing or invalid for this table
+  if (e?.code === '42703') return true;
+  return /reports_to|team_id|employment_status|schema cache|column.*employees|does not exist/i.test(msg);
 }
 
 export async function saveEmployeeToSupabase(employee: Employee): Promise<void> {
@@ -285,6 +290,7 @@ export async function saveEmployeeToSupabase(employee: Employee): Promise<void> 
     executive_type: employee.executiveType ?? null,
     team_id: employee.teamId ?? null,
     reports_to: employee.reportsTo ?? null,
+    employment_status: employee.employmentStatus ?? 'permanent',
     created_at: employee.createdAt || new Date().toISOString(),
     updated_at: employee.updatedAt || new Date().toISOString(),
   };
@@ -294,6 +300,7 @@ export async function saveEmployeeToSupabase(employee: Employee): Promise<void> 
     .upsert(fullPayload, { onConflict: 'id' });
 
   if (result.error && isMissingColumnError(result.error)) {
+    // Minimal payload: only columns that exist on a basic employees table (no updated_at, employment_status, etc.)
     const basePayload = {
       id: employee.id,
       name: employee.name,
@@ -323,6 +330,15 @@ export async function saveEmployeeToSupabase(employee: Employee): Promise<void> 
         .eq('id', employee.id);
       if (r.error) {
         console.warn('Employee saved but reports_to could not be set. Run supabase-add-teams.sql:', r.error.message);
+      }
+    }
+    if ((employee as { employmentStatus?: string }).employmentStatus !== undefined) {
+      const r = await supabase
+        .from(TABLES.EMPLOYEES)
+        .update({ employment_status: (employee as { employmentStatus?: string }).employmentStatus ?? 'permanent' })
+        .eq('id', employee.id);
+      if (r.error) {
+        console.warn('Employee saved but employment_status could not be set. Run supabase-employee-status.sql:', r.error.message);
       }
     }
     return;

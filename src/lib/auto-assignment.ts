@@ -3,13 +3,23 @@
  * Uses Reports To first; falls back to same-team (member's team = leader's department) when Reports To is missing.
  * Executives and chairman are never appraised by anyone. Exec/leads only do Exec→Leader.
  * Only pure leaders (hierarchy='leader') do Leader→Member, Leader→Leader, and are targets of Member→Leader and Exec→Leader.
+ * Temporary, terminated, and resigned employees never get auto-created appraisal forms (targets only).
  */
 import type { Employee, AppraisalAssignment, AssignmentRelationshipType } from '@/types';
+import { LOCKING_STATUSES } from '@/types';
 import { generateId } from '@/lib/utils';
 
 const isChairman = (e: Employee): boolean => e.hierarchy === 'chairman';
 const isExecutive = (e: Employee): boolean => e.hierarchy === 'executive';
 const isPureLeader = (e: Employee): boolean => e.hierarchy === 'leader' || e.hierarchy === 'department-leader';
+
+/** True if we should auto-create an appraisal form *for* this employee (they are the one being appraised). Excludes temporary, terminated, resigned. */
+function isAppraisableForAutoAssignment(e: Employee): boolean {
+  const status = e.employmentStatus ?? 'permanent';
+  if (status === 'temporary') return false;
+  if (LOCKING_STATUSES.includes(status)) return false;
+  return true;
+}
 
 export interface AutoAssignmentPreview {
   leaderToMember: { appraiserId: string; appraiserName: string; employeeId: string; employeeName: string }[];
@@ -73,14 +83,21 @@ export function previewAutoAssignments(
     warnings.push(`${membersNoReportNoTeam.length} member(s) have no "Reports To" and no team – set one on the Employees tab to include them.`);
   }
 
+  // Employees excluded from auto-assignment (temporary, terminated, resigned) never get forms created for them
+  const excludedFromAuto = employees.filter((e) => !isAppraisableForAutoAssignment(e));
+  if (excludedFromAuto.length > 0) {
+    warnings.push(`${excludedFromAuto.length} employee(s) are temporary, terminated, or resigned – no appraisal forms will be auto-created for them.`);
+  }
+
   const seenL2M = new Set<string>();
   const seenM2L = new Set<string>();
 
   // RULE 1: Leader → Member — only pure leaders (hierarchy='leader') do this; exec/leads do NOT.
-  // (a) From Reports To or same-team; (b) ensure every pure-leader department head gets every member in that team.
+  // Skip members who are temporary/terminated/resigned (no auto-created forms for them).
   if (opts.includeLeaderToMember) {
     for (const member of employees) {
       if (member.hierarchy !== 'member') continue;
+      if (!isAppraisableForAutoAssignment(member)) continue;
       let managers: Employee[] = [];
       if (member.reportsTo) {
         const m = byId.get(member.reportsTo);
@@ -102,10 +119,10 @@ export function previewAutoAssignments(
         });
       }
     }
-    // Ensure every pure-leader department head gets all members in their department
+    // Ensure every pure-leader department head gets all members in their department (skip temporary/terminated/resigned)
     for (const manager of employees) {
       if (!isPureLeader(manager) || !manager.teamId) continue;
-      const deptMembers = employees.filter((e) => e.hierarchy === 'member' && e.teamId === manager.teamId);
+      const deptMembers = employees.filter((e) => e.hierarchy === 'member' && e.teamId === manager.teamId && isAppraisableForAutoAssignment(e));
       for (const member of deptMembers) {
         const key = `${manager.id}:${member.id}`;
         if (seenL2M.has(key)) continue;
@@ -120,12 +137,12 @@ export function previewAutoAssignments(
     }
   }
 
-  // RULE 2: Member → Leader — members only appraise pure leaders (never executives).
-  // Same pairs as Leader→Member reversed; target (employeeId) is always pure leader after RULE 1.
+  // RULE 2: Member → Leader — members only appraise pure leaders (never executives). Skip if leader is temporary/terminated/resigned.
   if (opts.includeMemberToLeader) {
     for (const pair of leaderToMember) {
       const leader = byId.get(pair.appraiserId);
       if (!leader || !isPureLeader(leader)) continue; // defensive: never target executives
+      if (!isAppraisableForAutoAssignment(leader)) continue;
       const key = `${pair.employeeId}:${pair.appraiserId}`;
       if (seenM2L.has(key)) continue;
       seenM2L.add(key);
@@ -138,12 +155,14 @@ export function previewAutoAssignments(
     }
   }
 
-  // RULE 3: Leader → Leader — only pure leaders; executives (including exec/leads) do NOT participate.
+  // RULE 3: Leader → Leader — only pure leaders; executives (including exec/leads) do NOT participate (isPureLeader excludes execs).
+  // Skip targets who are temporary/terminated/resigned.
   if (opts.includeLeaderToLeader) {
     const leaders = employees.filter(isPureLeader);
     for (const appraiser of leaders) {
       for (const target of leaders) {
         if (appraiser.id === target.id) continue;
+        if (!isAppraisableForAutoAssignment(target)) continue;
         leaderToLeader.push({
           appraiserId: appraiser.id,
           appraiserName: appraiser.name,
@@ -157,10 +176,10 @@ export function previewAutoAssignments(
     }
   }
 
-  // RULE 4: Executive → Leader — executives appraise only pure leaders; executives are never targets.
+  // RULE 4: Executive → Leader — executives appraise only pure leaders; executives are never targets. Skip leaders who are temporary/terminated/resigned.
   if (opts.includeExecToLeader) {
     const execs = employees.filter(isExecutive);
-    const leadersForExec = employees.filter(isPureLeader);
+    const leadersForExec = employees.filter((e) => isPureLeader(e) && isAppraisableForAutoAssignment(e));
     for (const exec of execs) {
       for (const leader of leadersForExec) {
         execToLeader.push({
@@ -179,10 +198,12 @@ export function previewAutoAssignments(
     }
   }
 
-  // RULE 5: HR → All — HR appraises non-HR employees; executives and chairman are never targets.
+  // RULE 5: HR → All — HR appraises non-HR employees; executives and chairman are never targets. Skip temporary/terminated/resigned.
   if (opts.includeHrToAll) {
     const hrStaff = employees.filter((e) => e.hierarchy === 'hr');
-    const allOthers = employees.filter((e) => e.hierarchy !== 'hr' && !isExecutive(e) && !isChairman(e));
+    const allOthers = employees.filter(
+      (e) => e.hierarchy !== 'hr' && !isExecutive(e) && !isChairman(e) && isAppraisableForAutoAssignment(e)
+    );
     for (const hrPerson of hrStaff) {
       for (const employee of allOthers) {
         hrToAll.push({

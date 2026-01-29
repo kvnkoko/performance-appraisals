@@ -12,7 +12,10 @@ import { useToast } from '@/contexts/toast-context';
 import { RatingSelector } from '@/components/ui/rating-selector';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { useTheme } from '@/hooks/use-theme';
+import { Sun, Moon } from 'phosphor-react';
 import type { AppraisalResponse, Category, CategoryItem } from '@/types';
+import { RATING_LABELS } from '@/types';
 
 const responseSchema = z.record(z.union([z.string(), z.number()]));
 
@@ -34,12 +37,13 @@ export function AppraisalFormPage() {
     handleSubmit,
     watch,
     setValue,
-    formState: { errors },
+    formState: { errors, submitCount },
   } = useForm<ResponseFormData>({
     resolver: zodResolver(responseSchema),
   });
 
   const watchedValues = watch();
+  const { resolvedTheme, setTheme } = useTheme();
 
   useEffect(() => {
     loadData();
@@ -322,19 +326,29 @@ export function AppraisalFormPage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 lg:pt-8 pb-12 lg:pb-16">
         {/* Header */}
-        <div className="mb-6 lg:mb-8 text-center space-y-2">
-          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 bg-clip-text text-transparent myanmar-text">
-            {template.name}
-          </h1>
-          {template.subtitle && (
-            <p className="text-muted-foreground myanmar-text text-base lg:text-lg">
-              {template.subtitle}
-            </p>
-          )}
-          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <span>Appraising:</span>
-            <span className="font-semibold text-foreground">{employee.name}</span>
+        <div className="flex items-start justify-between gap-4 mb-6 lg:mb-8">
+          <div className="flex-1 text-center space-y-2 min-w-0">
+            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 bg-clip-text text-transparent myanmar-text">
+              {template.name}
+            </h1>
+            {template.subtitle && (
+              <p className="text-muted-foreground myanmar-text text-base lg:text-lg">
+                {template.subtitle}
+              </p>
+            )}
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <span>Appraising:</span>
+              <span className="font-semibold text-foreground">{employee.name}</span>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+            className="shrink-0 p-2.5 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Toggle theme"
+          >
+            {resolvedTheme === 'dark' ? <Moon size={20} weight="duotone" /> : <Sun size={20} weight="duotone" />}
+          </button>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)}>
@@ -361,8 +375,8 @@ export function AppraisalFormPage() {
                   <table className="w-full border-collapse">
                     <thead>
                       <tr className="bg-gradient-to-r from-muted/80 via-muted/60 to-muted/80 border-b-2 border-border/50">
-                        <th className="px-3 py-2.5 text-left font-bold text-xs uppercase tracking-wider text-muted-foreground w-12">No.</th>
-                        <th className="px-4 py-2.5 text-left font-bold text-xs uppercase tracking-wider text-muted-foreground min-w-[420px]">Description</th>
+                        <th className="px-4 py-2.5 text-left font-bold text-xs uppercase tracking-wider text-muted-foreground min-w-[200px]">Title</th>
+                        <th className="px-3 py-2.5 text-center font-bold text-xs uppercase tracking-wider text-muted-foreground w-12">No.</th>
                         <th className="px-3 py-2.5 text-center font-bold text-xs uppercase tracking-wider text-muted-foreground w-20">Weight</th>
                         <th className="px-4 py-2.5 text-center font-bold text-xs uppercase tracking-wider text-muted-foreground" colSpan={5}>Rating (1-5)</th>
                         <th className="px-3 py-2.5 text-center font-bold text-xs uppercase tracking-wider text-muted-foreground w-24">Score</th>
@@ -370,79 +384,72 @@ export function AppraisalFormPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {categories.map((category, catIndex) => {
-                        let itemCounter = 0;
-                        return (
-                          <React.Fragment key={category.id}>
-                            {/* Category Header Row */}
-                            <tr className="bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 border-b-2 border-primary/20">
-                              <td colSpan={9} className="px-4 py-3">
-                                <div className="font-bold text-sm lg:text-base myanmar-text text-foreground flex items-center gap-2">
-                                  <div className="w-1 h-5 bg-gradient-to-b from-primary to-primary/60 rounded-full"></div>
-                                  {category.categoryName}
-                                </div>
-                              </td>
-                            </tr>
-                            {/* Category Items */}
-                            {category.items.map((item, itemIndex) => {
-                              itemCounter++;
-                              const globalIndex = categories.slice(0, catIndex).reduce((sum, cat) => sum + cat.items.length, 0) + itemIndex;
-                              const currentValue = watchedValues[item.id];
-                              const questionScores = scores[item.id] || { weightScore: 0, percentageScore: 0 };
-                              const isEven = globalIndex % 2 === 0;
-                              
-                              return (
-                                <tr 
-                                  key={item.id} 
-                                  className={`border-b border-border/30 transition-all duration-200 ${
-                                    isEven ? 'bg-background' : 'bg-muted/20'
-                                  } hover:bg-muted/40 hover:shadow-sm`}
-                                >
-                                  <td className="px-3 py-3 text-center text-sm font-medium text-muted-foreground">
-                                    {globalIndex + 1}
-                                  </td>
-                                  <td className="px-4 py-3 myanmar-text leading-relaxed">
-                                    {item.categoryName && (
-                                      <div className="text-xs font-semibold text-primary/80 mb-1.5 pl-2.5 border-l-2 border-primary/40">
-                                        {item.categoryName}
-                                      </div>
-                                    )}
-                                    <div className={`text-sm whitespace-pre-line ${item.categoryName ? 'pl-2.5' : ''}`}>
-                                      {item.text}
+                      {categories.map((category, catIndex) => (
+                        <React.Fragment key={category.id}>
+                          {category.items.map((item, itemIndex) => {
+                            const globalIndex = categories.slice(0, catIndex).reduce((sum, cat) => sum + cat.items.length, 0) + itemIndex;
+                            const currentValue = watchedValues[item.id];
+                            const questionScores = scores[item.id] || { weightScore: 0, percentageScore: 0 };
+                            const title = item.categoryName || category.categoryName;
+                            const descriptionBullets = item.text
+                              .split(/\s*[•]\s*/)
+                              .map((s) => s.trim())
+                              .filter(Boolean);
+                            return (
+                              <React.Fragment key={item.id}>
+                                <tr className="bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 border-b border-primary/20">
+                                  <td className="px-4 py-3 align-middle">
+                                    <div className="font-bold text-sm lg:text-base myanmar-text text-foreground flex items-center gap-2">
+                                      <div className="w-1 h-5 bg-gradient-to-b from-primary to-primary/60 rounded-full flex-shrink-0"></div>
+                                      {title}
                                     </div>
                                   </td>
-                                  <td className="px-3 py-3 text-center">
+                                  <td className="px-3 py-3 text-center text-sm font-medium text-muted-foreground align-middle">
+                                    {globalIndex + 1}
+                                  </td>
+                                  <td className="px-3 py-3 text-center align-middle">
                                     <span className="text-sm font-semibold text-muted-foreground">{item.weight}%</span>
                                   </td>
-                                  <td className="px-2 py-3" colSpan={5}>
+                                  <td className="px-2 py-3 align-middle" colSpan={5}>
                                     {item.type === 'rating-1-5' ? (
-                                      <div className="flex justify-center gap-1">
-                                        {[1, 2, 3, 4, 5].map((rating) => {
-                                          const isSelected = Number(currentValue) === rating;
-                                          return (
-                                            <label 
-                                              key={rating} 
-                                              className={`flex flex-col items-center justify-center cursor-pointer transition-all duration-200 rounded-md border min-w-[40px] h-[48px] ${
-                                                isSelected 
-                                                  ? 'bg-primary text-primary-foreground border-primary shadow-md scale-105 ring-1 ring-primary/20' 
-                                                  : 'bg-background border-border text-muted-foreground hover:bg-muted hover:border-border/80 hover:text-foreground'
-                                              }`}
-                                            >
-                                              <input
-                                                type="radio"
-                                                {...register(item.id)}
-                                                value={rating}
-                                                checked={isSelected}
-                                                onChange={() => setValue(item.id, rating)}
-                                                className="sr-only"
-                                                required={item.required}
-                                              />
-                                              <span className={`text-base font-semibold ${isSelected ? 'text-primary-foreground' : ''}`}>
-                                                {rating}
-                                              </span>
-                                            </label>
-                                          );
-                                        })}
+                                      <div className="space-y-1.5">
+                                        <div className="flex flex-wrap items-stretch justify-center gap-2 py-1">
+                                          {[1, 2, 3, 4, 5].map((rating) => {
+                                            const isSelected = Number(currentValue) === rating;
+                                            const label = RATING_LABELS[rating];
+                                            return (
+                                              <label
+                                                key={rating}
+                                                className={`flex flex-col items-center justify-center cursor-pointer transition-all duration-200 rounded-md border min-w-[3.5rem] max-w-[4.5rem] py-2.5 px-1.5 ${
+                                                  isSelected
+                                                    ? 'bg-primary text-primary-foreground border-primary shadow-md scale-[1.02] ring-1 ring-primary/20'
+                                                    : 'bg-background border-border text-muted-foreground hover:bg-muted hover:border-border/80 hover:text-foreground'
+                                                }`}
+                                              >
+                                                <input
+                                                  type="radio"
+                                                  {...register(item.id)}
+                                                  value={rating}
+                                                  checked={isSelected}
+                                                  onChange={() => setValue(item.id, rating)}
+                                                  className="sr-only"
+                                                  required={item.required}
+                                                />
+                                                <span className={`text-base font-semibold mb-1 ${isSelected ? 'text-primary-foreground' : ''}`}>
+                                                  {rating}
+                                                </span>
+                                                <span className={`text-[9px] leading-tight text-center break-words w-full ${isSelected ? 'text-primary-foreground/90' : 'text-muted-foreground'}`}>
+                                                  {label.label.split(' ').map((word, i) => (
+                                                    <span key={i}>{word}{i < label.label.split(' ').length - 1 && <br />}</span>
+                                                  ))}
+                                                </span>
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                        {item.required && !currentValue && submitCount > 0 && (
+                                          <p className="text-xs text-destructive text-center">Required field</p>
+                                        )}
                                       </div>
                                     ) : item.type === 'text' ? (
                                       <Textarea
@@ -466,14 +473,14 @@ export function AppraisalFormPage() {
                                       </Select>
                                     ) : null}
                                   </td>
-                                  <td className="px-3 py-3 text-center">
+                                  <td className="px-3 py-3 text-center align-middle">
                                     <span className={`text-sm font-semibold ${
                                       questionScores.weightScore > 0 ? 'text-foreground' : 'text-muted-foreground/50'
                                     }`}>
                                       {questionScores.weightScore > 0 ? questionScores.weightScore.toFixed(2) : '—'}
                                     </span>
                                   </td>
-                                  <td className="px-3 py-3 text-center">
+                                  <td className="px-3 py-3 text-center align-middle">
                                     <span className={`text-sm font-semibold ${
                                       questionScores.percentageScore > 0 ? 'text-foreground' : 'text-muted-foreground/50'
                                     }`}>
@@ -481,11 +488,24 @@ export function AppraisalFormPage() {
                                     </span>
                                   </td>
                                 </tr>
-                              );
-                            })}
-                          </React.Fragment>
-                        );
-                      })}
+                                <tr className="border-b border-border/30 bg-muted/20">
+                                  <td colSpan={10} className="px-4 py-2.5 pb-3 text-sm text-muted-foreground myanmar-text">
+                                    {descriptionBullets.length > 0 ? (
+                                      <ul className="list-disc list-inside space-y-1 my-0 pl-2">
+                                        {descriptionBullets.map((line, i) => (
+                                          <li key={i}>{line}</li>
+                                        ))}
+                                      </ul>
+                                    ) : (
+                                      <span className="whitespace-pre-line">{item.text}</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              </React.Fragment>
+                            );
+                          })}
+                        </React.Fragment>
+                      ))}
                       {/* Total Row */}
                       <tr className="bg-gradient-to-r from-primary/15 via-primary/10 to-primary/15 border-t-2 border-primary/30">
                         <td colSpan={8} className="px-4 py-4 text-right">
@@ -524,49 +544,42 @@ export function AppraisalFormPage() {
               </CardContent>
             </Card>
 
-            {categories.map((category, catIndex) => {
-              let itemCounter = 0;
-              return (
-                <div key={category.id} className="space-y-3">
-                  {/* Category Header */}
-                  <Card className="bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 border-2 border-primary/20">
-                    <CardContent className="p-3">
-                      <div className="font-bold text-sm myanmar-text text-foreground flex items-center gap-2">
-                        <div className="w-1 h-4 bg-gradient-to-b from-primary to-primary/60 rounded-full"></div>
-                        {category.categoryName}
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  {/* Category Items */}
-                  {category.items.map((item, itemIndex) => {
-                    itemCounter++;
-                    const globalIndex = categories.slice(0, catIndex).reduce((sum, cat) => sum + cat.items.length, 0) + itemIndex;
-                    const currentValue = watchedValues[item.id];
-                    const questionScores = scores[item.id] || { weightScore: 0, percentageScore: 0 };
-                    
-                    return (
-                      <Card key={item.id} className={`border border-border/30 ${item.categoryName ? 'ml-3 border-l-2 border-primary/40' : ''}`}>
-                        <CardContent className="p-4 space-y-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="text-xs font-medium text-muted-foreground mb-1">Item #{globalIndex + 1}</div>
-                              {item.categoryName && (
-                                <div className="text-xs font-semibold myanmar-text text-primary/80 mb-1.5">
-                                  {item.categoryName}
-                                </div>
-                              )}
-                            </div>
-                            <div className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                              {item.weight}%
-                            </div>
+            {categories.map((category, catIndex) => (
+              <div key={category.id} className="space-y-3">
+                {category.items.map((item, itemIndex) => {
+                  const globalIndex = categories.slice(0, catIndex).reduce((sum, cat) => sum + cat.items.length, 0) + itemIndex;
+                  const currentValue = watchedValues[item.id];
+                  const questionScores = scores[item.id] || { weightScore: 0, percentageScore: 0 };
+                  const title = item.categoryName || category.categoryName;
+                  const descriptionBullets = item.text
+                    .split(/\s*[•]\s*/)
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                  return (
+                    <Card key={item.id} className={`border border-border/30 ${item.categoryName ? 'border-l-2 border-primary/40' : ''}`}>
+                      <CardContent className="p-4 space-y-3">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <div className="font-bold text-sm myanmar-text text-foreground flex items-center gap-2">
+                            <div className="w-1 h-4 bg-gradient-to-b from-primary to-primary/60 rounded-full flex-shrink-0"></div>
+                            {title}
                           </div>
-                          
-                          <div className="myanmar-text text-sm leading-relaxed">
-                            <div className="whitespace-pre-line">{item.text}</div>
-                          </div>
+                          <span className="text-xs font-medium text-muted-foreground">#{globalIndex + 1}</span>
+                          <span className="text-xs font-semibold text-muted-foreground">{item.weight}%</span>
+                        </div>
 
-                          <div>
+                        <div className="myanmar-text text-sm text-muted-foreground leading-relaxed">
+                          {descriptionBullets.length > 0 ? (
+                            <ul className="list-disc list-inside space-y-1 my-0 pl-2">
+                              {descriptionBullets.map((line, i) => (
+                                <li key={i}>{line}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <span className="whitespace-pre-line">{item.text}</span>
+                          )}
+                        </div>
+
+                        <div>
                             {item.type === 'rating-1-5' ? (
                               <div className="space-y-2">
                                 <div className="text-xs font-medium text-muted-foreground mb-2">Rating (1-5):</div>
@@ -574,6 +587,7 @@ export function AppraisalFormPage() {
                                   value={currentValue ? Number(currentValue) : undefined}
                                   onChange={(value) => setValue(item.id, value)}
                                   required={item.required}
+                                  showRequiredError={submitCount > 0}
                                 />
                               </div>
                             ) : item.type === 'text' ? (
@@ -620,10 +634,9 @@ export function AppraisalFormPage() {
                         </CardContent>
                       </Card>
                     );
-                  })}
-                </div>
-              );
-            })}
+                })}
+              </div>
+            ))}
 
             {/* Total Score Card */}
             <Card className="bg-gradient-to-r from-primary/15 via-primary/10 to-primary/15 border-2 border-primary/30">

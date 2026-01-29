@@ -24,7 +24,10 @@ import { useToast } from '@/contexts/toast-context';
 import { RatingSelector } from '@/components/ui/rating-selector';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { useTheme } from '@/hooks/use-theme';
+import { Sun, Moon } from 'phosphor-react';
 import type { AppraisalResponse, Category, CategoryItem } from '@/types';
+import { RATING_LABELS } from '@/types';
 import type { AppraisalAssignment } from '@/types';
 
 const responseSchema = z.record(z.union([z.string(), z.number()]));
@@ -48,10 +51,12 @@ export function AppraisalFormByAssignmentPage() {
     handleSubmit,
     watch,
     setValue,
+    formState: { submitCount },
   } = useForm<ResponseFormData>({
     resolver: zodResolver(responseSchema),
   });
   const watchedValues = watch();
+  const { resolvedTheme, setTheme } = useTheme();
 
   useEffect(() => {
     loadData();
@@ -230,13 +235,23 @@ export function AppraisalFormByAssignmentPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 lg:pt-8 pb-12 lg:pb-16">
-        <div className="mb-6 lg:mb-8 text-center space-y-2">
-          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">{template.name}</h1>
-          {template.subtitle && <p className="text-muted-foreground">{template.subtitle}</p>}
-          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <span>Appraising:</span>
-            <span className="font-semibold text-foreground">{employee.name}</span>
+        <div className="flex items-start justify-between gap-4 mb-6 lg:mb-8">
+          <div className="flex-1 text-center space-y-2 min-w-0">
+            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight">{template.name}</h1>
+            {template.subtitle && <p className="text-muted-foreground">{template.subtitle}</p>}
+            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+              <span>Appraising:</span>
+              <span className="font-semibold text-foreground">{employee.name}</span>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+            className="shrink-0 p-2.5 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Toggle theme"
+          >
+            {resolvedTheme === 'dark' ? <Moon size={20} weight="duotone" /> : <Sun size={20} weight="duotone" />}
+          </button>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)}>
@@ -249,8 +264,8 @@ export function AppraisalFormByAssignmentPage() {
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="bg-muted/80 border-b">
-                      <th className="px-3 py-2.5 text-left text-xs w-12">No.</th>
-                      <th className="px-4 py-2.5 text-left text-xs min-w-[320px]">Description</th>
+                      <th className="px-4 py-2.5 text-left text-xs min-w-[200px]">Title</th>
+                      <th className="px-3 py-2.5 text-center text-xs w-12">No.</th>
                       <th className="px-3 py-2.5 text-center text-xs w-20">Weight</th>
                       <th className="px-4 py-2.5 text-center" colSpan={5}>Rating (1-5)</th>
                       <th className="px-3 py-2.5 text-center text-xs w-24">Score</th>
@@ -259,44 +274,75 @@ export function AppraisalFormByAssignmentPage() {
                   <tbody>
                     {categories.map((category, catIndex) => (
                       <React.Fragment key={category.id}>
-                        <tr className="bg-primary/10 border-b-2 border-primary/20">
-                          <td colSpan={9} className="px-4 py-3 font-bold text-sm">{category.categoryName}</td>
-                        </tr>
                         {category.items.map((item, itemIndex) => {
                           const globalIndex = categories.slice(0, catIndex).reduce((s, c) => s + c.items.length, 0) + itemIndex;
                           const currentValue = watchedValues[item.id];
                           const questionScores = scores[item.id] || { weightScore: 0, percentageScore: 0 };
+                          const title = item.categoryName || category.categoryName;
+                          const descriptionBullets = item.text
+                            .split(/\s*[•]\s*/)
+                            .map((s) => s.trim())
+                            .filter(Boolean);
                           return (
-                            <tr key={item.id} className="border-b border-border/30">
-                              <td className="px-3 py-3 text-center text-sm">{globalIndex + 1}</td>
-                              <td className="px-4 py-3 text-sm">{item.text}</td>
-                              <td className="px-3 py-3 text-center text-sm">{item.weight}%</td>
-                              <td className="px-2 py-3" colSpan={5}>
-                                {item.type === 'rating-1-5' ? (
-                                  <div className="flex justify-center gap-1">
-                                    {[1, 2, 3, 4, 5].map((r) => (
-                                      <label
-                                        key={r}
-                                        className={`flex flex-col items-center justify-center cursor-pointer rounded border min-w-[40px] h-[48px] ${
-                                          Number(currentValue) === r ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-border'
-                                        }`}
-                                      >
-                                        <input type="radio" {...register(item.id)} value={r} className="sr-only" required={item.required} />
-                                        <span>{r}</span>
-                                      </label>
-                                    ))}
-                                  </div>
-                                ) : item.type === 'text' ? (
-                                  <Textarea {...register(item.id)} placeholder="Enter feedback..." className="min-h-[70px] text-sm" required={item.required} />
-                                ) : item.type === 'multiple-choice' ? (
-                                  <Select {...register(item.id)} className="w-full text-sm" required={item.required}>
-                                    <option value="">Select...</option>
-                                    {item.options?.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-                                  </Select>
-                                ) : null}
-                              </td>
-                              <td className="px-3 py-3 text-center text-sm">{questionScores.weightScore > 0 ? questionScores.weightScore.toFixed(2) : '—'}</td>
-                            </tr>
+                            <React.Fragment key={item.id}>
+                              <tr className="bg-primary/10 border-b border-primary/20">
+                                <td className="px-4 py-3 font-bold text-sm align-middle">{title}</td>
+                                <td className="px-3 py-3 text-center text-sm align-middle">{globalIndex + 1}</td>
+                                <td className="px-3 py-3 text-center text-sm align-middle">{item.weight}%</td>
+                                <td className="px-2 py-3 align-middle" colSpan={5}>
+                                  {item.type === 'rating-1-5' ? (
+                                    <div className="space-y-1.5">
+                                      <div className="flex flex-wrap items-stretch justify-center gap-2 py-1">
+                                        {[1, 2, 3, 4, 5].map((r) => {
+                                          const isSelected = Number(currentValue) === r;
+                                          const label = RATING_LABELS[r];
+                                          return (
+                                            <label
+                                              key={r}
+                                              className={`flex flex-col items-center justify-center cursor-pointer rounded-md border min-w-[3.5rem] max-w-[4.5rem] py-2.5 px-1.5 transition-all duration-200 ${
+                                                isSelected ? 'bg-primary text-primary-foreground border-primary ring-1 ring-primary/20' : 'bg-background border-border hover:bg-muted/50'
+                                              }`}
+                                            >
+                                              <input type="radio" {...register(item.id)} value={r} className="sr-only" required={item.required} />
+                                              <span className="text-base font-semibold mb-1">{r}</span>
+                                              <span className={`text-[9px] leading-tight text-center break-words w-full ${isSelected ? 'text-primary-foreground/90' : 'text-muted-foreground'}`}>
+                                                {label.label.split(' ').map((word, i) => (
+                                                  <span key={i}>{word}{i < label.label.split(' ').length - 1 && <br />}</span>
+                                                ))}
+                                              </span>
+                                            </label>
+                                          );
+                                        })}
+                                      </div>
+                                      {item.required && !currentValue && submitCount > 0 && (
+                                        <p className="text-xs text-destructive text-center">Required field</p>
+                                      )}
+                                    </div>
+                                  ) : item.type === 'text' ? (
+                                    <Textarea {...register(item.id)} placeholder="Enter feedback..." className="min-h-[70px] text-sm" required={item.required} />
+                                  ) : item.type === 'multiple-choice' ? (
+                                    <Select {...register(item.id)} className="w-full text-sm" required={item.required}>
+                                      <option value="">Select...</option>
+                                      {item.options?.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                                    </Select>
+                                  ) : null}
+                                </td>
+                                <td className="px-3 py-3 text-center text-sm align-middle">{questionScores.weightScore > 0 ? questionScores.weightScore.toFixed(2) : '—'}</td>
+                              </tr>
+                              <tr className="border-b border-border/30">
+                                <td colSpan={9} className="px-4 py-2.5 pb-3 text-sm text-muted-foreground bg-muted/30">
+                                  {descriptionBullets.length > 0 ? (
+                                    <ul className="list-disc list-inside space-y-1 my-0">
+                                      {descriptionBullets.map((line, i) => (
+                                        <li key={i}>{line}</li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <span className="whitespace-pre-line">{item.text}</span>
+                                  )}
+                                </td>
+                              </tr>
+                            </React.Fragment>
                           );
                         })}
                       </React.Fragment>
@@ -314,23 +360,40 @@ export function AppraisalFormByAssignmentPage() {
           <div className="lg:hidden space-y-4">
             {categories.map((category, catIndex) => (
               <div key={category.id} className="space-y-3">
-                <Card className="bg-primary/10 border-2 border-primary/20">
-                  <CardContent className="p-3 font-bold text-sm">{category.categoryName}</CardContent>
-                </Card>
                 {category.items.map((item, itemIndex) => {
                   const globalIndex = categories.slice(0, catIndex).reduce((s, c) => s + c.items.length, 0) + itemIndex;
                   const currentValue = watchedValues[item.id];
                   const questionScores = scores[item.id] || { weightScore: 0, percentageScore: 0 };
+                  const title = item.categoryName || category.categoryName;
+                  const descriptionBullets = item.text
+                    .split(/\s*[•]\s*/)
+                    .map((s) => s.trim())
+                    .filter(Boolean);
                   return (
                     <Card key={item.id} className="border">
                       <CardContent className="p-4 space-y-3">
-                        <div className="text-sm">{item.text}</div>
-                        <div className="text-xs text-muted-foreground">{item.weight}%</div>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span className="font-bold text-sm">{title}</span>
+                          <span className="text-xs text-muted-foreground">#{globalIndex + 1}</span>
+                          <span className="text-xs text-muted-foreground">{item.weight}%</span>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {descriptionBullets.length > 0 ? (
+                            <ul className="list-disc list-inside space-y-1 my-0">
+                              {descriptionBullets.map((line, i) => (
+                                <li key={i}>{line}</li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <span className="whitespace-pre-line">{item.text}</span>
+                          )}
+                        </div>
                         {item.type === 'rating-1-5' ? (
                           <RatingSelector
                             value={currentValue ? Number(currentValue) : undefined}
                             onChange={(v) => setValue(item.id, v)}
                             required={item.required}
+                            showRequiredError={submitCount > 0}
                           />
                         ) : item.type === 'text' ? (
                           <Textarea {...register(item.id)} placeholder="Enter feedback..." className="min-h-[90px]" required={item.required} />

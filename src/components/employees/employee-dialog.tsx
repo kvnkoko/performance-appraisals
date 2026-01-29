@@ -10,11 +10,13 @@ import { Select } from '@/components/ui/select';
 import { getEmployee, saveEmployee, saveUser, getUserByUsername, getUsers, getUserByEmployeeId } from '@/lib/storage';
 import { generateId, hashPassword } from '@/lib/utils';
 import { getDepartmentLeaderId } from '@/lib/org-chart-utils';
-import type { Employee, User, ExecutiveType } from '@/types';
-import { isDepartmentLeader } from '@/types';
+import type { Employee, User, ExecutiveType, EmploymentStatus } from '@/types';
+import { isDepartmentLeader, LOCKING_STATUSES } from '@/types';
 import { useToast } from '@/contexts/toast-context';
 import { useApp } from '@/contexts/app-context';
 import { LinkSimple, LinkSimpleBreak, UserCircle } from 'phosphor-react';
+
+const EMPLOYMENT_STATUS_VALUES = ['permanent', 'temporary', 'contractor', 'probation', 'intern', 'on-leave', 'terminated', 'resigned'] as const;
 
 const employeeSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -24,6 +26,7 @@ const employeeSchema = z.object({
   executiveType: z.enum(['operational', 'advisory']).optional(),
   teamId: z.string().optional(),
   reportsTo: z.string().optional(),
+  employmentStatus: z.enum(EMPLOYMENT_STATUS_VALUES).optional(),
 });
 
 type EmployeeFormData = z.infer<typeof employeeSchema>;
@@ -61,10 +64,12 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
       executiveType: undefined as ExecutiveType | undefined,
       teamId: '',
       reportsTo: '',
+      employmentStatus: 'permanent' as EmploymentStatus,
     },
   });
 
   const selectedHierarchy = watch('hierarchy');
+  const selectedEmploymentStatus = watch('employmentStatus');
 
   useEffect(() => {
     if (open && employeeId) {
@@ -79,6 +84,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         executiveType: undefined,
         teamId: '',
         reportsTo: '',
+        employmentStatus: 'permanent',
       });
       setLinkedUser(null);
       setShowUserLink(false);
@@ -103,6 +109,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           executiveType: employee.executiveType,
           teamId: employee.teamId || '',
           reportsTo: employee.reportsTo || '',
+          employmentStatus: employee.employmentStatus ?? 'permanent',
         });
         
         // Load linked user if exists
@@ -287,6 +294,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         if (leaderId && leaderId !== newEmployeeId) reportsTo = leaderId;
       }
       
+      const employmentStatus = (data.employmentStatus ?? 'permanent') as EmploymentStatus;
       const employee: Employee = {
         id: newEmployeeId,
         name: data.name,
@@ -296,12 +304,37 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         executiveType: data.executiveType,
         teamId: data.teamId ? data.teamId : undefined,
         reportsTo,
+        employmentStatus,
         createdAt: existingEmployee?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
       await saveEmployee(employee);
-      
+
+      // If status is Terminated or Resigned, lock linked user accounts and broadcast session invalidation
+      let didLockAccounts = false;
+      if (LOCKING_STATUSES.includes(employmentStatus)) {
+        const users = await getUsers();
+        const linkedUsers = users.filter((u) => u.employeeId === newEmployeeId);
+        for (const u of linkedUsers) {
+          const updatedUser: User = { ...u, active: false };
+          await saveUser(updatedUser);
+        }
+        try {
+          const channel = new BroadcastChannel('appraisals-auth');
+          channel.postMessage({ type: 'employeeTerminatedOrResigned', employeeId: newEmployeeId });
+          channel.close();
+        } catch {
+          // BroadcastChannel not supported
+        }
+        toast({
+          title: 'Employee status updated',
+          description: "Linked account(s) have been locked and signed out on all devices.",
+          variant: 'success',
+        });
+        didLockAccounts = true;
+      }
+
       // Dispatch event to notify other pages (like Teams) to refresh
       window.dispatchEvent(new CustomEvent('employeeCreated', { detail: { employeeId: newEmployeeId } }));
       window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: newEmployeeId } }));
@@ -528,25 +561,27 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
             variant: 'success' 
           });
         } else {
-          // Editing existing employee - refresh and close
-          toast({ title: 'Success', description: 'Employee updated successfully.', variant: 'success' });
+          // Editing existing employee - refresh and close (skip generic toast if we already showed lock toast)
+          if (!didLockAccounts) {
+            toast({ title: 'Success', description: 'Employee updated successfully.', variant: 'success' });
+          }
         }
-        
+
         // Dispatch event to notify other pages (like Teams) to refresh
         window.dispatchEvent(new CustomEvent('employeeCreated', { detail: { employeeId: newEmployeeId } }));
         window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: newEmployeeId } }));
-        
+
         // Also dispatch after delays to catch pages if they weren't ready
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('employeeCreated', { detail: { employeeId: newEmployeeId } }));
           window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: newEmployeeId } }));
         }, 500);
-        
+
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('employeeCreated', { detail: { employeeId: newEmployeeId } }));
           window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: newEmployeeId } }));
         }, 2000);
-        
+
         onSuccess();
         onOpenChange(false);
         // Reload linked user in case it changed
@@ -1012,6 +1047,27 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
               {errors.reportsTo && <p className="text-sm text-destructive">{errors.reportsTo.message}</p>}
             </div>
           )}
+
+          {/* Employment status */}
+          <div className="space-y-2">
+            <Label htmlFor="employmentStatus">Employment status</Label>
+            <Select id="employmentStatus" {...register('employmentStatus')}>
+              <option value="permanent">Permanent</option>
+              <option value="temporary">Temporary</option>
+              <option value="contractor">Contractor</option>
+              <option value="probation">Probation</option>
+              <option value="intern">Intern</option>
+              <option value="on-leave">On leave</option>
+              <option value="terminated">Terminated</option>
+              <option value="resigned">Resigned</option>
+            </Select>
+            {selectedEmploymentStatus === 'terminated' || selectedEmploymentStatus === 'resigned' ? (
+              <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                This will lock the employee's account and sign them out on all devices.
+              </p>
+            ) : null}
+            {errors.employmentStatus && <p className="text-sm text-destructive">{errors.employmentStatus.message}</p>}
+          </div>
 
           {/* User Account Section - Different UI for new vs existing employees */}
           <div className="space-y-3 pt-4 border-t">

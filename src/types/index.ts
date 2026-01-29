@@ -62,6 +62,30 @@ export interface Template {
 /** Executive type: operational = manages department(s); advisory = no direct department management */
 export type ExecutiveType = 'operational' | 'advisory';
 
+export type EmploymentStatus =
+  | 'permanent'
+  | 'temporary'
+  | 'contractor'
+  | 'probation'
+  | 'intern'
+  | 'on-leave'
+  | 'terminated'
+  | 'resigned';
+
+/** Statuses that lock linked user accounts and invalidate sessions */
+export const LOCKING_STATUSES: EmploymentStatus[] = ['terminated', 'resigned'];
+
+export const EMPLOYMENT_STATUS_LABELS: Record<EmploymentStatus, string> = {
+  permanent: 'Permanent',
+  temporary: 'Temporary',
+  contractor: 'Contractor',
+  probation: 'Probation',
+  intern: 'Intern',
+  'on-leave': 'On leave',
+  terminated: 'Terminated',
+  resigned: 'Resigned',
+};
+
 export interface Employee {
   id: string;
   name: string;
@@ -77,6 +101,8 @@ export interface Employee {
   managesDepartments?: string[];
   /** Direct manager's employee ID */
   reportsTo?: string;
+  /** Employment status (e.g. Permanent, Terminated). When terminated/resigned, linked accounts are locked. */
+  employmentStatus?: EmploymentStatus;
   /** Dotted-line / matrix reporting (secondary managers) */
   dottedLineReportsTo?: string[];
   /** Optional metadata */
