@@ -325,34 +325,33 @@ export function AppraisalFormPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 lg:pt-8 pb-6 lg:pb-10">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 lg:mb-8">
-          <div className="flex-shrink-0 order-2 sm:order-1">
-            <BrandLogo className="max-h-8 opacity-90" />
+      {/* Top bar: logo + theme toggle – always visible */}
+      <div className="sticky top-0 z-20 flex items-center justify-between gap-4 px-4 sm:px-6 lg:px-8 py-3 bg-background/95 backdrop-blur border-b border-border/60">
+        <BrandLogo className="h-9 max-h-9 opacity-90" />
+        <button
+          type="button"
+          onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+          className="shrink-0 p-2.5 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Toggle theme"
+        >
+          {resolvedTheme === 'dark' ? <Moon size={20} weight="duotone" /> : <Sun size={20} weight="duotone" />}
+        </button>
+      </div>
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-6 lg:pb-10">
+        {/* Form title */}
+        <div className="text-center space-y-2 mb-6 lg:mb-8">
+          <h1 className="text-2xl lg:text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 bg-clip-text text-transparent myanmar-text">
+            {template.name}
+          </h1>
+          {template.subtitle && (
+            <p className="text-muted-foreground myanmar-text text-base lg:text-lg">
+              {template.subtitle}
+            </p>
+          )}
+          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <span>Appraising:</span>
+            <span className="font-semibold text-foreground">{employee.name}</span>
           </div>
-          <div className="flex-1 text-center space-y-2 min-w-0 order-1 sm:order-2">
-            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 bg-clip-text text-transparent myanmar-text">
-              {template.name}
-            </h1>
-            {template.subtitle && (
-              <p className="text-muted-foreground myanmar-text text-base lg:text-lg">
-                {template.subtitle}
-              </p>
-            )}
-            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-              <span>Appraising:</span>
-              <span className="font-semibold text-foreground">{employee.name}</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-            className="shrink-0 order-3 p-2.5 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Toggle theme"
-          >
-            {resolvedTheme === 'dark' ? <Moon size={20} weight="duotone" /> : <Sun size={20} weight="duotone" />}
-          </button>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)}>

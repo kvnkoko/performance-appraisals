@@ -9,7 +9,6 @@ import { ProfileEditModal } from './ProfileEditModal';
 import type { Employee, EmployeeProfile, DirectoryFilters as DirectoryFiltersType } from '@/types';
 import { cn } from '@/lib/utils';
 import { getEmployees } from '@/lib/storage';
-import { BrandLogo } from '@/components/shared/brand-logo';
 
 const defaultFilters: DirectoryFiltersType = {
   search: '',
@@ -64,12 +63,9 @@ export function DirectoryPage() {
         )}
       >
         <div className="relative z-10">
-          <div className="flex flex-wrap items-center gap-4 mb-2">
-            <BrandLogo className="max-h-10" />
-            <h1 className="text-3xl font-bold text-foreground tracking-tight">
-              {settings.name || 'Our People'}
-            </h1>
-          </div>
+          <h1 className="text-3xl font-bold text-foreground tracking-tight">
+            {settings.name || 'Our People'}
+          </h1>
           <p className="text-muted-foreground mt-1">Meet the team</p>
           <div className="flex items-center gap-4 mt-4">
             <div className="flex items-center gap-2 text-muted-foreground">
