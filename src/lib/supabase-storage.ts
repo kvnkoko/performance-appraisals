@@ -11,9 +11,16 @@ import type {
   PerformanceSummary, 
   ReviewPeriod,
   Team,
-  User
+  User,
+  EmployeeProfile
 } from '@/types';
 import { isSupabaseConfigured, getSupabaseClient } from './supabase';
+
+const VALID_HIERARCHIES: Employee['hierarchy'][] = ['chairman', 'executive', 'leader', 'department-leader', 'member', 'hr'];
+function normalizeHierarchy(h: string | null | undefined): Employee['hierarchy'] {
+  if (h && VALID_HIERARCHIES.includes(h as Employee['hierarchy'])) return h as Employee['hierarchy'];
+  return 'member';
+}
 
 const TABLES = {
   TEMPLATES: 'templates',
@@ -24,6 +31,7 @@ const TABLES = {
   SETTINGS: 'settings',
   REVIEW_PERIODS: 'review_periods',
   PERFORMANCE_SUMMARIES: 'performance_summaries',
+  EMPLOYEE_PROFILES: 'employee_profiles',
 };
 
 // ============================================
@@ -194,10 +202,12 @@ export async function getEmployeesFromSupabase(): Promise<Employee[]> {
       name: e.name,
       email: e.email,
       role: e.role,
-      hierarchy: e.hierarchy,
+      hierarchy: normalizeHierarchy(e.hierarchy),
+      executiveType: e.executive_type ?? undefined,
       teamId: e.team_id,
       reportsTo: e.reports_to,
       createdAt: e.created_at,
+      updatedAt: e.updated_at,
     }));
   } catch (error) {
     console.error('Error in getEmployeesFromSupabase:', error);
@@ -225,10 +235,12 @@ export async function getEmployeeFromSupabase(id: string): Promise<Employee | un
       name: data.name,
       email: data.email,
       role: data.role,
-      hierarchy: data.hierarchy,
+      hierarchy: normalizeHierarchy(data.hierarchy),
+      executiveType: data.executive_type ?? undefined,
       teamId: data.team_id,
       reportsTo: data.reports_to,
       createdAt: data.created_at,
+      updatedAt: data.updated_at,
     };
   } catch (error) {
     console.error('Error in getEmployeeFromSupabase:', error);
@@ -270,9 +282,11 @@ export async function saveEmployeeToSupabase(employee: Employee): Promise<void> 
     email: employee.email ?? null,
     role: employee.role,
     hierarchy: employee.hierarchy,
+    executive_type: employee.executiveType ?? null,
     team_id: employee.teamId ?? null,
-    reports_to: (employee as { reportsTo?: string }).reportsTo ?? null,
+    reports_to: employee.reportsTo ?? null,
     created_at: employee.createdAt || new Date().toISOString(),
+    updated_at: employee.updatedAt || new Date().toISOString(),
   };
 
   let result = await supabase
@@ -1193,4 +1207,109 @@ export async function getUserByEmployeeIdFromSupabase(employeeId: string): Promi
     console.error('Error in getUserByEmployeeIdFromSupabase:', error);
     return undefined;
   }
+}
+
+// ============================================
+// EMPLOYEE PROFILES
+// ============================================
+function mapProfileFromSupabase(data: any): EmployeeProfile {
+  return {
+    id: data.id,
+    employeeId: data.employee_id,
+    profilePicture: data.profile_picture,
+    coverPhoto: data.cover_photo,
+    bio: data.bio,
+    headline: data.headline,
+    location: data.location,
+    timezone: data.timezone,
+    startDate: data.start_date,
+    birthday: data.birthday,
+    pronouns: data.pronouns,
+    skills: data.skills || [],
+    interests: data.interests || [],
+    socialLinks: data.social_links || {},
+    contactPreferences: data.contact_preferences || {},
+    phoneNumber: data.phone_number,
+    slackHandle: data.slack_handle,
+    funFacts: data.fun_facts || [],
+    achievements: data.achievements || [],
+    education: data.education || [],
+    previousRoles: data.previous_roles || [],
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
+
+export async function getEmployeeProfilesFromSupabase(): Promise<EmployeeProfile[]> {
+  if (!isSupabaseConfigured()) return [];
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return [];
+    const { data, error } = await supabase.from(TABLES.EMPLOYEE_PROFILES).select('*').order('updated_at', { ascending: false });
+    if (error) {
+      if (error.code === '42P01') return [];
+      console.error('getEmployeeProfilesFromSupabase:', error);
+      return [];
+    }
+    return (data || []).map(mapProfileFromSupabase);
+  } catch (e) {
+    console.error('getEmployeeProfilesFromSupabase:', e);
+    return [];
+  }
+}
+
+export async function getEmployeeProfileFromSupabase(employeeId: string): Promise<EmployeeProfile | null> {
+  if (!isSupabaseConfigured()) return null;
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return null;
+    const { data, error } = await supabase.from(TABLES.EMPLOYEE_PROFILES).select('*').eq('employee_id', employeeId).maybeSingle();
+    if (error || !data) return null;
+    return mapProfileFromSupabase(data);
+  } catch (e) {
+    console.error('getEmployeeProfileFromSupabase:', e);
+    return null;
+  }
+}
+
+export async function saveEmployeeProfileToSupabase(profile: EmployeeProfile): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const supabase = await getSupabaseClient();
+  if (!supabase) return;
+  const now = new Date().toISOString();
+  const row = {
+    id: profile.id || profile.employeeId,
+    employee_id: profile.employeeId,
+    profile_picture: profile.profilePicture ?? null,
+    cover_photo: profile.coverPhoto ?? null,
+    bio: profile.bio ?? null,
+    headline: profile.headline ?? null,
+    location: profile.location ?? null,
+    timezone: profile.timezone ?? null,
+    start_date: profile.startDate ?? null,
+    birthday: profile.birthday ?? null,
+    pronouns: profile.pronouns ?? null,
+    skills: profile.skills ?? [],
+    interests: profile.interests ?? [],
+    social_links: profile.socialLinks ?? {},
+    contact_preferences: profile.contactPreferences ?? {},
+    phone_number: profile.phoneNumber ?? null,
+    slack_handle: profile.slackHandle ?? null,
+    fun_facts: profile.funFacts ?? [],
+    achievements: profile.achievements ?? [],
+    education: profile.education ?? [],
+    previous_roles: profile.previousRoles ?? [],
+    created_at: profile.createdAt || now,
+    updated_at: profile.updatedAt || now,
+  };
+  const { error } = await supabase.from(TABLES.EMPLOYEE_PROFILES).upsert(row, { onConflict: 'employee_id' });
+  if (error) throw error;
+}
+
+export async function deleteEmployeeProfileFromSupabase(employeeId: string): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  const supabase = await getSupabaseClient();
+  if (!supabase) return;
+  const { error } = await supabase.from(TABLES.EMPLOYEE_PROFILES).delete().eq('employee_id', employeeId);
+  if (error) throw error;
 }

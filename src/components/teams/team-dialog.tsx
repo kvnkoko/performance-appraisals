@@ -39,14 +39,14 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
   // Department leaders: executives and leaders whose teamId is this team
   const currentLeaders = teamId
     ? employees.filter(
-        (e) => e.teamId === teamId && (e.hierarchy === 'leader' || e.hierarchy === 'executive')
+        (e) => e.teamId === teamId && (e.hierarchy === 'leader' || e.hierarchy === 'department-leader' || e.hierarchy === 'executive')
       )
     : [];
   // Executives and leaders not already leading this team (for "Add leader" dropdown)
   const availableToAdd = teamId
     ? employees.filter(
         (e) =>
-          (e.hierarchy === 'leader' || e.hierarchy === 'executive') && e.teamId !== teamId
+          (e.hierarchy === 'leader' || e.hierarchy === 'department-leader' || e.hierarchy === 'executive') && e.teamId !== teamId
       )
     : [];
 

@@ -103,7 +103,7 @@ export function TeamsPage() {
   // Get department leaders (leaders + executives who lead this department)
   const getTeamLeaders = (teamId: string) => {
     return employees.filter(
-      (e) => e.teamId === teamId && (e.hierarchy === 'leader' || e.hierarchy === 'executive')
+      (e) => e.teamId === teamId && (e.hierarchy === 'leader' || e.hierarchy === 'department-leader' || e.hierarchy === 'executive')
     );
   };
 

@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '@/contexts/app-context';
 import { useUser } from '@/contexts/user-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Avatar } from '@/components/ui/avatar';
+import { ProfileEditModal } from '@/pages/directory/ProfileEditModal';
 import { 
   ClipboardText, 
   CheckCircle, 
@@ -11,13 +14,14 @@ import {
   ChartLineUp,
   Calendar,
   Buildings,
-  Warning
+  Warning,
+  PencilSimple
 } from 'phosphor-react';
 import { formatDate } from '@/lib/utils';
 import type { AppraisalLink, Employee } from '@/types';
 
 export function EmployeeDashboardPage() {
-  const { links, employees, appraisals, reviewPeriods, assignments, loading } = useApp();
+  const { links, employees, appraisals, reviewPeriods, assignments, employeeProfiles, loading } = useApp();
   const { user, employee: contextEmployee, isAdmin } = useUser();
   const employeeId = user?.employeeId ?? contextEmployee?.id ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('employeeId') : null) ?? null;
   const employee = employeeId ? (employees.find(e => e.id === employeeId) ?? contextEmployee ?? null) : null;
@@ -52,6 +56,8 @@ export function EmployeeDashboardPage() {
   const myAppraisals = appraisals.filter(a => a.employeeId === employeeId && a.completedAt);
 
   const userName = localStorage.getItem('userName') || 'User';
+  const [showProfileEdit, setShowProfileEdit] = useState(false);
+  const myProfile = employee ? employeeProfiles.find((p) => p.employeeId === employee.id) : undefined;
 
   if (loading) {
     return (
@@ -94,6 +100,39 @@ export function EmployeeDashboardPage() {
           {employee ? `${employee.role} · ${employee.hierarchy.charAt(0).toUpperCase() + employee.hierarchy.slice(1)}` : 'Your personal appraisal dashboard'}
         </p>
       </div>
+
+      {/* My profile – staff can edit their own profile picture and details */}
+      {employee && (
+        <Card className="overflow-hidden border-border/50 hover:shadow-dropdown transition-shadow duration-200">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-4">
+              <Avatar
+                src={myProfile?.profilePicture ?? employee.avatar ?? undefined}
+                name={employee.name}
+                hierarchy={employee.hierarchy}
+                size="xl"
+                className="shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <h2 className="font-semibold text-foreground truncate">{employee.name}</h2>
+                <p className="text-sm text-muted-foreground truncate">{employee.role}</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setShowProfileEdit(true)} className="shrink-0" aria-label="Edit my profile">
+                <PencilSimple size={18} weight="duotone" className="mr-2" />
+                Edit my profile
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {showProfileEdit && employee && (
+        <ProfileEditModal
+          employee={employee}
+          onClose={() => setShowProfileEdit(false)}
+          onSaved={() => setShowProfileEdit(false)}
+        />
+      )}
 
       {/* Stats Cards – Proxel/Finvero style */}
       <div className="grid gap-4 md:grid-cols-3">

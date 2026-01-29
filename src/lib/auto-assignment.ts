@@ -1,14 +1,15 @@
 /**
  * Auto-assignment logic: preview and generate appraisal assignments from org structure.
  * Uses Reports To first; falls back to same-team (member's team = leader's department) when Reports To is missing.
- * Executives are never appraised by anyone. Exec/leads (executives with teamId) only do Exec→Leader.
+ * Executives and chairman are never appraised by anyone. Exec/leads only do Exec→Leader.
  * Only pure leaders (hierarchy='leader') do Leader→Member, Leader→Leader, and are targets of Member→Leader and Exec→Leader.
  */
 import type { Employee, AppraisalAssignment, AssignmentRelationshipType } from '@/types';
 import { generateId } from '@/lib/utils';
 
+const isChairman = (e: Employee): boolean => e.hierarchy === 'chairman';
 const isExecutive = (e: Employee): boolean => e.hierarchy === 'executive';
-const isPureLeader = (e: Employee): boolean => e.hierarchy === 'leader';
+const isPureLeader = (e: Employee): boolean => e.hierarchy === 'leader' || e.hierarchy === 'department-leader';
 
 export interface AutoAssignmentPreview {
   leaderToMember: { appraiserId: string; appraiserName: string; employeeId: string; employeeName: string }[];
@@ -178,10 +179,10 @@ export function previewAutoAssignments(
     }
   }
 
-  // RULE 5: HR → All — HR appraises non-HR employees; executives are never targets.
+  // RULE 5: HR → All — HR appraises non-HR employees; executives and chairman are never targets.
   if (opts.includeHrToAll) {
     const hrStaff = employees.filter((e) => e.hierarchy === 'hr');
-    const allOthers = employees.filter((e) => e.hierarchy !== 'hr' && !isExecutive(e));
+    const allOthers = employees.filter((e) => e.hierarchy !== 'hr' && !isExecutive(e) && !isChairman(e));
     for (const hrPerson of hrStaff) {
       for (const employee of allOthers) {
         hrToAll.push({

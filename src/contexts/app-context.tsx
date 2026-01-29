@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, ReviewPeriod, Team, AppraisalAssignment } from '@/types';
-import { getTemplates, getEmployees, getAppraisals, getLinks, getSettings, getReviewPeriods, getActiveReviewPeriods, getTeams, getAppraisalAssignments } from '@/lib/storage';
+import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, ReviewPeriod, Team, AppraisalAssignment, EmployeeProfile } from '@/types';
+import { getTemplates, getEmployees, getAppraisals, getLinks, getSettings, getReviewPeriods, getActiveReviewPeriods, getTeams, getAppraisalAssignments, getEmployeeProfiles } from '@/lib/storage';
+import { getDepartmentLeaderId } from '@/lib/org-chart-utils';
 import { applyAccentColor } from '@/lib/utils';
 
 interface AppContextType {
@@ -13,6 +14,7 @@ interface AppContextType {
   reviewPeriods: ReviewPeriod[];
   activePeriods: ReviewPeriod[];
   teams: Team[];
+  employeeProfiles: EmployeeProfile[];
   loading: boolean;
   refresh: () => Promise<void>;
 }
@@ -34,6 +36,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activePeriods, setActivePeriods] = useState<ReviewPeriod[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [assignments, setAssignments] = useState<AppraisalAssignment[]>([]);
+  const [employeeProfiles, setEmployeeProfiles] = useState<EmployeeProfile[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
@@ -49,10 +52,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
         getActiveReviewPeriods(),
         getTeams(),
         getAppraisalAssignments(),
+        getEmployeeProfiles(),
       ]);
       
       if (results[0].status === 'fulfilled') setTemplates(results[0].value);
-      if (results[1].status === 'fulfilled') setEmployees(results[1].value);
+      if (results[1].status === 'fulfilled') {
+        const next = results[1].value;
+        // Auto-set Reports to = department leader when not set (in memory for app state)
+        const normalized = next.map((e) => {
+          if (e.teamId && !e.reportsTo) {
+            const leaderId = getDepartmentLeaderId(e.teamId, next);
+            if (leaderId && leaderId !== e.id) return { ...e, reportsTo: leaderId };
+          }
+          return e;
+        });
+        setEmployees((prev) => (normalized.length > 0 ? normalized : prev.length > 0 ? prev : normalized));
+      }
       if (results[2].status === 'fulfilled') setAppraisals(results[2].value);
       if (results[3].status === 'fulfilled') setLinks(results[3].value);
       if (results[4].status === 'fulfilled') {
@@ -67,6 +82,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (results[6].status === 'fulfilled') setActivePeriods(results[6].value);
       if (results[7].status === 'fulfilled') setTeams(results[7].value);
       if (results[8].status === 'fulfilled') setAssignments(results[8].value);
+      if (results[9].status === 'fulfilled') {
+        const next = results[9].value;
+        // Never replace with empty when we already have profiles (keeps directory visible)
+        setEmployeeProfiles((prev) => (next.length > 0 ? next : prev.length > 0 ? prev : next));
+      }
       
       // Log any failures for debugging
       results.forEach((result, index) => {
@@ -97,6 +117,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     window.addEventListener('userUpdated', handleDataChange);
     window.addEventListener('teamCreated', handleDataChange);
     window.addEventListener('teamUpdated', handleDataChange);
+    window.addEventListener('employeeProfileUpdated', handleDataChange);
     
     return () => {
       window.removeEventListener('employeeCreated', handleDataChange);
@@ -105,11 +126,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('userUpdated', handleDataChange);
       window.removeEventListener('teamCreated', handleDataChange);
       window.removeEventListener('teamUpdated', handleDataChange);
+      window.removeEventListener('employeeProfileUpdated', handleDataChange);
     };
   }, [refresh]);
 
   return (
-    <AppContext.Provider value={{ templates, employees, appraisals, links, assignments, settings, reviewPeriods, activePeriods, teams, loading, refresh }}>
+    <AppContext.Provider value={{ templates, employees, appraisals, links, assignments, settings, reviewPeriods, activePeriods, teams, employeeProfiles, loading, refresh }}>
       {children}
     </AppContext.Provider>
   );

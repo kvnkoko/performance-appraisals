@@ -1,5 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, PerformanceSummary, ReviewPeriod, User, Team, AppraisalAssignment } from '@/types';
+import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, PerformanceSummary, ReviewPeriod, User, Team, AppraisalAssignment, EmployeeProfile } from '@/types';
 
 interface AppraisalDB extends DBSchema {
   templates: {
@@ -44,6 +44,10 @@ interface AppraisalDB extends DBSchema {
     value: AppraisalAssignment;
     indexes: { 'by-period': string; 'by-appraiser': string };
   };
+  employeeProfiles: {
+    key: string;
+    value: EmployeeProfile;
+  };
 }
 
 let db: IDBPDatabase<AppraisalDB> | null = null;
@@ -52,7 +56,7 @@ let _supabaseUsersDiagnosticLogged = false;
 export async function initDB(): Promise<IDBPDatabase<AppraisalDB>> {
   if (db) return db;
 
-  db = await openDB<AppraisalDB>('appraisal-db', 5, {
+  db = await openDB<AppraisalDB>('appraisal-db', 6, {
     upgrade(db, _oldVersion, _newVersion, transaction) {
       // Create all object stores if they don't exist
       if (!db.objectStoreNames.contains('templates')) {
@@ -150,6 +154,10 @@ export async function initDB(): Promise<IDBPDatabase<AppraisalDB>> {
         asnStore.createIndex('by-period', 'reviewPeriodId', { unique: false });
         // @ts-ignore - idb library type issue
         asnStore.createIndex('by-appraiser', 'appraiserId', { unique: false });
+      }
+      // Create employee_profiles store (directory / org chart profiles)
+      if (!db.objectStoreNames.contains('employeeProfiles')) {
+        db.createObjectStore('employeeProfiles', { keyPath: 'employeeId' });
       }
     },
   });
@@ -264,35 +272,47 @@ export async function deleteTemplate(id: string): Promise<void> {
   await database.delete('templates', id);
 }
 
-// Employees - Supabase as single source of truth when configured; fallback to IndexedDB for read-your-writes
+// Employees - Supabase as single source of truth when configured; fallback to IndexedDB for read-your-writes.
+// Never throws: returns [] on any failure so directory never disappears due to unhandled rejection.
 export async function getEmployees(): Promise<Employee[]> {
-  const database = await initDB();
   try {
-    const { isSupabaseConfigured } = await import('./supabase');
-    if (isSupabaseConfigured()) {
-      const { getEmployeesFromSupabase } = await import('./supabase-storage');
-      const supabaseEmployees = await getEmployeesFromSupabase();
-      if (import.meta.env.DEV) console.log('getEmployees: Found', supabaseEmployees.length, 'employees in Supabase');
-      if (database.objectStoreNames.contains('employees')) {
-        const tx = database.transaction('employees', 'readwrite');
-        const store = tx.objectStore('employees');
-        await store.clear();
-        for (const e of supabaseEmployees) await store.put(e);
+    const database = await initDB();
+    try {
+      const { isSupabaseConfigured } = await import('./supabase');
+      if (isSupabaseConfigured()) {
+        const { getEmployeesFromSupabase } = await import('./supabase-storage');
+        const supabaseEmployees = await getEmployeesFromSupabase();
+        if (import.meta.env.DEV) console.log('getEmployees: Found', supabaseEmployees.length, 'employees in Supabase');
+        if (supabaseEmployees.length > 0) {
+          if (database.objectStoreNames.contains('employees')) {
+            const tx = database.transaction('employees', 'readwrite');
+            const store = tx.objectStore('employees');
+            await store.clear();
+            for (const e of supabaseEmployees) await store.put(e);
+          }
+          return supabaseEmployees;
+        }
+        // Supabase returned empty — do not overwrite IndexedDB; return existing data so directory does not disappear
+        if (database.objectStoreNames.contains('employees')) {
+          const existing = await database.getAll('employees');
+          if (existing.length > 0) return existing;
+        }
       }
-      if (supabaseEmployees.length > 0) return supabaseEmployees;
-      // Supabase returned empty — fall back to IndexedDB so creating browser sees its just-written employee
+    } catch (error) {
+      if (import.meta.env.DEV) console.log('getEmployees: Supabase not available, using IndexedDB:', error);
     }
-  } catch (error) {
-    if (import.meta.env.DEV) console.log('getEmployees: Supabase not available, using IndexedDB:', error);
-  }
-  try {
-    if (database.objectStoreNames.contains('employees')) {
-      return database.getAll('employees');
+    try {
+      if (database.objectStoreNames.contains('employees')) {
+        return await database.getAll('employees');
+      }
+    } catch (error) {
+      console.error('Error getting employees from IndexedDB:', error);
     }
+    return [];
   } catch (error) {
-    console.error('Error getting employees from IndexedDB:', error);
+    console.error('getEmployees failed:', error);
+    return [];
   }
-  return [];
 }
 
 export async function getEmployee(id: string): Promise<Employee | undefined> {
@@ -393,6 +413,15 @@ export async function cascadeDeleteForEmployee(employeeId: string): Promise<void
       await database.delete('summaries', employeeId);
     } catch {
       // summaries keyPath is employeeId; ignore if missing
+    }
+  }
+
+  // IndexedDB: employee profile for this employee
+  if (database.objectStoreNames.contains('employeeProfiles')) {
+    try {
+      await database.delete('employeeProfiles', employeeId);
+    } catch {
+      // ignore if missing
     }
   }
 
@@ -1252,7 +1281,7 @@ export async function syncFromSupabase(): Promise<boolean> {
 
 // Export/Import
 export async function exportData(): Promise<string> {
-  const [templates, employees, appraisals, links, settings, reviewPeriods, users, teams] = await Promise.all([
+  const [templates, employees, appraisals, links, settings, reviewPeriods, users, teams, employeeProfiles] = await Promise.all([
     getTemplates(),
     getEmployees(),
     getAppraisals(),
@@ -1261,6 +1290,7 @@ export async function exportData(): Promise<string> {
     getReviewPeriods(),
     getUsers(),
     getTeams(),
+    getEmployeeProfiles(),
   ]);
 
   return JSON.stringify({
@@ -1272,6 +1302,7 @@ export async function exportData(): Promise<string> {
     reviewPeriods,
     users,
     teams,
+    employeeProfiles,
     version: '1.0.0',
     exportedAt: new Date().toISOString(),
   }, null, 2);
@@ -1492,6 +1523,93 @@ export async function deleteUser(id: string): Promise<void> {
   await database.delete('users', id);
 }
 
+// Employee profiles (directory / org chart). Never throws: returns [] on any failure.
+export async function getEmployeeProfiles(): Promise<EmployeeProfile[]> {
+  try {
+    const database = await initDB();
+    try {
+      const { isSupabaseConfigured } = await import('./supabase');
+      if (isSupabaseConfigured()) {
+        const { getEmployeeProfilesFromSupabase } = await import('./supabase-storage');
+        const list = await getEmployeeProfilesFromSupabase();
+        if (list.length > 0) {
+          if (database.objectStoreNames.contains('employeeProfiles')) {
+            const tx = database.transaction('employeeProfiles', 'readwrite');
+            const store = tx.objectStore('employeeProfiles');
+            await store.clear();
+            for (const p of list) await store.put(p);
+          }
+          return list;
+        }
+        // Supabase returned empty — do not overwrite IndexedDB; return existing data
+        if (database.objectStoreNames.contains('employeeProfiles')) {
+          const existing = await database.getAll('employeeProfiles');
+          if (existing.length > 0) return existing;
+        }
+      }
+    } catch (e) {
+      if (import.meta.env.DEV) console.log('getEmployeeProfiles: Supabase not available, using IndexedDB:', e);
+    }
+    if (database.objectStoreNames.contains('employeeProfiles')) {
+      return await database.getAll('employeeProfiles');
+    }
+    return [];
+  } catch (error) {
+    console.error('getEmployeeProfiles failed:', error);
+    return [];
+  }
+}
+
+export async function getEmployeeProfile(employeeId: string): Promise<EmployeeProfile | null> {
+  const database = await initDB();
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { getEmployeeProfileFromSupabase } = await import('./supabase-storage');
+      const p = await getEmployeeProfileFromSupabase(employeeId);
+      if (p && database.objectStoreNames.contains('employeeProfiles')) {
+        await database.put('employeeProfiles', p);
+      }
+      return p ?? null;
+    }
+  } catch (e) {
+    if (import.meta.env.DEV) console.log('getEmployeeProfile: Supabase not available, using IndexedDB:', e);
+  }
+  const p = await database.get('employeeProfiles', employeeId);
+  return p ?? null;
+}
+
+export async function saveEmployeeProfile(profile: EmployeeProfile): Promise<void> {
+  const database = await initDB();
+  const toSave = { ...profile, employeeId: profile.employeeId };
+  await database.put('employeeProfiles', toSave);
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { saveEmployeeProfileToSupabase } = await import('./supabase-storage');
+      await saveEmployeeProfileToSupabase(toSave);
+    }
+  } catch (e) {
+    if (import.meta.env.DEV) console.warn('saveEmployeeProfile: Supabase sync failed', e);
+  }
+  window.dispatchEvent(new CustomEvent('employeeProfileUpdated', { detail: { employeeId: profile.employeeId } }));
+}
+
+export async function deleteEmployeeProfile(employeeId: string): Promise<void> {
+  const database = await initDB();
+  try {
+    const { isSupabaseConfigured } = await import('./supabase');
+    if (isSupabaseConfigured()) {
+      const { deleteEmployeeProfileFromSupabase } = await import('./supabase-storage');
+      await deleteEmployeeProfileFromSupabase(employeeId);
+    }
+  } catch (e) {
+    if (import.meta.env.DEV) console.warn('deleteEmployeeProfile: Supabase sync failed', e);
+  }
+  await database.delete('employeeProfiles', employeeId);
+  window.dispatchEvent(new CustomEvent('employeeProfileUpdated', { detail: { employeeId } }));
+}
+
 export async function importData(json: string): Promise<void> {
   const data = JSON.parse(json);
   const database = await initDB();
@@ -1537,6 +1655,11 @@ export async function importData(json: string): Promise<void> {
   if (data.teams) {
     for (const team of data.teams) {
       await database.put('teams', team);
+    }
+  }
+  if (data.employeeProfiles) {
+    for (const profile of data.employeeProfiles) {
+      if (profile.employeeId) await database.put('employeeProfiles', profile);
     }
   }
 }

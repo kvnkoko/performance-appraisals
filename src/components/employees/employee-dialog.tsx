@@ -9,7 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { getEmployee, saveEmployee, saveUser, getUserByUsername, getUsers, getUserByEmployeeId } from '@/lib/storage';
 import { generateId, hashPassword } from '@/lib/utils';
-import type { Employee, User } from '@/types';
+import { getDepartmentLeaderId } from '@/lib/org-chart-utils';
+import type { Employee, User, ExecutiveType } from '@/types';
+import { isDepartmentLeader } from '@/types';
 import { useToast } from '@/contexts/toast-context';
 import { useApp } from '@/contexts/app-context';
 import { LinkSimple, LinkSimpleBreak, UserCircle } from 'phosphor-react';
@@ -18,7 +20,8 @@ const employeeSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   email: z.string().email('Invalid email').optional().or(z.literal('')),
   role: z.string().min(1, 'Role is required'),
-  hierarchy: z.enum(['executive', 'leader', 'member', 'hr']),
+  hierarchy: z.enum(['chairman', 'executive', 'leader', 'department-leader', 'member', 'hr']),
+  executiveType: z.enum(['operational', 'advisory']).optional(),
   teamId: z.string().optional(),
   reportsTo: z.string().optional(),
 });
@@ -55,6 +58,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
       email: '',
       role: '',
       hierarchy: 'member',
+      executiveType: undefined as ExecutiveType | undefined,
       teamId: '',
       reportsTo: '',
     },
@@ -72,6 +76,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         email: '',
         role: '',
         hierarchy: 'member',
+        executiveType: undefined,
         teamId: '',
         reportsTo: '',
       });
@@ -95,6 +100,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           email: employee.email || '',
           role: employee.role,
           hierarchy: employee.hierarchy,
+          executiveType: employee.executiveType,
           teamId: employee.teamId || '',
           reportsTo: employee.reportsTo || '',
         });
@@ -274,6 +280,12 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
     try {
       const existingEmployee = employeeId ? await getEmployee(employeeId) : null;
       const newEmployeeId = employeeId || generateId();
+      // Auto-set Reports to = department leader when not set (persist to DB)
+      let reportsTo = data.reportsTo || undefined;
+      if (data.teamId && !reportsTo) {
+        const leaderId = getDepartmentLeaderId(data.teamId, employees);
+        if (leaderId && leaderId !== newEmployeeId) reportsTo = leaderId;
+      }
       
       const employee: Employee = {
         id: newEmployeeId,
@@ -281,9 +293,11 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         email: data.email || undefined,
         role: data.role,
         hierarchy: data.hierarchy,
+        executiveType: data.executiveType,
         teamId: data.teamId ? data.teamId : undefined,
-        reportsTo: data.reportsTo || undefined,
+        reportsTo,
         createdAt: existingEmployee?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
 
       await saveEmployee(employee);
@@ -871,10 +885,11 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           <div className="space-y-2">
             <Label htmlFor="hierarchy">Hierarchy Level</Label>
             <Select id="hierarchy" {...register('hierarchy')}>
+              <option value="chairman">Chairman</option>
               <option value="executive">Executive</option>
-              <option value="leader">Leader</option>
-              <option value="member">Member</option>
-              <option value="hr">HR</option>
+              <option value="department-leader">Department Leader</option>
+              <option value="member">Team Member</option>
+              <option value="hr">HR Personnel</option>
             </Select>
             <p className="text-xs text-muted-foreground">
               HR personnel can appraise all employees company-wide.
@@ -911,7 +926,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
               </p>
               {errors.teamId && <p className="text-sm text-destructive">{errors.teamId.message}</p>}
             </div>
-          ) : selectedHierarchy === 'leader' ? (
+          ) : (selectedHierarchy === 'leader' || selectedHierarchy === 'department-leader') ? (
             <div className="space-y-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
               <div className="flex items-center gap-2">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/20">
@@ -957,14 +972,34 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
             </div>
           )}
 
-          {/* Reports To - for members and leaders (direct manager for auto-assignment) */}
-          {(selectedHierarchy === 'member' || selectedHierarchy === 'leader') && (
+          {/* Executive type: operational (manages dept) vs advisory (no dept) */}
+          {selectedHierarchy === 'executive' && (
+            <div className="space-y-2">
+              <Label htmlFor="executiveType">Executive Type</Label>
+              <Select id="executiveType" {...register('executiveType')}>
+                <option value="">Not set</option>
+                <option value="operational">Operational (manages department(s))</option>
+                <option value="advisory">Advisory (no direct department)</option>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Operational executives oversee department(s); advisory executives have no direct department management.
+              </p>
+            </div>
+          )}
+
+          {/* Reports To - for members, leaders, and executives (direct manager for auto-assignment) */}
+          {(selectedHierarchy === 'member' || selectedHierarchy === 'leader' || selectedHierarchy === 'department-leader' || selectedHierarchy === 'executive') && (
             <div className="space-y-2">
               <Label htmlFor="reportsTo">Reports To</Label>
               <Select id="reportsTo" {...register('reportsTo')}>
                 <option value="">Not set</option>
                 {employees
-                  .filter((e) => (e.hierarchy === 'leader' || e.hierarchy === 'executive') && e.id !== employeeId)
+                  .filter((e) => {
+                    if (e.id === employeeId) return false;
+                    if (selectedHierarchy === 'executive') return e.hierarchy === 'chairman';
+                    if (isDepartmentLeader(selectedHierarchy)) return e.hierarchy === 'chairman' || e.hierarchy === 'executive';
+                    return isDepartmentLeader(e.hierarchy) || e.hierarchy === 'executive' || e.hierarchy === 'chairman';
+                  })
                   .map((emp) => (
                     <option key={emp.id} value={emp.id}>
                       {emp.name} ({emp.hierarchy})

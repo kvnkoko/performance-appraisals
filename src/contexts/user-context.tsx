@@ -145,7 +145,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   };
   
   const isLeader = () => {
-    return employee?.hierarchy === 'leader';
+    return employee?.hierarchy === 'leader' || employee?.hierarchy === 'department-leader';
   };
   
   const isMember = () => {

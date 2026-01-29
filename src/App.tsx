@@ -27,6 +27,9 @@ import { TeamsPage } from '@/pages/teams';
 import { EmployeeDashboardPage } from '@/pages/employee-dashboard';
 import { MyAppraisalsPage } from '@/pages/my-appraisals';
 import { MyPerformancePage } from '@/pages/my-performance';
+import { DirectoryPage } from '@/pages/directory/DirectoryPage';
+import { OrgChartPage } from '@/pages/org-chart/OrgChartPage';
+import { OrganizationAnalyticsPage } from '@/pages/organization-analytics/OrganizationAnalyticsPage';
 import { useUser } from '@/contexts/user-context';
 
 function PrivateRoute({ children }: { children: React.ReactElement }) {
@@ -146,6 +149,11 @@ function App() {
                         <Route path="/my-dashboard" element={<MyDashboardOrRedirect />} />
                         <Route path="/my-appraisals" element={<MyAppraisalsPage />} />
                         <Route path="/my-performance" element={<MyPerformancePage />} />
+                        
+                        {/* Shared: Directory & Org Chart (admin + staff) */}
+                        <Route path="/directory" element={<DirectoryPage />} />
+                        <Route path="/org-chart" element={<OrgChartPage />} />
+                        <Route path="/organization-analytics" element={<AdminRoute><OrganizationAnalyticsPage /></AdminRoute>} />
                         
                         {/* Shared routes */}
                         <Route path="/settings" element={<SettingsPage />} />

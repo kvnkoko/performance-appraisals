@@ -1,6 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;500;600;700&display=swap');
 @import url('https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,600,700,800,900&display=swap');
 
+@import './styles/animations.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -45,6 +46,14 @@
     --accent-color: #2563eb;
     --accent-light: 217 91% 70%;
     --accent-dark: 217 91% 45%;
+    /* Hierarchy (directory / org chart) */
+    --color-executive: 38 92% 50%;
+    --color-leader: 217 91% 55%;
+    --color-member: 220 10% 46%;
+    --color-hr: 262 83% 58%;
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.2);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
   }
 
   .dark {
@@ -60,6 +69,7 @@
     --secondary-foreground: 210 20% 98%;
     --muted: 224 18% 10%;
     --muted-foreground: 220 12% 62%;
+    --accent: 224 16% 18%;
     --accent-foreground: 210 20% 98%;
     --destructive: 0 65% 50%;
     --destructive-foreground: 0 0% 98%;
@@ -79,6 +89,13 @@
     --warning-foreground: 224 25% 4%;
     --info: 199 89% 48%;
     --info-foreground: 0 0% 98%;
+    --color-executive: 38 92% 55%;
+    --color-leader: 217 91% 60%;
+    --color-member: 220 12% 62%;
+    --color-hr: 262 83% 65%;
+    --glass-bg: rgba(30, 30, 30, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   }
 }
 

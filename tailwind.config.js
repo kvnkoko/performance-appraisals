@@ -46,6 +46,12 @@ export default {
           4: 'hsl(var(--chart-4))',
           5: 'hsl(var(--chart-5))',
         },
+        hierarchy: {
+          executive: 'hsl(var(--color-executive))',
+          leader: 'hsl(var(--color-leader))',
+          member: 'hsl(var(--color-member))',
+          hr: 'hsl(var(--color-hr))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
@@ -55,6 +61,17 @@ export default {
       boxShadow: {
         'card': 'var(--shadow-card)',
         'dropdown': 'var(--shadow-dropdown)',
+        'glass': '0 8px 32px rgba(0, 0, 0, 0.1)',
+        'card-hover': '0 20px 40px rgba(0, 0, 0, 0.12)',
+      },
+      animation: {
+        'fade-in-up': 'fadeInUp 0.5s ease-out',
+        'scale-in': 'scaleIn 0.3s ease-out',
+        'pulse-ring': 'pulse-ring 1.5s ease-out infinite',
+        'float': 'float 3s ease-in-out infinite',
+      },
+      backdropBlur: {
+        xs: '2px',
       },
     },
   },

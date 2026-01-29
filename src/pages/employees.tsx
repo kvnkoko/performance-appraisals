@@ -4,9 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Plus, Pencil, Trash, Users, MagnifyingGlass, UsersThree, UserCircle, CheckCircle, ArrowClockwise } from 'phosphor-react';
+import { Plus, Pencil, Trash, Users, MagnifyingGlass, UsersThree, CheckCircle, ArrowClockwise, List, Buildings } from 'phosphor-react';
 import { EmployeeDialog } from '@/components/employees/employee-dialog';
-import { HIERARCHY_LABELS } from '@/types';
+import { HIERARCHY_LABELS, isDepartmentLeader } from '@/types';
 import { deleteEmployee, getUserByEmployeeId } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { formatDate } from '@/lib/utils';
@@ -25,6 +25,8 @@ export function EmployeesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  type GroupBy = 'hierarchy' | 'department' | 'flat';
+  const [groupBy, setGroupBy] = useState<GroupBy>('hierarchy');
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string | null; name: string }>({
     open: false,
     id: null,
@@ -139,6 +141,45 @@ export function EmployeesPage() {
     employee.role.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  /** Group by hierarchy: Chairman → Executives → Department Leaders → Team Members → HR */
+  const hierarchyOrder: Array<{ key: string; label: string; predicate: (e: (typeof employees)[0]) => boolean }> = [
+    { key: 'chairman', label: 'Chairman', predicate: (e) => e.hierarchy === 'chairman' },
+    { key: 'executive', label: 'Executives', predicate: (e) => e.hierarchy === 'executive' },
+    { key: 'leaders', label: 'Department Leaders', predicate: (e) => isDepartmentLeader(e.hierarchy) },
+    { key: 'member', label: 'Team Members', predicate: (e) => e.hierarchy === 'member' },
+    { key: 'hr', label: 'HR Personnel', predicate: (e) => e.hierarchy === 'hr' },
+  ];
+
+  type EmployeeGroup = { key: string; label: string; employees: typeof filteredEmployees };
+  const groups: EmployeeGroup[] = (() => {
+    if (groupBy === 'hierarchy') {
+      return hierarchyOrder.map(({ key, label, predicate }) => ({
+        key,
+        label,
+        employees: filteredEmployees.filter(predicate),
+      })).filter((g) => g.employees.length > 0);
+    }
+    if (groupBy === 'department') {
+      const byTeam = new Map<string | 'none', typeof filteredEmployees>();
+      for (const e of filteredEmployees) {
+        const tid = e.teamId ?? 'none';
+        if (!byTeam.has(tid)) byTeam.set(tid, []);
+        byTeam.get(tid)!.push(e);
+      }
+      const result: EmployeeGroup[] = [];
+      for (const team of teams) {
+        const list = byTeam.get(team.id);
+        if (list?.length) result.push({ key: team.id, label: team.name, employees: list });
+      }
+      const noDept = byTeam.get('none');
+      if (noDept?.length) result.push({ key: 'none', label: 'No department', employees: noDept });
+      return result;
+    }
+    // flat: single group, sorted by name
+    const sorted = [...filteredEmployees].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    return sorted.length ? [{ key: 'all', label: 'All employees', employees: sorted }] : [];
+  })();
+
   return (
     <div className="space-y-6">
       {/* Header – award-worthy hierarchy */}
@@ -190,15 +231,50 @@ export function EmployeesPage() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Input
-          placeholder="Search employees by name or role..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-12 pl-10 text-base"
-        />
-        <MagnifyingGlass size={20} weight="duotone" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+      {/* Search and view filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Input
+            placeholder="Search employees by name or role..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-11 pl-10 text-base"
+            aria-label="Search employees by name or role"
+          />
+          <MagnifyingGlass size={20} weight="duotone" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        </div>
+        <div className="flex rounded-lg border border-border overflow-hidden shrink-0" role="group" aria-label="Group employees by">
+          <button
+            type="button"
+            onClick={() => setGroupBy('hierarchy')}
+            className={`flex items-center gap-2 px-3 py-2.5 text-sm font-medium transition-colors ${groupBy === 'hierarchy' ? 'bg-accent text-accent-foreground' : 'bg-card hover:bg-muted text-muted-foreground'}`}
+            title="Group by hierarchy"
+            aria-pressed={groupBy === 'hierarchy'}
+          >
+            <UsersThree size={18} weight="duotone" />
+            Hierarchy
+          </button>
+          <button
+            type="button"
+            onClick={() => setGroupBy('department')}
+            className={`flex items-center gap-2 px-3 py-2.5 text-sm font-medium transition-colors border-l border-border ${groupBy === 'department' ? 'bg-accent text-accent-foreground' : 'bg-card hover:bg-muted text-muted-foreground'}`}
+            title="Group by department"
+            aria-pressed={groupBy === 'department'}
+          >
+            <Buildings size={18} weight="duotone" />
+            Department
+          </button>
+          <button
+            type="button"
+            onClick={() => setGroupBy('flat')}
+            className={`flex items-center gap-2 px-3 py-2.5 text-sm font-medium transition-colors border-l border-border ${groupBy === 'flat' ? 'bg-accent text-accent-foreground' : 'bg-card hover:bg-muted text-muted-foreground'}`}
+            title="Flat list (A–Z)"
+            aria-pressed={groupBy === 'flat'}
+          >
+            <List size={18} weight="duotone" />
+            A–Z
+          </button>
+        </div>
       </div>
 
       {filteredEmployees.length === 0 ? (
@@ -222,25 +298,38 @@ export function EmployeesPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filteredEmployees.map((employee) => (
-            <Card 
-              key={employee.id} 
-              className="hover:shadow-xl transition-all duration-300 border-2 hover:border-purple-500/50 group"
-            >
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg group-hover:text-purple-600 transition-colors">
-                  {employee.name}
-                </CardTitle>
-                <CardDescription className="text-base">{employee.role}</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-muted-foreground min-w-[80px]">Hierarchy:</span>
-                  <span className={employee.hierarchy === 'hr' ? 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300 border border-teal-200 dark:border-teal-700' : 'font-semibold'}>
-                    {HIERARCHY_LABELS[employee.hierarchy]}
-                  </span>
-                </div>
+        <div className="space-y-8">
+          {groups.map((group) => (
+            <section key={group.key}>
+              <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+                <UsersThree size={20} weight="duotone" className="text-muted-foreground" />
+                {group.label}
+                <span className="text-sm font-normal text-muted-foreground">({group.employees.length})</span>
+              </h2>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {group.employees.map((employee) => (
+                  <Card 
+                    key={employee.id} 
+                    className="hover:shadow-xl transition-all duration-300 border-2 hover:border-purple-500/50 group"
+                  >
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg group-hover:text-purple-600 transition-colors">
+                        {employee.name}
+                      </CardTitle>
+                      <CardDescription className="text-base">{employee.role}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex items-center gap-2 text-sm flex-wrap">
+                        <span className="text-muted-foreground min-w-[80px]">Hierarchy:</span>
+                        <span className={employee.hierarchy === 'hr' ? 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300 border border-teal-200 dark:border-teal-700' : 'font-semibold'}>
+                          {HIERARCHY_LABELS[employee.hierarchy]}
+                        </span>
+                        {employee.hierarchy === 'executive' && employee.executiveType && (
+                          <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 border border-blue-200 dark:border-blue-700">
+                            {employee.executiveType === 'operational' ? 'Operational' : 'Advisory'}
+                          </span>
+                        )}
+                      </div>
                 {employee.teamId && getTeamName(employee.teamId) && (
                   <div className="flex items-center gap-2 text-sm">
                     <span className="text-muted-foreground min-w-[80px]">Team:</span>
@@ -274,37 +363,40 @@ export function EmployeesPage() {
                 <div className="text-xs text-muted-foreground pt-2 border-t">
                   Added {formatDate(employee.createdAt)}
                 </div>
-                <div className="flex gap-2 pt-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 hover:bg-purple-500 hover:text-white hover:border-purple-500 transition-all"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingEmployee(employee.id);
-                      setDialogOpen(true);
-                    }}
-                  >
-                    <Pencil size={16} weight="duotone" className="mr-1.5" />
-                    Edit
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteClick(employee.id, employee.name);
-                    }}
-                  >
-                    <Trash size={16} weight="duotone" className="mr-1.5" />
-                    Delete
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                      <div className="flex gap-2 pt-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 hover:bg-purple-500 hover:text-white hover:border-purple-500 transition-all"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingEmployee(employee.id);
+                            setDialogOpen(true);
+                          }}
+                        >
+                          <Pencil size={16} weight="duotone" className="mr-1.5" />
+                          Edit
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 text-red-600 hover:bg-red-500 hover:text-white hover:border-red-500 transition-all"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClick(employee.id, employee.name);
+                          }}
+                          >
+                            <Trash size={16} weight="duotone" className="mr-1.5" />
+                            Delete
+                          </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </section>
           ))}
         </div>
       )}

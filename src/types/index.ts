@@ -59,16 +59,33 @@ export interface Template {
   version: number;
 }
 
+/** Executive type: operational = manages department(s); advisory = no direct department management */
+export type ExecutiveType = 'operational' | 'advisory';
+
 export interface Employee {
   id: string;
   name: string;
   email?: string;
-  role: string;
-  /** Primary role. Executives can also lead departments (set teamId) and have direct reports like leaders. HR appraises all employees company-wide. */
-  hierarchy: 'executive' | 'leader' | 'member' | 'hr';
-  teamId?: string; // department/team; executives with teamId lead that department
-  reportsTo?: string; // employeeId of direct manager (Leader or Executive) – for auto-assignment
+  role: string; // Job title: "CEO", "CFO", "Senior Developer", etc.
+  /** Hierarchy: Chairman → Executives (C-Suite) → Department Leaders → Members. HR is company-wide. */
+  hierarchy: 'chairman' | 'executive' | 'leader' | 'department-leader' | 'member' | 'hr';
+  /** Only for hierarchy === 'executive': operational = manages dept(s), advisory = no dept */
+  executiveType?: ExecutiveType;
+  /** Department/team membership (for leaders, members, HR). Legacy: use teamId. */
+  teamId?: string;
+  /** For operational executives: department IDs this executive oversees */
+  managesDepartments?: string[];
+  /** Direct manager's employee ID */
+  reportsTo?: string;
+  /** Dotted-line / matrix reporting (secondary managers) */
+  dottedLineReportsTo?: string[];
+  /** Optional metadata */
+  avatar?: string;
+  phone?: string;
+  location?: string;
+  startDate?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 /** Relationship type for an assignment (maps to template type or custom) */
@@ -101,7 +118,18 @@ export interface Team {
   id: string;
   name: string;
   description?: string;
+  /** Operational executive who oversees this department (optional) */
+  oversightExecutiveId?: string;
+  /** Department leaders assigned to this team (optional; leaders also identified by employee.teamId) */
+  leaderIds?: string[];
+  /** Optional metadata */
+  budget?: number;
+  headcount?: number;
+  location?: string;
+  color?: string;
+  icon?: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface AppraisalResponse {
@@ -187,11 +215,23 @@ export const APPRAISAL_TYPE_LABELS: Record<AppraisalType, string> = {
 };
 
 export const HIERARCHY_LABELS: Record<Employee['hierarchy'], string> = {
+  chairman: 'Chairman',
   executive: 'Executive',
-  leader: 'Leader',
-  member: 'Member',
-  hr: 'HR',
+  leader: 'Department Leader', // legacy; prefer department-leader
+  'department-leader': 'Department Leader',
+  member: 'Team Member',
+  hr: 'HR Personnel',
 };
+
+/** Check if hierarchy is a department leader (legacy 'leader' or new 'department-leader') */
+export function isDepartmentLeader(h: Employee['hierarchy']): boolean {
+  return h === 'leader' || h === 'department-leader';
+}
+
+/** Check if hierarchy is executive (with optional type) */
+export function isExecutiveHierarchy(h: Employee['hierarchy']): boolean {
+  return h === 'executive';
+}
 
 export interface User {
   id: string;
@@ -205,4 +245,65 @@ export interface User {
   mustChangePassword?: boolean; // Force password change on first login
   createdAt: string;
   lastLoginAt?: string;
+}
+
+// --- Employee Directory & Org Chart ---
+
+export interface EmployeeProfile {
+  id: string;
+  employeeId: string;
+  profilePicture?: string;
+  coverPhoto?: string;
+  bio?: string;
+  headline?: string;
+  location?: string;
+  timezone?: string;
+  startDate?: string;
+  birthday?: string; // MM-DD
+  pronouns?: string;
+  skills?: string[];
+  interests?: string[];
+  socialLinks?: {
+    linkedin?: string;
+    twitter?: string;
+    github?: string;
+    website?: string;
+  };
+  contactPreferences?: {
+    email?: boolean;
+    slack?: boolean;
+    phone?: boolean;
+  };
+  phoneNumber?: string;
+  slackHandle?: string;
+  funFacts?: string[];
+  achievements?: string[];
+  education?: { institution: string; degree: string; year?: string }[];
+  previousRoles?: { title: string; company: string; duration?: string }[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DirectoryFilters {
+  search: string;
+  department: string | null;
+  hierarchy: string | null;
+  location: string | null;
+  skills: string[];
+}
+
+export interface OrgChartNode {
+  employee: Employee;
+  profile?: EmployeeProfile;
+  children: OrgChartNode[];
+  team?: Team;
+  isExpanded?: boolean;
+}
+
+export interface OrgChartConfig {
+  rootEmployeeId?: string | null;
+  includeHierarchy: ('chairman' | 'executive' | 'leader' | 'department-leader' | 'member' | 'hr')[];
+  groupByDepartment: boolean;
+  sortAlphabetically?: boolean;
+  maxDepth?: number;
 }

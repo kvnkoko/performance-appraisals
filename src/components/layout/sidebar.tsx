@@ -18,7 +18,10 @@ import {
   ClipboardText,
   ChartLineUp,
   UsersThree,
-  SignOut
+  SignOut,
+  AddressBook,
+  TreeStructure,
+  ChartPieSlice
 } from 'phosphor-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
@@ -26,9 +29,16 @@ import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/contexts/app-context';
 import { useUser } from '@/contexts/user-context';
 
+// Shared navigation (Directory & Org Chart — admin + staff)
+const sharedNavItems = [
+  { path: '/directory', label: 'Directory', icon: AddressBook },
+  { path: '/org-chart', label: 'Org Chart', icon: TreeStructure },
+];
+
 // Admin navigation items (Overview = system-wide dashboard)
 const adminNavItems = [
   { path: '/dashboard', label: 'Overview', icon: SquaresFour },
+  ...sharedNavItems,
   { path: '/templates', label: 'Templates', icon: FileText },
   { path: '/employees', label: 'Employees', icon: Users },
   { path: '/teams', label: 'Teams', icon: UsersThree },
@@ -38,12 +48,14 @@ const adminNavItems = [
   { path: '/reviews', label: 'Reviews', icon: ChartBar },
   { path: '/historical', label: 'Historical Reviews', icon: Clock },
   { path: '/submission-tracker', label: 'Submission Tracker', icon: ListChecks },
+  { path: '/organization-analytics', label: 'Organization Analytics', icon: ChartPieSlice },
   { path: '/settings', label: 'Settings', icon: Gear },
 ];
 
 // Employee navigation items (non-admin users)
 const employeeNavItems = [
   { path: '/my-dashboard', label: 'My Dashboard', icon: House },
+  ...sharedNavItems,
   { path: '/my-appraisals', label: 'My Appraisals', icon: ClipboardText },
   { path: '/my-performance', label: 'My Performance', icon: ChartLineUp },
   { path: '/settings', label: 'Settings', icon: Gear },
