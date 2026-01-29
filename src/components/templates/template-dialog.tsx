@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useForm, useFieldArray, Control, UseFormRegister, FieldErrors, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -498,7 +499,7 @@ export function TemplateDialog({ open, onOpenChange, templateId, onSuccess }: Te
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-background rounded-lg border shadow-lg w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b flex-shrink-0">
@@ -686,6 +687,7 @@ export function TemplateDialog({ open, onOpenChange, templateId, onSuccess }: Te
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

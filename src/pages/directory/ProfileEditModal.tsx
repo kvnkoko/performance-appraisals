@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'phosphor-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -62,7 +63,7 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
   const setAchievements = (s: string) =>
     setForm((prev) => ({ ...prev, achievements: s ? s.split('\n').map((x) => x.trim()).filter(Boolean) : [] }));
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-hidden />
       <div
@@ -181,6 +182,7 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
           <X size={20} weight="bold" />
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

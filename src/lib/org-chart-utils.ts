@@ -50,12 +50,12 @@ export function getReportingChain(employeeId: string, employees: Employee[]): Em
   return chain;
 }
 
-/** Get the department leader's employee ID for a team (first leader/executive with this teamId). */
+/** Get the department leader's employee ID for a team (first leader/executive/HR with this teamId). */
 export function getDepartmentLeaderId(teamId: string, employees: Employee[]): string | undefined {
   const leader = employees.find(
     (e) =>
       e.teamId === teamId &&
-      (e.hierarchy === 'leader' || e.hierarchy === 'department-leader' || e.hierarchy === 'executive')
+      (e.hierarchy === 'leader' || e.hierarchy === 'department-leader' || e.hierarchy === 'executive' || e.hierarchy === 'hr')
   );
   return leader?.id;
 }

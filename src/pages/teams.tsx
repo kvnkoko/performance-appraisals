@@ -100,10 +100,10 @@ export function TeamsPage() {
     return employees.filter((e) => e.teamId === teamId).length;
   };
 
-  // Get department leaders (leaders + executives who lead this department)
+  // Get department leaders (leaders + executives + HR who lead this department)
   const getTeamLeaders = (teamId: string) => {
     return employees.filter(
-      (e) => e.teamId === teamId && (e.hierarchy === 'leader' || e.hierarchy === 'department-leader' || e.hierarchy === 'executive')
+      (e) => e.teamId === teamId && (e.hierarchy === 'leader' || e.hierarchy === 'department-leader' || e.hierarchy === 'executive' || e.hierarchy === 'hr')
     );
   };
 
@@ -118,7 +118,7 @@ export function TeamsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="page-title text-foreground">Teams</h1>
-          <p className="page-subtitle">Organize employees into teams. Edit a team to assign Executives or Leaders as department heads.</p>
+          <p className="page-subtitle">Organize employees into teams. Edit a team to assign Executives, Leaders, or HR as department heads.</p>
         </div>
         <div className="flex gap-3">
           <Button 
@@ -223,9 +223,11 @@ export function TeamsPage() {
                             className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs ${
                               leader.hierarchy === 'executive'
                                 ? 'bg-purple-500/10 text-purple-700 dark:text-purple-300'
-                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                : leader.hierarchy === 'hr'
+                                  ? 'bg-teal-500/10 text-teal-700 dark:text-teal-300'
+                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
                             }`}
-                            title={leader.hierarchy === 'executive' ? 'Executive (department head)' : 'Leader'}
+                            title={leader.hierarchy === 'executive' ? 'Executive (department head)' : leader.hierarchy === 'hr' ? 'HR (department head)' : 'Leader'}
                           >
                             {leader.hierarchy === 'executive' ? (
                               <Crown size={12} weight="duotone" className="mr-1" />
@@ -235,6 +237,9 @@ export function TeamsPage() {
                             {leader.name}
                             {leader.hierarchy === 'executive' && (
                               <span className="ml-1 opacity-80">(Exec)</span>
+                            )}
+                            {leader.hierarchy === 'hr' && (
+                              <span className="ml-1 opacity-80">(HR)</span>
                             )}
                           </span>
                         ))}
@@ -246,7 +251,7 @@ export function TeamsPage() {
                       </div>
                     ) : (
                       <p className="text-xs text-muted-foreground italic">
-                        No leaders yet. Edit team to add Executives or Leaders.
+                        No leaders yet. Edit team to add Executives, Leaders, or HR.
                       </p>
                     )}
                   </div>

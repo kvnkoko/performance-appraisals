@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -781,7 +782,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
 
   // Show credentials screen after creating new employee
   if (createdCredentials) {
-    return (
+    return createPortal(
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
         <div className="bg-background rounded-lg border shadow-lg w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
           <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
@@ -881,11 +882,12 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
             </Button>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     );
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-background rounded-lg border shadow-lg w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
@@ -978,6 +980,31 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
               </div>
               <Select id="teamId" {...register('teamId')} className="bg-background">
                 <option value="">Select a team (optional)</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </Select>
+              {errors.teamId && <p className="text-sm text-destructive">{errors.teamId.message}</p>}
+            </div>
+          ) : selectedHierarchy === 'hr' ? (
+            <div className="space-y-2 rounded-xl border border-teal-500/20 bg-teal-500/5 p-4">
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500/20">
+                  <UserCircle size={20} weight="duotone" className="text-teal-600 dark:text-teal-400" />
+                </div>
+                <div>
+                  <Label htmlFor="teamId" className="text-base font-semibold">
+                    Assign as head of HR department
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Optional. When set, this HR person is the department head for the chosen team (e.g. HR team).
+                  </p>
+                </div>
+              </div>
+              <Select id="teamId" {...register('teamId')} className="bg-background">
+                <option value="">No department — HR only</option>
                 {teams.map((team) => (
                   <option key={team.id} value={team.id}>
                     {team.name}
@@ -1231,6 +1258,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

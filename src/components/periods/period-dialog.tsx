@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -158,7 +159,7 @@ export function PeriodDialog({ open, onOpenChange, periodId, onSuccess }: Period
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-background rounded-lg border shadow-lg w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
@@ -253,6 +254,7 @@ export function PeriodDialog({ open, onOpenChange, periodId, onSuccess }: Period
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

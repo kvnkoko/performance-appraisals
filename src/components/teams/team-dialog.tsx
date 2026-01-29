@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -36,17 +37,17 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
   const [addLeaderId, setAddLeaderId] = useState('');
   const [leaderActionLoading, setLeaderActionLoading] = useState<string | null>(null);
 
-  // Department leaders: executives and leaders whose teamId is this team
+  // Department leaders: executives, leaders, and HR whose teamId is this team
   const currentLeaders = teamId
     ? employees.filter(
-        (e) => e.teamId === teamId && (e.hierarchy === 'leader' || e.hierarchy === 'department-leader' || e.hierarchy === 'executive')
+        (e) => e.teamId === teamId && (e.hierarchy === 'leader' || e.hierarchy === 'department-leader' || e.hierarchy === 'executive' || e.hierarchy === 'hr')
       )
     : [];
-  // Executives and leaders not already leading this team (for "Add leader" dropdown)
+  // Executives, leaders, and HR not already leading this team (for "Add leader" dropdown)
   const availableToAdd = teamId
     ? employees.filter(
         (e) =>
-          (e.hierarchy === 'leader' || e.hierarchy === 'department-leader' || e.hierarchy === 'executive') && e.teamId !== teamId
+          (e.hierarchy === 'leader' || e.hierarchy === 'department-leader' || e.hierarchy === 'executive' || e.hierarchy === 'hr') && e.teamId !== teamId
       )
     : [];
 
@@ -171,7 +172,7 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
       <div className={`bg-background rounded-xl border shadow-2xl w-full max-h-[90vh] flex flex-col overflow-hidden ${teamId ? 'max-w-lg' : 'max-w-md'}`}>
         <div className="flex items-center justify-between p-6 border-b bg-muted/30 flex-shrink-0">
@@ -287,6 +288,7 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

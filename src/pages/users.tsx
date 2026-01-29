@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -271,7 +272,7 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <Card className="w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border-2">
         <CardHeader className="border-b bg-gradient-to-r from-purple-500/10 to-pink-500/10 flex-shrink-0">
@@ -512,7 +513,8 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
           </form>
         </CardContent>
       </Card>
-    </div>
+    </div>,
+    document.body
   );
 }
 

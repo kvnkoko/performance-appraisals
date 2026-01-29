@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { Warning, X } from 'phosphor-react';
 import { Button } from './button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './card';
@@ -51,7 +52,7 @@ export function ConfirmDialog({
 
   const styles = variantStyles[variant];
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl border-2 animate-in zoom-in-95 duration-200">
         <CardHeader className="border-b">
@@ -96,6 +97,7 @@ export function ConfirmDialog({
           </div>
         </CardContent>
       </Card>
-    </div>
+    </div>,
+    document.body
   );
 }

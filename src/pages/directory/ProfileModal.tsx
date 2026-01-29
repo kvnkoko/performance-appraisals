@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, MapPin, Buildings, Envelope, Link as LinkIcon, Briefcase, Trophy, Sparkle } from 'phosphor-react';
 import { Button } from '@/components/ui/button';
 import { getInitials, hashToHue } from '@/components/ui/avatar';
@@ -56,7 +57,7 @@ export function ProfileModal({ employee, profile, onClose, onEdit }: ProfileModa
 
   const hasAspect = heroAspect != null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-hidden />
       <div
@@ -198,6 +199,7 @@ export function ProfileModal({ employee, profile, onClose, onEdit }: ProfileModa
           <X size={20} weight="bold" />
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
