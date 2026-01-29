@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Camera, X } from 'phosphor-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -13,21 +13,70 @@ interface ImageUploaderProps {
 
 const sizeMap = { sm: 24, md: 32, lg: 40 };
 
+const MAX_DIMENSION = 800;
+const JPEG_QUALITY = 0.82;
+
+/** Resize and compress image to reduce bandwidth and storage; returns data URL. */
+function resizeAndCompressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      const scale = Math.min(1, MAX_DIMENSION / Math.max(w, h));
+      const width = Math.round(w * scale);
+      const height = Math.round(h * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Canvas not available'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      const isPng = file.type === 'image/png';
+      const dataUrl = canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', isPng ? undefined : JPEG_QUALITY);
+      resolve(dataUrl);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load image'));
+    };
+    img.src = url;
+  });
+}
+
 export function ImageUploader({ value, onChange, className, shape = 'circle', size = 'md' }: ImageUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(value ?? null);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    setPreview(value ?? null);
+  }, [value]);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !file.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      setPreview(dataUrl);
-      onChange(dataUrl);
-    };
-    reader.readAsDataURL(file);
     e.target.value = '';
+    setUploading(true);
+    resizeAndCompressImage(file)
+      .then((dataUrl) => {
+        setPreview(dataUrl);
+        onChange(dataUrl);
+      })
+      .catch(() => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setPreview(reader.result as string);
+          onChange(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      })
+      .finally(() => setUploading(false));
   };
 
   const clear = () => {
@@ -60,11 +109,12 @@ export function ImageUploader({ value, onChange, className, shape = 'circle', si
           type="button"
           variant="outline"
           size="sm"
+          disabled={uploading}
           onClick={() => inputRef.current?.click()}
           className="gap-1"
         >
           <Camera size={14} />
-          {preview ? 'Change' : 'Upload'}
+          {uploading ? 'Processing…' : preview ? 'Change' : 'Upload'}
         </Button>
         {preview && (
           <Button type="button" variant="ghost" size="sm" onClick={clear} className="gap-1 text-destructive">

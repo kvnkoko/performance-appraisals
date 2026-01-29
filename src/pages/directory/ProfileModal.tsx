@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react';
 import { X, MapPin, Buildings, Envelope, Link as LinkIcon, Briefcase, Trophy, Sparkle } from 'phosphor-react';
 import { Button } from '@/components/ui/button';
 import { getInitials, hashToHue } from '@/components/ui/avatar';
@@ -26,6 +27,35 @@ export function ProfileModal({ employee, profile, onClose, onEdit }: ProfileModa
   const isOwnProfile = user?.employeeId === employee.id;
   const canEdit = isOwnProfile || isAdmin();
 
+  const heroImageSrc = profile?.profilePicture ?? profile?.coverPhoto ?? null;
+  const [heroAspect, setHeroAspect] = useState<number | null>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  const setAspectFromImg = (img: HTMLImageElement | null) => {
+    if (!img?.naturalWidth || !img.naturalHeight) return;
+    setHeroAspect(img.naturalWidth / img.naturalHeight);
+  };
+
+  useEffect(() => {
+    setHeroAspect(null);
+    if (!heroImageSrc) return;
+    const img = imgRef.current;
+    if (img?.complete && img.naturalWidth) {
+      setAspectFromImg(img);
+      return;
+    }
+    const preload = new Image();
+    preload.onload = () => setHeroAspect(preload.naturalWidth / preload.naturalHeight);
+    preload.src = heroImageSrc;
+    return () => { preload.src = ''; };
+  }, [heroImageSrc]);
+
+  const onHeroImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    setAspectFromImg(e.currentTarget);
+  };
+
+  const hasAspect = heroAspect != null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} aria-hidden />
@@ -36,23 +66,27 @@ export function ProfileModal({ employee, profile, onClose, onEdit }: ProfileModa
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Hero: profile/cover image – object-contain so portrait and landscape both show fully, no cropping */}
-        <div className="w-full h-[min(320px,42vh)] min-h-[220px] rounded-t-2xl overflow-hidden bg-muted relative flex items-center justify-center">
-          {profile?.profilePicture ? (
+        {/* Hero: container aspect = image aspect so no blank areas; portrait = tall, landscape = shorter; modal scrolls if needed */}
+        <div
+          className="w-full rounded-t-2xl overflow-hidden bg-muted flex justify-center items-center shrink-0 min-h-[180px]"
+          style={
+            hasAspect
+              ? { aspectRatio: `${heroAspect}` }
+              : { minHeight: 200, maxHeight: 'min(45vh, 360px)' }
+          }
+        >
+          {heroImageSrc ? (
             <img
-              src={profile.profilePicture}
+              ref={imgRef}
+              src={heroImageSrc}
               alt=""
-              className="max-w-full max-h-full w-auto h-auto object-contain object-center"
-            />
-          ) : profile?.coverPhoto ? (
-            <img
-              src={profile.coverPhoto}
-              alt=""
-              className="max-w-full max-h-full w-auto h-auto object-contain object-center"
+              className="w-full h-full object-contain object-center block"
+              loading="eager"
+              onLoad={onHeroImageLoad}
             />
           ) : (
             <div
-              className="absolute inset-0 flex items-center justify-center"
+              className="w-full flex items-center justify-center min-h-[220px] rounded-t-2xl"
               style={{
                 background: `linear-gradient(135deg, hsl(${hashToHue(employee.name)}, 65%, 55%), hsl(${hashToHue(employee.name)}, 65%, 40%))`,
               }}
@@ -63,17 +97,17 @@ export function ProfileModal({ employee, profile, onClose, onEdit }: ProfileModa
             </div>
           )}
         </div>
-        <div className="px-6 pb-6 pt-5 relative">
+        <div className="px-6 sm:px-8 pb-8 pt-6 relative">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-2xl font-bold text-foreground">{employee.name}</h2>
+                <h2 className="text-2xl font-bold text-foreground tracking-tight">{employee.name}</h2>
                 <HierarchyBadge hierarchy={employee.hierarchy} size="md" />
               </div>
-              <p className="text-muted-foreground mt-0.5">{employee.role}</p>
-              {team && (
-                <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
-                  <Buildings size={14} /> {team.name}
+              <p className="text-muted-foreground mt-1">{employee.role}</p>
+              {team && employee.role !== team.name && (
+                <p className="text-sm text-muted-foreground mt-1.5 flex items-center gap-1.5">
+                  <Buildings size={14} weight="duotone" /> {team.name}
                 </p>
               )}
             </div>
@@ -85,12 +119,12 @@ export function ProfileModal({ employee, profile, onClose, onEdit }: ProfileModa
           </div>
 
           {profile?.headline && (
-            <p className="text-lg text-muted-foreground mt-4 border-b border-border pb-4">{profile.headline}</p>
+            <p className="text-muted-foreground mt-5 pb-5 border-b border-border">{profile.headline}</p>
           )}
           {profile?.bio && (
-            <section className="mt-4">
+            <section className="mt-6">
               <h3 className="text-sm font-semibold text-foreground mb-2">About</h3>
-              <p className="text-muted-foreground whitespace-pre-wrap">{profile.bio}</p>
+              <p className="text-muted-foreground whitespace-pre-wrap text-sm leading-relaxed">{profile.bio}</p>
             </section>
           )}
 
@@ -108,20 +142,20 @@ export function ProfileModal({ employee, profile, onClose, onEdit }: ProfileModa
           </div>
 
           {manager && (
-            <section className="mt-6">
-              <h3 className="text-sm font-semibold text-foreground mb-2">Reports to</h3>
-              <p className="text-muted-foreground">{manager.name} · {manager.role}</p>
+            <section className="mt-6 pt-4 border-t border-border/60">
+              <h3 className="text-sm font-semibold text-foreground mb-1.5">Reports to</h3>
+              <p className="text-muted-foreground text-sm">{manager.name} · {manager.role}</p>
             </section>
           )}
           {reports.length > 0 && (
             <section className="mt-4">
-              <h3 className="text-sm font-semibold text-foreground mb-2">Direct reports ({reports.length})</h3>
+              <h3 className="text-sm font-semibold text-foreground mb-1.5">Direct reports ({reports.length})</h3>
               <p className="text-muted-foreground text-sm">{reports.map((r) => r.name).join(', ')}</p>
             </section>
           )}
 
           {(profile?.skills?.length ?? 0) > 0 && (
-            <section className="mt-6">
+            <section className="mt-6 pt-4 border-t border-border/60">
               <h3 className="text-sm font-semibold text-foreground mb-2">Skills</h3>
               <div className="flex flex-wrap gap-2">
                 {profile!.skills!.map((s) => (
@@ -131,7 +165,7 @@ export function ProfileModal({ employee, profile, onClose, onEdit }: ProfileModa
             </section>
           )}
           {(profile?.funFacts?.length ?? 0) > 0 && (
-            <section className="mt-6">
+            <section className="mt-6 pt-4 border-t border-border/60">
               <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1">
                 <Sparkle size={16} /> Fun facts
               </h3>
@@ -143,7 +177,7 @@ export function ProfileModal({ employee, profile, onClose, onEdit }: ProfileModa
             </section>
           )}
           {(profile?.achievements?.length ?? 0) > 0 && (
-            <section className="mt-6">
+            <section className="mt-6 pt-4 border-t border-border/60">
               <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1">
                 <Trophy size={16} /> Achievements
               </h3>

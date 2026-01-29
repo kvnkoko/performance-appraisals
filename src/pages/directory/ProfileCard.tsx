@@ -49,10 +49,23 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
     );
   }
 
+  const handleCardKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClick();
+    }
+  };
+
   if (variant === 'list') {
     return (
       <AnimatedCard delay={index * 0.03}>
-        <button type="button" onClick={onClick} className="flex w-full items-center gap-4 text-left">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={onClick}
+          onKeyDown={handleCardKeyDown}
+          className="flex w-full items-center gap-4 text-left cursor-pointer rounded-lg hover:bg-muted/50 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
           <Avatar src={profile?.profilePicture} name={employee.name} size="lg" hierarchy={employee.hierarchy} />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
@@ -72,22 +85,42 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
               <PencilSimple size={18} />
             </Button>
           )}
-        </button>
+        </div>
       </AnimatedCard>
     );
   }
 
   return (
-    <AnimatedCard delay={index * 0.03}>
-      <div className="flex flex-col h-full rounded-2xl border border-border bg-card overflow-hidden transition-all duration-200 hover:shadow-lg hover:scale-[1.02]">
-        <button type="button" onClick={onClick} className="flex flex-col flex-1 text-left">
-          {/* Hero: profile image – object-contain so portrait and landscape both show fully */}
-          <div className="relative w-full aspect-[4/5] min-h-[200px] rounded-t-2xl overflow-hidden bg-muted flex items-center justify-center">
+    <AnimatedCard delay={index * 0.03} className="p-0 overflow-hidden rounded-2xl aspect-square">
+      <div className="relative flex flex-col h-full w-full rounded-2xl border border-border bg-card overflow-hidden transition-all duration-200 hover:shadow-lg hover:scale-[1.02]">
+        {/* Edit button top right */}
+        {canEdit && onEdit && (
+          <div className="absolute top-2 right-2 z-10">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="shrink-0 bg-black/40 hover:bg-black/60 border-0 text-white backdrop-blur-sm"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(); }}
+              title={isAdmin() ? 'Edit profile (admin)' : 'Edit profile'}
+            >
+              <PencilSimple size={16} />
+            </Button>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={onClick}
+          className="relative flex flex-col h-full w-full text-left rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border-0 bg-transparent p-0 cursor-pointer overflow-hidden"
+        >
+          {/* Image fills square; object-cover so no blank areas */}
+          <div className="absolute inset-0 rounded-2xl overflow-hidden bg-muted">
             {profile?.profilePicture ? (
               <img
                 src={profile.profilePicture}
                 alt=""
-                className="max-w-full max-h-full w-auto h-auto object-contain object-center"
+                className="w-full h-full object-cover object-center"
+                loading="lazy"
               />
             ) : (
               <div
@@ -101,47 +134,28 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
                 </span>
               </div>
             )}
-            {canEdit && onEdit && (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="absolute top-2 right-2 shrink-0 bg-card/90 hover:bg-card border border-border"
-                onClick={(e) => { e.stopPropagation(); onEdit(); }}
-                title={isAdmin() ? 'Edit profile (admin)' : 'Edit profile'}
-              >
-                <PencilSimple size={16} />
-              </Button>
-            )}
           </div>
-          <div className="p-4 flex flex-col flex-1">
-            <h3 className="font-semibold text-foreground truncate w-full text-lg">{employee.name}</h3>
-            <p className="text-sm text-muted-foreground truncate w-full mt-0.5">{employee.role}</p>
+          {/* Gradient overlay + name, title, department on top of image */}
+          <div
+            className="absolute inset-x-0 bottom-0 z-[1] pt-16 pb-4 px-4 rounded-b-2xl"
+            style={{
+              background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.5) 50%, transparent 100%)',
+            }}
+          >
+            <h3 className="font-bold text-white text-lg leading-tight drop-shadow-sm truncate">
+              {employee.name}
+            </h3>
+            <p className="text-white/95 text-sm mt-0.5 truncate">{employee.role}</p>
             {team && (
-              <span className="mt-2 rounded-full px-2.5 py-0.5 text-xs bg-muted/80 text-muted-foreground w-fit">
-                {team.name}
-              </span>
-            )}
-            {headline && (
-              <p className="text-sm text-muted-foreground mt-3 line-clamp-2 flex-1">{headline}</p>
-            )}
-            {profile?.location && (
-              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                <MapPin size={12} /> {profile.location}
+              <p className="text-white/80 text-xs mt-1 flex items-center gap-1 truncate">
+                <Buildings size={12} weight="duotone" className="shrink-0" /> {team.name}
               </p>
             )}
-            <div className="flex flex-wrap gap-1.5 mt-3">
-              {skills.map((s) => (
-                <SkillBadge key={s} label={s} />
-              ))}
-              {extraSkills > 0 && <SkillBadge label={`+${extraSkills}`} />}
-            </div>
+            <span className="inline-block mt-2 text-white/90 text-xs font-medium">
+              View profile →
+            </span>
           </div>
         </button>
-        <div className="px-4 pb-4 pt-0">
-          <Button variant="outline" size="sm" className="w-full" onClick={onClick}>
-            View profile
-          </Button>
-        </div>
       </div>
     </AnimatedCard>
   );

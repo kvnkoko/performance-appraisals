@@ -29,15 +29,23 @@ export function getDirectReports(employeeId: string, employees: Employee[]): Emp
   return employees.filter((e) => e.reportsTo === employeeId);
 }
 
+const MAX_CHAIN_DEPTH = 50;
+
 export function getReportingChain(employeeId: string, employees: Employee[]): Employee[] {
   const byId = new Map(employees.map((e) => [e.id, e]));
   const chain: Employee[] = [];
+  const visited = new Set<string>();
   let current = byId.get(employeeId);
-  while (current?.reportsTo) {
-    const manager = byId.get(current.reportsTo);
+  let depth = 0;
+  while (current?.reportsTo && depth < MAX_CHAIN_DEPTH) {
+    const nextId = current.reportsTo;
+    if (visited.has(nextId)) break;
+    visited.add(nextId);
+    const manager = byId.get(nextId);
     if (!manager) break;
     chain.push(manager);
     current = manager;
+    depth++;
   }
   return chain;
 }
