@@ -29,6 +29,7 @@ export interface AutoAssignmentPreview {
   leaderToMember: { appraiserId: string; appraiserName: string; employeeId: string; employeeName: string }[];
   memberToLeader: { appraiserId: string; appraiserName: string; employeeId: string; employeeName: string }[];
   leaderToLeader: { appraiserId: string; appraiserName: string; employeeId: string; employeeName: string }[];
+  memberToMember: { appraiserId: string; appraiserName: string; employeeId: string; employeeName: string }[];
   execToLeader: { appraiserId: string; appraiserName: string; employeeId: string; employeeName: string }[];
   hrToAll: { appraiserId: string; appraiserName: string; employeeId: string; employeeName: string }[];
   warnings: string[];
@@ -38,6 +39,7 @@ export interface AutoAssignmentOptions {
   includeLeaderToMember: boolean;
   includeMemberToLeader: boolean;
   includeLeaderToLeader: boolean;
+  includeMemberToMember: boolean;
   includeExecToLeader: boolean;
   includeHrToAll: boolean;
 }
@@ -46,6 +48,7 @@ const DEFAULT_OPTIONS: AutoAssignmentOptions = {
   includeLeaderToMember: true,
   includeMemberToLeader: true,
   includeLeaderToLeader: true,
+  includeMemberToMember: true,
   includeExecToLeader: true,
   includeHrToAll: false,
 };
@@ -70,6 +73,7 @@ export function previewAutoAssignments(
   const leaderToMember: AutoAssignmentPreview['leaderToMember'] = [];
   const memberToLeader: AutoAssignmentPreview['memberToLeader'] = [];
   const leaderToLeader: AutoAssignmentPreview['leaderToLeader'] = [];
+  const memberToMember: AutoAssignmentPreview['memberToMember'] = [];
   const execToLeader: AutoAssignmentPreview['execToLeader'] = [];
   const hrToAll: AutoAssignmentPreview['hrToAll'] = [];
 
@@ -95,6 +99,7 @@ export function previewAutoAssignments(
 
   const seenL2M = new Set<string>();
   const seenM2L = new Set<string>();
+  const seenM2M = new Set<string>();
 
   // RULE 1: Leader → Member — pure leaders and exec/leads (executives with teamId) appraise their department members.
   // Skip members who are temporary/terminated/resigned (no auto-created forms for them).
@@ -226,10 +231,39 @@ export function previewAutoAssignments(
     }
   }
 
+  // RULE 6: Member → Member (same department only) — each appraisable member in a department rates every other appraisable member in that department.
+  if (opts.includeMemberToMember) {
+    const membersByTeam = new Map<string, Employee[]>();
+    for (const e of employees) {
+      if (e.hierarchy !== 'member' || !isAppraisableForAutoAssignment(e) || !e.teamId) continue;
+      const list = membersByTeam.get(e.teamId) ?? [];
+      list.push(e);
+      membersByTeam.set(e.teamId, list);
+    }
+    for (const [, deptMembers] of membersByTeam) {
+      if (deptMembers.length < 2) continue;
+      for (const appraiser of deptMembers) {
+        for (const employee of deptMembers) {
+          if (appraiser.id === employee.id) continue;
+          const key = `${appraiser.id}:${employee.id}`;
+          if (seenM2M.has(key)) continue;
+          seenM2M.add(key);
+          memberToMember.push({
+            appraiserId: appraiser.id,
+            appraiserName: appraiser.name,
+            employeeId: employee.id,
+            employeeName: employee.name,
+          });
+        }
+      }
+    }
+  }
+
   return {
     leaderToMember,
     memberToLeader,
     leaderToLeader,
+    memberToMember,
     execToLeader,
     hrToAll,
     warnings,
@@ -238,12 +272,13 @@ export function previewAutoAssignments(
 
 /** Map relationship type to template-type hint. */
 export function relationshipToTemplateType(
-  rel: 'leader-to-member' | 'member-to-leader' | 'leader-to-leader' | 'exec-to-leader' | 'hr-to-all' | 'custom'
+  rel: 'leader-to-member' | 'member-to-leader' | 'leader-to-leader' | 'member-to-member' | 'exec-to-leader' | 'hr-to-all' | 'custom'
 ): AssignmentRelationshipType {
   const map: Record<string, AssignmentRelationshipType> = {
     'leader-to-member': 'leader-to-member',
     'member-to-leader': 'member-to-leader',
     'leader-to-leader': 'leader-to-leader',
+    'member-to-member': 'member-to-member',
     'exec-to-leader': 'exec-to-leader',
     'hr-to-all': 'hr-to-all',
     custom: 'custom',
@@ -255,6 +290,7 @@ export interface TemplateMapping {
   leaderToMember: string;
   memberToLeader: string;
   leaderToLeader: string;
+  memberToMember: string;
   execToLeader: string;
   hrToAll: string;
 }
@@ -306,6 +342,9 @@ export function buildAssignmentsFromPreview(
   }
   for (const row of preview.execToLeader) {
     push('exec-to-leader', 'auto', row.appraiserId, row.appraiserName, row.employeeId, row.employeeName, templateMapping.execToLeader);
+  }
+  for (const row of preview.memberToMember) {
+    push('member-to-member', 'auto', row.appraiserId, row.appraiserName, row.employeeId, row.employeeName, templateMapping.memberToMember);
   }
   for (const row of preview.hrToAll) {
     push('hr-to-all', 'auto', row.appraiserId, row.appraiserName, row.employeeId, row.employeeName, templateMapping.hrToAll);

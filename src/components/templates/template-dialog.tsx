@@ -580,6 +580,9 @@ export function TemplateDialog({ open, onOpenChange, templateId, onSuccess }: Te
                   </option>
                 ))}
               </Select>
+              {watch('type') === 'members-to-members' && (
+                <p className="text-xs text-muted-foreground mt-1">Used for peer review: members of the same department rate each other only.</p>
+              )}
               {errors.type && <p className="text-xs text-destructive mt-1">{errors.type.message}</p>}
             </div>
 

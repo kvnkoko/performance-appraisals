@@ -120,6 +120,7 @@ export type AssignmentRelationshipType =
   | 'leader-to-member'
   | 'member-to-leader'
   | 'leader-to-leader'
+  | 'member-to-member'
   | 'hr-to-all'
   | 'custom';
 
@@ -236,7 +237,7 @@ export const APPRAISAL_TYPE_LABELS: Record<AppraisalType, string> = {
   'leaders-to-members': 'Leaders → Members',
   'members-to-leaders': 'Members → Leaders',
   'leaders-to-leaders': 'Leaders → Leaders',
-  'members-to-members': 'Members → Members',
+  'members-to-members': 'Members → Members (same department)',
   'hr-to-all': 'HR → All Employees',
 };
 

@@ -48,11 +48,13 @@ export function LinksPage() {
   const [autoStep, setAutoStep] = useState<AutoWizardStep>(1);
   const [autoPreview, setAutoPreview] = useState<AutoAssignmentPreview | null>(null);
   const [includeLeaderToLeader, setIncludeLeaderToLeader] = useState(true);
+  const [includeMemberToMember, setIncludeMemberToMember] = useState(true);
   const [includeExecToLeader, setIncludeExecToLeader] = useState(true);
   const [autoTemplateMap, setAutoTemplateMap] = useState<TemplateMapping>({
     leaderToMember: '',
     memberToLeader: '',
     leaderToLeader: '',
+    memberToMember: '',
     execToLeader: '',
     hrToAll: '',
   });
@@ -73,10 +75,11 @@ export function LinksPage() {
       includeLeaderToMember: true,
       includeMemberToLeader: true,
       includeLeaderToLeader,
+      includeMemberToMember,
       includeExecToLeader,
       includeHrToAll,
     });
-  }, [employees, selectedPeriod, includeLeaderToLeader, includeExecToLeader, includeHrToAll, mode]);
+  }, [employees, selectedPeriod, includeLeaderToLeader, includeMemberToMember, includeExecToLeader, includeHrToAll, mode]);
 
   const runAutoPreview = () => {
     if (!selectedPeriod) {
@@ -93,6 +96,7 @@ export function LinksPage() {
     ? autoPreview.leaderToMember.length +
       autoPreview.memberToLeader.length +
       autoPreview.leaderToLeader.length +
+      autoPreview.memberToMember.length +
       autoPreview.execToLeader.length +
       autoPreview.hrToAll.length
     : 0;
@@ -108,6 +112,7 @@ export function LinksPage() {
       leaderToMember: autoTemplateMap.leaderToMember || templates[0]?.id || '',
       memberToLeader: autoTemplateMap.memberToLeader || templates[0]?.id || '',
       leaderToLeader: autoTemplateMap.leaderToLeader || templates[0]?.id || '',
+      memberToMember: autoTemplateMap.memberToMember || templates[0]?.id || '',
       execToLeader: autoTemplateMap.execToLeader || templates[0]?.id || '',
       hrToAll: autoTemplateMap.hrToAll || '',
     };
@@ -115,12 +120,15 @@ export function LinksPage() {
       !templateMapping.leaderToMember ||
       !templateMapping.memberToLeader ||
       (includeLeaderToLeader && !templateMapping.leaderToLeader) ||
+      (includeMemberToMember && !templateMapping.memberToMember) ||
       (includeExecToLeader && !templateMapping.execToLeader) ||
       (includeHrToAll && !templateMapping.hrToAll);
     if (hasEmpty) {
       const msg = includeHrToAll && !templateMapping.hrToAll
         ? 'Please select an HR template or disable HR assignments.'
-        : 'Choose a template for each relationship type.';
+        : includeMemberToMember && !templateMapping.memberToMember
+          ? 'Please select a Member→Member template or disable Member→Member.'
+          : 'Choose a template for each relationship type.';
       toast({ title: 'Select templates', description: msg, variant: 'error' });
       return;
     }
@@ -342,9 +350,11 @@ export function LinksPage() {
                                 ? 'Member→Leader'
                                 : a.relationshipType === 'leader-to-leader'
                                   ? 'Leader→Leader'
-                                  : a.relationshipType === 'hr-to-all'
-                                    ? 'HR→All'
-                                    : a.relationshipType;
+                                  : a.relationshipType === 'member-to-member'
+                                    ? 'Member→Member'
+                                    : a.relationshipType === 'hr-to-all'
+                                      ? 'HR→All'
+                                      : a.relationshipType;
                         const statusLabel = a.status === 'completed' ? 'Completed' : a.status === 'in-progress' ? 'In progress' : 'Pending';
                         const formUrl = `/appraisal/assignment/${a.id}`;
                         return (
@@ -690,6 +700,14 @@ export function LinksPage() {
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
+                      checked={includeMemberToMember}
+                      onChange={(e) => setIncludeMemberToMember(e.target.checked)}
+                    />
+                    <span className="text-sm">Member → Member (same department only; peers rate each other)</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
                       checked={includeExecToLeader}
                       onChange={(e) => setIncludeExecToLeader(e.target.checked)}
                     />
@@ -723,6 +741,11 @@ export function LinksPage() {
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Leader → Leader</p>
                         <p className="text-2xl font-bold mt-0.5">{livePreview.leaderToLeader.length}</p>
                         <p className="text-xs text-muted-foreground">Every leader × every other leader</p>
+                      </div>
+                      <div className="rounded-lg border bg-card p-3">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Member → Member</p>
+                        <p className="text-2xl font-bold mt-0.5">{livePreview.memberToMember.length}</p>
+                        <p className="text-xs text-muted-foreground">Same department only; peers rate each other</p>
                       </div>
                       <div className="rounded-lg border bg-card p-3">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Executive → Leader</p>
@@ -762,8 +785,8 @@ export function LinksPage() {
                 )}
                 <div className="flex justify-end">
                   <Button onClick={runAutoPreview} disabled={!selectedPeriod || !livePreview}>
-                    {livePreview && (livePreview.leaderToMember.length + livePreview.memberToLeader.length + livePreview.leaderToLeader.length + livePreview.execToLeader.length + livePreview.hrToAll.length) > 0
-                      ? `Continue with ${livePreview.leaderToMember.length + livePreview.memberToLeader.length + livePreview.leaderToLeader.length + livePreview.execToLeader.length + livePreview.hrToAll.length} appraisals`
+                    {livePreview && (livePreview.leaderToMember.length + livePreview.memberToLeader.length + livePreview.leaderToLeader.length + livePreview.memberToMember.length + livePreview.execToLeader.length + livePreview.hrToAll.length) > 0
+                      ? `Continue with ${livePreview.leaderToMember.length + livePreview.memberToLeader.length + livePreview.leaderToLeader.length + livePreview.memberToMember.length + livePreview.execToLeader.length + livePreview.hrToAll.length} appraisals`
                       : 'Preview & continue'}
                     <CaretRight size={16} className="ml-1" />
                   </Button>
@@ -801,6 +824,17 @@ export function LinksPage() {
                       <p className="text-xs text-muted-foreground">Every leader × every other leader</p>
                     </CardContent>
                   </Card>
+                  {autoPreview.memberToMember.length > 0 && (
+                    <Card>
+                      <CardHeader className="py-3">
+                        <CardTitle className="text-sm">Member → Member</CardTitle>
+                      </CardHeader>
+                      <CardContent className="py-2">
+                        <p className="text-2xl font-bold">{autoPreview.memberToMember.length}</p>
+                        <p className="text-xs text-muted-foreground">Same department only</p>
+                      </CardContent>
+                    </Card>
+                  )}
                   <Card>
                     <CardHeader className="py-3">
                       <CardTitle className="text-sm">Executive → Leader</CardTitle>
@@ -874,6 +908,20 @@ export function LinksPage() {
                         ))}
                       </Select>
                     </div>
+                    {autoPreview.memberToMember.length > 0 && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Member → Member (same dept)</Label>
+                        <Select
+                          value={autoTemplateMap.memberToMember}
+                          onChange={(e) => setAutoTemplateMap((m) => ({ ...m, memberToMember: e.target.value }))}
+                        >
+                          <option value="">Select...</option>
+                          {templates.map((t) => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                        </Select>
+                      </div>
+                    )}
                     <div>
                       <Label className="text-xs text-muted-foreground">Executive → Leader</Label>
                       <Select
