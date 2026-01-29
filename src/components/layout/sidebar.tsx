@@ -61,10 +61,18 @@ const employeeNavItems = [
   { path: '/settings', label: 'Settings', icon: Gear },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  mobileOpen?: boolean;
+  setMobileOpen?: (open: boolean) => void;
+}
+
+export function Sidebar({ mobileOpen: controlledOpen, setMobileOpen: setControlledOpen }: SidebarProps = {}) {
   const location = useLocation();
   const navigate = useNavigate();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined && setControlledOpen !== undefined;
+  const mobileOpen = isControlled ? controlledOpen : internalOpen;
+  const setMobileOpen = isControlled ? setControlledOpen! : setInternalOpen;
   const { resolvedTheme, setTheme, accentColor } = useTheme();
   const { settings, employees } = useApp();
   const { user, employee, logout, isAdmin: checkIsAdmin } = useUser();
@@ -114,15 +122,7 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile menu button – minimal, striking */}
-      <button
-        onClick={() => setMobileOpen(!mobileOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2.5 rounded-xl bg-card border border-border shadow-card hover:bg-surface transition-all duration-200"
-      >
-        {mobileOpen ? <X size={20} weight="duotone" /> : <List size={20} weight="duotone" />}
-      </button>
-
-      {/* Sidebar – Holo/Finvero-style: crisp, minimal active state */}
+      {/* Sidebar – Holo/Finvero-style: crisp, minimal active state. On mobile, top padding clears the main-layout top bar. */}
       <aside
         className={cn(
           'fixed left-0 top-0 z-40 h-screen w-60 bg-card border-r border-border/40 transition-transform duration-300 shadow-dropdown',
@@ -131,9 +131,9 @@ export function Sidebar() {
         )}
       >
         <div className="flex h-full flex-col">
-          {/* Header: logo + theme toggle */}
-          <div className="px-5 pt-6 pb-5 border-b border-border/50">
-            <div className="flex items-center justify-between mb-5">
+          {/* Header: logo + theme toggle. pt-14 on mobile so content sits below the main-layout top bar when overlay is open. */}
+          <div className="px-5 pt-14 pb-5 lg:pt-6 border-b border-border/50">
+            <div className="flex items-center justify-between mb-5 gap-3">
               <div className="flex items-center gap-3">
                 <div
                   className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-semibold text-sm"
