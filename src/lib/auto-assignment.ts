@@ -1,8 +1,8 @@
 /**
  * Auto-assignment logic: preview and generate appraisal assignments from org structure.
  * Uses Reports To first; falls back to same-team (member's team = leader's department) when Reports To is missing.
- * Executives and chairman are never appraised by anyone. Exec/leads only do Exec→Leader.
- * Only pure leaders (hierarchy='leader') do Leader→Member, Leader→Leader, and are targets of Member→Leader and Exec→Leader.
+ * Executives and chairman are never appraised by anyone. Exec/leads do Exec→Leader and, when they have a teamId, Leader→Member for their department.
+ * Pure leaders (hierarchy='leader' or 'department-leader') do Leader→Member, Leader→Leader, and are targets of Member→Leader and Exec→Leader.
  * Temporary, terminated, and resigned employees never get auto-created appraisal forms (targets only).
  */
 import type { Employee, AppraisalAssignment, AssignmentRelationshipType } from '@/types';
@@ -12,6 +12,10 @@ import { generateId } from '@/lib/utils';
 const isChairman = (e: Employee): boolean => e.hierarchy === 'chairman';
 const isExecutive = (e: Employee): boolean => e.hierarchy === 'executive';
 const isPureLeader = (e: Employee): boolean => e.hierarchy === 'leader' || e.hierarchy === 'department-leader';
+
+/** True if this person should act as appraiser for Leader→Member (includes pure leaders and executives who lead a department). */
+const isManagerForLeaderToMember = (e: Employee): boolean =>
+  isPureLeader(e) || (isExecutive(e) && !!e.teamId);
 
 /** True if we should auto-create an appraisal form *for* this employee (they are the one being appraised). Excludes temporary, terminated, resigned. */
 function isAppraisableForAutoAssignment(e: Employee): boolean {
@@ -69,9 +73,9 @@ export function previewAutoAssignments(
   const execToLeader: AutoAssignmentPreview['execToLeader'] = [];
   const hrToAll: AutoAssignmentPreview['hrToAll'] = [];
 
-  // Only pure leaders do Leader→Member; executives (including exec/leads) do not.
+  // Both pure leaders and exec/leads (executives with teamId) can do Leader→Member.
   const managersWithNoReports = employees.filter(
-    (e) => isPureLeader(e) && countDirectReports(e.id, e.teamId, employees) === 0
+    (e) => isManagerForLeaderToMember(e) && countDirectReports(e.id, e.teamId, employees) === 0
   );
   if (managersWithNoReports.length > 0) {
     warnings.push(`${managersWithNoReports.length} leader(s) have no direct reports (set "Reports To" on members, or put members in the same team).`);
@@ -92,7 +96,7 @@ export function previewAutoAssignments(
   const seenL2M = new Set<string>();
   const seenM2L = new Set<string>();
 
-  // RULE 1: Leader → Member — only pure leaders (hierarchy='leader') do this; exec/leads do NOT.
+  // RULE 1: Leader → Member — pure leaders and exec/leads (executives with teamId) appraise their department members.
   // Skip members who are temporary/terminated/resigned (no auto-created forms for them).
   if (opts.includeLeaderToMember) {
     for (const member of employees) {
@@ -101,10 +105,10 @@ export function previewAutoAssignments(
       let managers: Employee[] = [];
       if (member.reportsTo) {
         const m = byId.get(member.reportsTo);
-        if (m && isPureLeader(m)) managers = [m];
+        if (m && isManagerForLeaderToMember(m)) managers = [m];
       }
       if (member.teamId) {
-        const teamManagers = employees.filter((e) => isPureLeader(e) && e.teamId === member.teamId);
+        const teamManagers = employees.filter((e) => isManagerForLeaderToMember(e) && e.teamId === member.teamId);
         managers = [...new Map([...managers, ...teamManagers].map((e) => [e.id, e])).values()];
       }
       for (const manager of managers) {
@@ -119,9 +123,9 @@ export function previewAutoAssignments(
         });
       }
     }
-    // Ensure every pure-leader department head gets all members in their department (skip temporary/terminated/resigned)
+    // Ensure every department head (pure leader or exec/lead) gets all members in their department (skip temporary/terminated/resigned)
     for (const manager of employees) {
-      if (!isPureLeader(manager) || !manager.teamId) continue;
+      if (!isManagerForLeaderToMember(manager) || !manager.teamId) continue;
       const deptMembers = employees.filter((e) => e.hierarchy === 'member' && e.teamId === manager.teamId && isAppraisableForAutoAssignment(e));
       for (const member of deptMembers) {
         const key = `${manager.id}:${member.id}`;
