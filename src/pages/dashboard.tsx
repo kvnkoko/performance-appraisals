@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { FileText, Users, Link as LinkIcon, CheckCircle, Clock, TrendUp, ChartBar, Activity, Buildings } from 'phosphor-react';
 import { formatDate } from '@/lib/utils';
+import { BrandLogo } from '@/components/shared/brand-logo';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
 export function Dashboard() {
@@ -104,9 +105,14 @@ export function Dashboard() {
   return (
     <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
       {/* Header – award-worthy hierarchy */}
-      <div className="space-y-1">
-        <h1 className="page-title text-foreground">Dashboard</h1>
-        <p className="page-subtitle">Comprehensive overview of your performance appraisal system</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="page-title text-foreground">Dashboard</h1>
+          <p className="page-subtitle">Comprehensive overview of your performance appraisal system</p>
+        </div>
+        <div className="flex-shrink-0">
+          <BrandLogo className="max-h-8 opacity-90" />
+        </div>
       </div>
 
       {/* Stats Grid – Proxel/Finvero: clean cards, chart colors */}

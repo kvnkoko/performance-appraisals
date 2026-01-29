@@ -14,6 +14,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useTheme } from '@/hooks/use-theme';
 import { Sun, Moon } from 'phosphor-react';
+import { BrandLogo } from '@/components/shared/brand-logo';
 import type { AppraisalResponse, Category, CategoryItem } from '@/types';
 import { RATING_LABELS } from '@/types';
 
@@ -326,8 +327,11 @@ export function AppraisalFormPage() {
     <div className="min-h-screen bg-background">
       <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 lg:pt-8 pb-6 lg:pb-10">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 mb-6 lg:mb-8">
-          <div className="flex-1 text-center space-y-2 min-w-0">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 lg:mb-8">
+          <div className="flex-shrink-0 order-2 sm:order-1">
+            <BrandLogo className="max-h-8 opacity-90" />
+          </div>
+          <div className="flex-1 text-center space-y-2 min-w-0 order-1 sm:order-2">
             <h1 className="text-2xl lg:text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 bg-clip-text text-transparent myanmar-text">
               {template.name}
             </h1>
@@ -344,7 +348,7 @@ export function AppraisalFormPage() {
           <button
             type="button"
             onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-            className="shrink-0 p-2.5 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+            className="shrink-0 order-3 p-2.5 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
             aria-label="Toggle theme"
           >
             {resolvedTheme === 'dark' ? <Moon size={20} weight="duotone" /> : <Sun size={20} weight="duotone" />}

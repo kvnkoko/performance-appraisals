@@ -28,6 +28,7 @@ import { useState, useEffect } from 'react';
 import { useTheme } from '@/hooks/use-theme';
 import { useApp } from '@/contexts/app-context';
 import { useUser } from '@/contexts/user-context';
+import { BrandLogo } from '@/components/shared/brand-logo';
 
 // Shared navigation (Directory & Org Chart — admin + staff)
 const sharedNavItems = [
@@ -131,23 +132,18 @@ export function Sidebar({ mobileOpen: controlledOpen, setMobileOpen: setControll
         )}
       >
         <div className="flex h-full flex-col">
-          {/* Header: logo + theme toggle. pt-14 on mobile so content sits below the main-layout top bar when overlay is open. */}
-          <div className="px-5 pt-14 pb-5 lg:pt-6 border-b border-border/50">
-            <div className="flex items-center justify-between mb-5 gap-3">
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-semibold text-sm"
-                  style={{ background: currentAccentColor }}
-                >
-                  {settings.name ? settings.name.charAt(0).toUpperCase() : 'A'}
-                </div>
-                <h1 className="text-base font-semibold text-foreground tracking-tight">
-                  {settings.name || 'Appraisals'}
-                </h1>
+          {/* Header: company logo (wide, prominent) + theme toggle. pt-14 on mobile so content sits below the main-layout top bar. */}
+          <div className="px-4 pt-14 pb-5 lg:pt-6 border-b border-border/50">
+            <div className="flex items-center justify-between gap-3 mb-5">
+              <div className="flex min-w-0 flex-1 py-1.5 pr-1">
+                <BrandLogo
+                  className="h-12 max-h-12 w-full object-contain object-left"
+                  alt={settings.name || 'Appraisals'}
+                />
               </div>
               <button
                 onClick={toggleTheme}
-                className="p-2 rounded-lg bg-surface hover:bg-muted text-muted-foreground hover:text-foreground transition-colors duration-200"
+                className="flex-shrink-0 p-2 rounded-lg bg-surface hover:bg-muted text-muted-foreground hover:text-foreground transition-colors duration-200"
                 aria-label="Toggle theme"
               >
                 {resolvedTheme === 'dark' ? (

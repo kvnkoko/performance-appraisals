@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Download, Moon, Sun, Monitor, SignOut, Check, CloudArrowDown, Buildings, Trash, UserCircle } from 'phosphor-react';
+import { BrandLogo } from '@/components/shared/brand-logo';
 import { saveSettings, exportData, importData, syncFromSupabase, clearAllAppraisalData, getUser, saveUser, getUserByUsername } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { useUser } from '@/contexts/user-context';
@@ -247,9 +248,14 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
-      <div>
-        <h1 className="page-title text-foreground">Settings</h1>
-        <p className="page-subtitle text-muted-foreground">Manage your application settings</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="page-title text-foreground">Settings</h1>
+          <p className="page-subtitle text-muted-foreground">Manage your application settings</p>
+        </div>
+        <div className="flex-shrink-0">
+          <BrandLogo className="max-h-8 opacity-90" />
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -324,8 +330,13 @@ export function SettingsPage() {
         {isAdmin() && (
           <Card>
             <CardHeader>
-              <CardTitle>Company Information</CardTitle>
-              <CardDescription>Update your company details</CardDescription>
+              <div className="flex items-center gap-3">
+                <BrandLogo className="max-h-7 opacity-80" />
+                <div>
+                  <CardTitle>Company Information</CardTitle>
+                  <CardDescription>Update your company details</CardDescription>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">

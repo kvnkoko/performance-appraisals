@@ -2,6 +2,7 @@ import { useState, FormEvent, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock, User as UserIcon, Key, Warning, Eye, EyeSlash } from 'phosphor-react';
 import { Button } from '@/components/ui/button';
+import { BrandLogo } from '@/components/shared/brand-logo';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -247,7 +248,10 @@ export function AuthPage() {
   // Password change screen
   if (showPasswordChange && currentUser) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-4 pb-10 sm:pb-12">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 pb-10 sm:pb-12">
+        <div className="mb-8 flex justify-center">
+          <BrandLogo className="max-h-10" />
+        </div>
         <Card className="w-full max-w-md border-border/50 shadow-dropdown">
           <CardHeader className="space-y-1 text-center">
             <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-chart-4/12">
@@ -320,12 +324,19 @@ export function AuthPage() {
             </form>
           </CardContent>
         </Card>
+        <footer className="mt-8 flex flex-col items-center gap-2 text-center">
+          <BrandLogo className="max-h-6 opacity-80" />
+          <p className="text-xs text-muted-foreground">Performance Appraisal</p>
+        </footer>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4 pb-10 sm:pb-12">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 pb-10 sm:pb-12">
+      <div className="mb-8 flex justify-center">
+        <BrandLogo className="max-h-10" />
+      </div>
       <Card className="w-full max-w-md border-border/50 shadow-dropdown">
         <CardHeader className="space-y-1 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-accent/10">
@@ -450,6 +461,10 @@ export function AuthPage() {
           )}
         </CardContent>
       </Card>
+      <footer className="mt-8 flex flex-col items-center gap-2 text-center">
+        <BrandLogo className="max-h-6 opacity-80" />
+        <p className="text-xs text-muted-foreground">Performance Appraisal</p>
+      </footer>
     </div>
   );
 }
