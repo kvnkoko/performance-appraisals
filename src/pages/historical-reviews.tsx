@@ -63,14 +63,10 @@ export function HistoricalReviewsPage() {
           p.templateId === a.templateId
       )
     ).length;
-    // When there are no assignments, treat completed appraisals as the source of truth (e.g. legacy data)
+    // Actual completion: assignments that have a matching completed appraisal / total assignments
     const totalToComplete = totalAssignments || periodAppraisals.length || 1;
     const completedCount = totalAssignments > 0 ? assignmentsWithCompletedAppraisal : periodAppraisals.length;
-    // Show 100% when all forms are in: either completed >= assignments, or gap is 1 (e.g. one duplicate/stale assignment)
-    const gap = totalToComplete - periodAppraisals.length;
-    const effectiveTotal = gap <= 1 && periodAppraisals.length > 0 ? periodAppraisals.length : totalToComplete;
-    const effectiveCompleted = gap <= 1 && periodAppraisals.length > 0 ? periodAppraisals.length : completedCount;
-    const completionRate = effectiveTotal > 0 ? (effectiveCompleted / effectiveTotal) * 100 : 0;
+    const completionRate = totalToComplete > 0 ? (completedCount / totalToComplete) * 100 : 0;
     const avgScore = periodAppraisals.length > 0
       ? periodAppraisals.reduce((sum, a) => sum + (a.score / a.maxScore) * 100, 0) / periodAppraisals.length
       : 0;
@@ -102,8 +98,8 @@ export function HistoricalReviewsPage() {
       : topPerformers[0]?.employee ?? null;
 
     return {
-      totalToComplete: effectiveTotal,
-      completedCount: effectiveCompleted,
+      totalToComplete,
+      completedCount,
       completionRate,
       avgScore: Math.round(avgScore),
       topPerformers,
