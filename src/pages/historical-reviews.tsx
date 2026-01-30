@@ -11,7 +11,7 @@ import { Trophy, FileText, Eye, X } from 'phosphor-react';
 import { CompletedFormViewModal } from '@/components/shared/completed-form-view-modal';
 
 export function HistoricalReviewsPage() {
-  const { appraisals, employees, templates } = useApp();
+  const { appraisals, assignments, employees, templates } = useApp();
   const [periods, setPeriods] = useState<ReviewPeriod[]>([]);
   const [filterYear, setFilterYear] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
@@ -47,7 +47,7 @@ export function HistoricalReviewsPage() {
     const periodAppraisals = appraisals.filter(
       (a) => a.reviewPeriodId === period.id && a.completedAt
     );
-    const totalAppraisals = appraisals.filter((a) => a.reviewPeriodId === period.id).length;
+    const totalToComplete = assignments.filter((a) => a.reviewPeriodId === period.id).length;
     const completedCount = periodAppraisals.length;
     const avgScore = periodAppraisals.length > 0
       ? periodAppraisals.reduce((sum, a) => sum + (a.score / a.maxScore) * 100, 0) / periodAppraisals.length
@@ -75,9 +75,9 @@ export function HistoricalReviewsPage() {
       .slice(0, 3);
 
     return {
-      totalAppraisals,
+      totalToComplete,
       completedCount,
-      completionRate: totalAppraisals > 0 ? (completedCount / totalAppraisals) * 100 : 0,
+      completionRate: totalToComplete > 0 ? (completedCount / totalToComplete) * 100 : 0,
       avgScore: Math.round(avgScore),
       topPerformers,
     };
@@ -181,7 +181,7 @@ export function HistoricalReviewsPage() {
                   <div className="grid gap-4 md:grid-cols-4">
                     <div>
                       <div className="text-sm text-muted-foreground">Appraisals</div>
-                      <div className="text-2xl font-bold">{stats.completedCount}/{stats.totalAppraisals}</div>
+                      <div className="text-2xl font-bold">{stats.completedCount}/{stats.totalToComplete}</div>
                       <div className="text-xs text-muted-foreground mt-1">
                         {Math.round(stats.completionRate)}% complete
                       </div>
