@@ -884,19 +884,22 @@ const defaultSettings: CompanySettings = {
 
 export async function getSettings(): Promise<CompanySettings> {
   const database = await initDB();
+  const stored = await database.get('settings', 'company') as (CompanySettings & { key?: string }) | undefined;
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { getSettingsFromSupabase } = await import('./supabase-storage');
-      const settings = await getSettingsFromSupabase();
-      if (settings) {
-        const merged = { ...defaultSettings, ...settings };
-        const stored = await database.get('settings', 'company') as CompanySettings | undefined;
-        if (stored) {
-          merged.hrScoreWeight = stored.hrScoreWeight ?? merged.hrScoreWeight;
-          merged.requireHrForRanking = stored.requireHrForRanking ?? merged.requireHrForRanking;
+      const fromSupabase = await getSettingsFromSupabase();
+      if (fromSupabase) {
+        const merged = { ...defaultSettings, ...fromSupabase };
+        // Prefer IndexedDB for HR fields so local slider saves persist (re-read after Supabase to get latest)
+        const latestStored = await database.get('settings', 'company') as (CompanySettings & { key?: string }) | undefined;
+        const idbSettings = latestStored ?? stored;
+        if (idbSettings) {
+          if (idbSettings.hrScoreWeight != null) merged.hrScoreWeight = idbSettings.hrScoreWeight;
+          if (idbSettings.requireHrForRanking != null) merged.requireHrForRanking = idbSettings.requireHrForRanking;
         }
-        const toStore = { ...merged, key: 'company' } as CompanySettings & { key: string };
+        const toStore = { ...merged, key: 'company' };
         if (database.objectStoreNames.contains('settings')) {
           await database.put('settings', toStore as any);
         }
@@ -906,8 +909,8 @@ export async function getSettings(): Promise<CompanySettings> {
   } catch (error) {
     if (import.meta.env.DEV) console.log('getSettings: Supabase not available, using IndexedDB:', error);
   }
-  const stored = await database.get('settings', 'company');
   const merged = { ...defaultSettings, ...(stored as CompanySettings) };
+  if (stored && (stored as any).key) delete (merged as any).key;
   return merged as CompanySettings;
 }
 

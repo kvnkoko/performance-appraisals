@@ -4,12 +4,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Download, Moon, Sun, Monitor, SignOut, Check, CloudArrowDown, Buildings, Trash, UserCircle } from 'phosphor-react';
+import { Download, Moon, Sun, Monitor, SignOut, Check, CloudArrowDown, Buildings, Trash, UserCircle, Key, Camera } from 'phosphor-react';
 import { BrandLogo } from '@/components/shared/brand-logo';
+import { Avatar } from '@/components/ui/avatar';
+import { ImageUploader } from '@/components/ui/image-uploader';
 import { saveSettings, exportData, importData, syncFromSupabase, clearAllAppraisalData, getUser, saveUser, getUserByUsername } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { useUser } from '@/contexts/user-context';
 import { useTheme } from '@/hooks/use-theme';
+import { useEmployeeProfiles } from '@/hooks/use-employee-profiles';
 import { applyAccentColor, hashPassword, verifyPassword } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { User } from '@/types';
@@ -30,8 +33,11 @@ const PRESET_COLORS = [
 
 export function SettingsPage() {
   const { settings, refresh } = useApp();
-  const { user, logout, isAdmin, refresh: refreshUser } = useUser();
+  const { user, employee, logout, isAdmin, refresh: refreshUser } = useUser();
   const { theme, setTheme, setAccentColor } = useTheme();
+  const { getProfile, getOrCreateProfile, saveProfile } = useEmployeeProfiles();
+  const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
+  const hasUserAccount = Boolean(userId && userId !== 'pin-admin' && user);
   const { toast } = useToast();
   const [formData, setFormData] = useState({
     name: settings.name,
@@ -63,16 +69,16 @@ export function SettingsPage() {
     });
   }, [settings]);
 
-  // Populate staff profile form from current user
+  // Populate profile form from current user (admin or staff with user account)
   useEffect(() => {
-    if (user && !isAdmin()) {
+    if (user) {
       setProfileForm((prev) => ({
         ...prev,
         username: user.username,
         email: user.email || '',
       }));
     }
-  }, [user, isAdmin]);
+  }, [user]);
 
   // Apply accent color preview immediately when changed
   const handleAccentColorChange = (color: string) => {
@@ -158,6 +164,33 @@ export function SettingsPage() {
   const handleLogout = () => {
     logout();
     window.location.href = '/auth';
+  };
+
+  const handleProfilePictureChange = async (dataUrl: string | null) => {
+    if (!employee) return;
+    try {
+      const profile = getOrCreateProfile(employee.id);
+      const now = new Date().toISOString();
+      await saveProfile({
+        id: profile.id || employee.id,
+        employeeId: employee.id,
+        profilePicture: dataUrl ?? undefined,
+        coverPhoto: (profile as any).coverPhoto,
+        bio: (profile as any).bio,
+        headline: (profile as any).headline,
+        location: (profile as any).location,
+        skills: (profile as any).skills ?? [],
+        funFacts: (profile as any).funFacts ?? [],
+        achievements: (profile as any).achievements ?? [],
+        socialLinks: (profile as any).socialLinks ?? {},
+        createdAt: (profile as any).createdAt ?? now,
+        updatedAt: now,
+      });
+      window.dispatchEvent(new CustomEvent('employeeProfileUpdated'));
+      toast({ title: 'Profile picture updated', variant: 'success' });
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to update profile picture.', variant: 'error' });
+    }
   };
 
   const handleProfileSave = async () => {
@@ -259,73 +292,142 @@ export function SettingsPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {!isAdmin() && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <UserCircle size={20} weight="duotone" />
-                Profile
-              </CardTitle>
-              <CardDescription>Update your username, email, and password</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="profile-username">Username</Label>
-                <Input
-                  id="profile-username"
-                  value={profileForm.username}
-                  onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value })}
-                  placeholder="e.g., john.doe"
-                />
-                <p className="text-xs text-muted-foreground">Use this to sign in. At least 3 characters.</p>
+        {/* Profile: for everyone — full form when signed in with user account, message when PIN-only */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserCircle size={20} weight="duotone" />
+              Profile
+            </CardTitle>
+            <CardDescription>
+              {hasUserAccount ? 'Update your profile picture, username, email, and password' : 'Your account and profile options'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!hasUserAccount ? (
+              <p className="text-sm text-muted-foreground rounded-lg border border-border/50 bg-muted/30 p-4">
+                You are signed in with the admin PIN. To change your profile picture, username, email, or password, sign in with a user account (username and password) from the sign-in page.
+              </p>
+            ) : (
+              <>
+                {employee && (
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-2">
+                      <Camera size={18} weight="duotone" />
+                      Profile picture
+                    </Label>
+                    <div className="flex items-center gap-4">
+                      <ImageUploader
+                        value={getProfile(employee.id)?.profilePicture ?? null}
+                        onChange={handleProfilePictureChange}
+                        shape="circle"
+                        size="lg"
+                      />
+                      <p className="text-xs text-muted-foreground">Shown in directory and org chart. Optional.</p>
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="profile-username">Username</Label>
+                  <Input
+                    id="profile-username"
+                    value={profileForm.username}
+                    onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value })}
+                    placeholder="e.g., john.doe"
+                  />
+                  <p className="text-xs text-muted-foreground">Use this to sign in. At least 3 characters.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="profile-email">Email</Label>
+                  <Input
+                    id="profile-email"
+                    type="email"
+                    value={profileForm.email}
+                    onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                    placeholder="e.g., you@company.com"
+                  />
+                  <p className="text-xs text-muted-foreground">Optional; visible to admins in User Management.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="profile-current-password">Current password (only to change password)</Label>
+                  <Input
+                    id="profile-current-password"
+                    type="password"
+                    value={profileForm.currentPassword}
+                    onChange={(e) => setProfileForm({ ...profileForm, currentPassword: e.target.value })}
+                    placeholder="Leave blank to keep current password"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="profile-new-password">New password</Label>
+                  <Input
+                    id="profile-new-password"
+                    type="password"
+                    value={profileForm.newPassword}
+                    onChange={(e) => setProfileForm({ ...profileForm, newPassword: e.target.value })}
+                    placeholder="Min. 6 characters"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="profile-confirm-password">Confirm new password</Label>
+                  <Input
+                    id="profile-confirm-password"
+                    type="password"
+                    value={profileForm.confirmPassword}
+                    onChange={(e) => setProfileForm({ ...profileForm, confirmPassword: e.target.value })}
+                    placeholder="Repeat new password"
+                  />
+                </div>
+                <Button type="button" onClick={handleProfileSave} disabled={profileSaving}>
+                  {profileSaving ? 'Saving...' : 'Save profile'}
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Theme / preferences for everyone */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Preferences</CardTitle>
+            <CardDescription>Theme and display</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3">
+              <Label>Theme</Label>
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  type="button"
+                  variant={theme === 'light' ? 'default' : 'secondary'}
+                  size="sm"
+                  onClick={() => setTheme('light')}
+                >
+                  <Sun size={18} weight="duotone" className="mr-2" />
+                  Light
+                </Button>
+                <Button
+                  type="button"
+                  variant={theme === 'dark' ? 'default' : 'secondary'}
+                  size="sm"
+                  onClick={() => setTheme('dark')}
+                >
+                  <Moon size={18} weight="duotone" className="mr-2" />
+                  Dark
+                </Button>
+                <Button
+                  type="button"
+                  variant={theme === 'system' ? 'default' : 'secondary'}
+                  size="sm"
+                  onClick={() => setTheme('system')}
+                >
+                  <Monitor size={18} weight="duotone" className="mr-2" />
+                  System
+                </Button>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-email">Email</Label>
-                <Input
-                  id="profile-email"
-                  type="email"
-                  value={profileForm.email}
-                  onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-                  placeholder="e.g., you@company.com"
-                />
-                <p className="text-xs text-muted-foreground">Optional; visible to admins in User Management.</p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-current-password">Current password (only to change password)</Label>
-                <Input
-                  id="profile-current-password"
-                  type="password"
-                  value={profileForm.currentPassword}
-                  onChange={(e) => setProfileForm({ ...profileForm, currentPassword: e.target.value })}
-                  placeholder="Leave blank to keep current password"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-new-password">New password</Label>
-                <Input
-                  id="profile-new-password"
-                  type="password"
-                  value={profileForm.newPassword}
-                  onChange={(e) => setProfileForm({ ...profileForm, newPassword: e.target.value })}
-                  placeholder="Min. 6 characters"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="profile-confirm-password">Confirm new password</Label>
-                <Input
-                  id="profile-confirm-password"
-                  type="password"
-                  value={profileForm.confirmPassword}
-                  onChange={(e) => setProfileForm({ ...profileForm, confirmPassword: e.target.value })}
-                  placeholder="Repeat new password"
-                />
-              </div>
-              <Button type="button" onClick={handleProfileSave} disabled={profileSaving}>
-                {profileSaving ? 'Saving...' : 'Save profile'}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+              <p className="text-xs text-muted-foreground">Choose how the app looks for you.</p>
+            </div>
+          </CardContent>
+        </Card>
 
         {isAdmin() && (
           <Card>
@@ -382,42 +484,9 @@ export function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle>Appearance</CardTitle>
-            <CardDescription>Customize the look and feel</CardDescription>
+            <CardDescription>Company accent color (theme is in Preferences above)</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-3">
-              <Label htmlFor="theme">Theme</Label>
-              <div className="flex gap-2 flex-wrap">
-                <Button
-                  type="button"
-                  variant={theme === 'light' ? 'default' : 'secondary'}
-                  size="sm"
-                  onClick={() => setTheme('light')}
-                >
-                  <Sun size={18} weight="duotone" className="mr-2" />
-                  Light
-                </Button>
-                <Button
-                  type="button"
-                  variant={theme === 'dark' ? 'default' : 'secondary'}
-                  size="sm"
-                  onClick={() => setTheme('dark')}
-                >
-                  <Moon size={18} weight="duotone" className="mr-2" />
-                  Dark
-                </Button>
-                <Button
-                  type="button"
-                  variant={theme === 'system' ? 'default' : 'secondary'}
-                  size="sm"
-                  onClick={() => setTheme('system')}
-                >
-                  <Monitor size={18} weight="duotone" className="mr-2" />
-                  System
-                </Button>
-              </div>
-            </div>
-            
             <div className="space-y-3">
               <Label>Accent Color</Label>
               <p className="text-xs text-muted-foreground">Choose a color that represents your brand</p>

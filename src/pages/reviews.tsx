@@ -3,14 +3,16 @@ import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { PeriodSelector } from '@/components/periods/period-selector';
-import { TrendUp, Trophy, Target, Lightning, TrendDown, Users, ChartBar, Calendar } from 'phosphor-react';
+import { TrendUp, Trophy, Target, Lightning, TrendDown, Users, ChartBar, Calendar, FileText, Eye } from 'phosphor-react';
 import { generatePerformanceSummary } from '@/lib/ai-summary';
 import { getAppraisals } from '@/lib/storage';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import type { PerformanceInsight } from '@/lib/ai-summary';
+import { CompletedFormViewModal } from '@/components/shared/completed-form-view-modal';
 
 export function ReviewsPage() {
-  const { employees, appraisals, reviewPeriods } = useApp();
+  const { employees, appraisals, templates, reviewPeriods } = useApp();
+  const [viewAppraisalId, setViewAppraisalId] = useState<string | null>(null);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [summary, setSummary] = useState<PerformanceInsight | null>(null);
@@ -315,6 +317,57 @@ export function ReviewsPage() {
         </div>
       )}
 
+      {/* Individual completed forms for selected employee in selected period */}
+      {selectedEmployee && selectedPeriodId && (() => {
+        const employeeForms = validAppraisals.filter((a) => a.employeeId === selectedEmployee);
+        if (employeeForms.length === 0) return null;
+        const nameById = Object.fromEntries(employees.map((e) => [e.id, e.name]));
+        const templateById = Object.fromEntries(templates.map((t) => [t.id, t]));
+        return (
+          <Card className="border">
+            <CardHeader className="p-3 pb-2">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <FileText size={18} weight="duotone" className="text-muted-foreground" />
+                Individual forms
+              </CardTitle>
+              <CardDescription className="text-xs">
+                {employeeForms.length} completed form{employeeForms.length !== 1 ? 's' : ''} for {employees.find((e) => e.id === selectedEmployee)?.name} in {periodLabel}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-3 pt-0">
+              <ul className="space-y-2">
+                {employeeForms.map((a) => {
+                  const formName = templateById[a.templateId]?.name ?? a.templateId;
+                  const appraiserName = nameById[a.appraiserId] ?? a.appraiserId;
+                  return (
+                    <li
+                      key={a.id}
+                      className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg border border-border bg-muted/20 hover:bg-muted/40 transition-colors"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm text-foreground truncate">{formName}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          By {appraiserName} · {a.score}/{a.maxScore}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setViewAppraisalId(a.id)}
+                        className="flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-foreground bg-muted hover:bg-muted/80 transition-colors"
+                        title="View form"
+                      >
+                        <Eye size={16} weight="duotone" />
+                        View
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       {loading && (
         <Card className="border">
           <CardContent className="py-8 px-4 text-center">
@@ -539,6 +592,12 @@ export function ReviewsPage() {
       )}
         </>
       )}
+
+      <CompletedFormViewModal
+        open={viewAppraisalId != null}
+        onClose={() => setViewAppraisalId(null)}
+        appraisalId={viewAppraisalId}
+      />
     </div>
   );
 }

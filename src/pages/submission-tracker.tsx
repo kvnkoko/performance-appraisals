@@ -2,14 +2,16 @@ import { useMemo, useState } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
-import { ListChecks, CheckCircle, Clock, Hourglass } from 'phosphor-react';
+import { ListChecks, CheckCircle, Clock, Hourglass, Eye } from 'phosphor-react';
 import type { AppraisalAssignment, Appraisal, Template, ReviewPeriod, Employee } from '@/types';
 import { formatDate } from '@/lib/utils';
+import { CompletedFormViewModal } from '@/components/shared/completed-form-view-modal';
 
 const PAGE_SIZE = 50;
 
 type Row = {
   assignmentId: string;
+  appraisalId: string | null;
   periodId: string;
   periodName: string;
   templateId: string;
@@ -68,6 +70,7 @@ function buildRows(
     const status: Row['status'] = appraisal ? 'completed' : (a.status as Row['status']);
     return {
       assignmentId: a.id,
+      appraisalId: appraisal?.id ?? null,
       periodId: a.reviewPeriodId,
       periodName: period?.name ?? a.reviewPeriodId,
       templateId: a.templateId,
@@ -114,6 +117,7 @@ function buildRowsFromAppraisals(
     const period = reviewPeriods.find((p) => p.id === a.reviewPeriodId);
     return {
       assignmentId: a.id,
+      appraisalId: a.id,
       periodId: a.reviewPeriodId,
       periodName: period?.name ?? a.reviewPeriodName ?? a.reviewPeriodId,
       templateId: a.templateId,
@@ -137,6 +141,7 @@ export function SubmissionTrackerPage() {
   const [filterAppraiserId, setFilterAppraiserId] = useState<string | null>(null);
   const [filterEmployeeId, setFilterEmployeeId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
+  const [viewAppraisalId, setViewAppraisalId] = useState<string | null>(null);
 
   const rows = useMemo(() => {
     const assignmentRows =
@@ -372,6 +377,7 @@ export function SubmissionTrackerPage() {
                       <th className="text-left py-3 px-3 font-semibold text-foreground">Status</th>
                       <th className="text-right py-3 px-3 font-semibold text-foreground">Score</th>
                       <th className="text-left py-3 px-3 font-semibold text-foreground">Submitted at</th>
+                      <th className="text-right py-3 px-3 font-semibold text-foreground w-20">View</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -410,6 +416,21 @@ export function SubmissionTrackerPage() {
                         <td className="py-3 px-3 text-muted-foreground">
                           {r.submittedAt ? formatDate(r.submittedAt) : '—'}
                         </td>
+                        <td className="py-3 px-3 text-right">
+                          {r.status === 'completed' && r.appraisalId ? (
+                            <button
+                              type="button"
+                              onClick={() => setViewAppraisalId(r.appraisalId)}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-foreground bg-muted hover:bg-muted/80 transition-colors"
+                              title="View completed form"
+                            >
+                              <Eye size={16} weight="duotone" />
+                              View
+                            </button>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">—</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -444,6 +465,12 @@ export function SubmissionTrackerPage() {
           )}
         </CardContent>
       </Card>
+
+      <CompletedFormViewModal
+        open={viewAppraisalId != null}
+        onClose={() => setViewAppraisalId(null)}
+        appraisalId={viewAppraisalId}
+      />
     </div>
   );
 }
