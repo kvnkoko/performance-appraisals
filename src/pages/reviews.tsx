@@ -11,6 +11,24 @@ import { getAppraisals } from '@/lib/storage';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import type { PerformanceInsight } from '@/lib/ai-summary';
 import { CompletedFormViewModal } from '@/components/shared/completed-form-view-modal';
+import { RATING_LABELS } from '@/types';
+
+/** Map overall score percentage to a 1–5 band for bar chart color. */
+function percentageToRatingBand(pct: number): 1 | 2 | 3 | 4 | 5 {
+  if (pct >= 80) return 5;
+  if (pct >= 60) return 4;
+  if (pct >= 40) return 3;
+  if (pct >= 20) return 2;
+  return 1;
+}
+
+const RATING_BAND_COLORS: Record<1 | 2 | 3 | 4 | 5, string> = {
+  1: '#ef4444',
+  2: '#f59e0b',
+  3: '#22c55e',
+  4: '#3b82f6',
+  5: '#8b5cf6',
+};
 
 export function ReviewsPage() {
   const { employees, appraisals, templates, reviewPeriods } = useApp();
@@ -103,22 +121,38 @@ export function ReviewsPage() {
 
   const topPerformer = sortedScores[0];
 
-  // Chart data with better truncation
-  const chartData = sortedScores.slice(0, 10).map((item) => ({
-    name: item.employee.name.length > 12
-      ? item.employee.name.substring(0, 12) + '...'
-      : item.employee.name,
-    fullName: item.employee.name,
-    score: Math.round(item.percentage),
-    role: item.employee.role,
-  }));
+  // Chart data: full names for horizontal bar, color by 1–5 band
+  const chartData = sortedScores.slice(0, 10).map((item) => {
+    const band = percentageToRatingBand(item.percentage);
+    return {
+      name: item.employee.name,
+      fullName: item.employee.name,
+      score: Math.round(item.percentage),
+      role: item.employee.role,
+      band,
+      fill: RATING_BAND_COLORS[band],
+    };
+  });
 
-  const performanceDistribution = [
-    { name: 'Excellent', range: '90-100%', value: sortedScores.filter((e) => e.percentage >= 90).length, color: '#10b981' },
-    { name: 'Good', range: '75-89%', value: sortedScores.filter((e) => e.percentage >= 75 && e.percentage < 90).length, color: '#3b82f6' },
-    { name: 'Satisfactory', range: '60-74%', value: sortedScores.filter((e) => e.percentage >= 60 && e.percentage < 75).length, color: '#f59e0b' },
-    { name: 'Needs Improvement', range: '<60%', value: sortedScores.filter((e) => e.percentage < 60).length, color: '#ef4444' },
-  ].filter((item) => item.value > 0);
+  // 1–5 rating distribution from actual question responses (how many times each rating was selected)
+  const ratingCountsFromResponses = useMemo(() => {
+    const counts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    validAppraisals.forEach((a) => {
+      (a.responses ?? []).forEach((r) => {
+        const v = typeof r.value === 'number' ? r.value : Number(r.value);
+        if (Number.isInteger(v) && v >= 1 && v <= 5) counts[v as 1 | 2 | 3 | 4 | 5]++;
+      });
+    });
+    return counts;
+  }, [validAppraisals]);
+
+  const performanceDistribution = [1, 2, 3, 4, 5].map((band) => ({
+    band,
+    name: `Rating ${band}: ${RATING_LABELS[band as 1].label}`,
+    range: 'Selected in forms',
+    value: ratingCountsFromResponses[band as 1],
+    color: RATING_BAND_COLORS[band as 1],
+  }));
 
   // Calculate additional stats
   const avgScore = sortedScores.length > 0
@@ -525,28 +559,28 @@ export function ReviewsPage() {
             <CardHeader className="p-3 pb-2">
               <CardTitle className="text-base font-semibold flex items-center gap-2">
                 <Target size={18} weight="duotone" className="text-blue-600/80" />
-                Performance Distribution
+                Performance Distribution (1–5 ratings)
               </CardTitle>
-              <CardDescription className="text-xs">{periodLabel}</CardDescription>
+              <CardDescription className="text-xs">How many times each rating was selected across all completed forms · {periodLabel}</CardDescription>
             </CardHeader>
             <CardContent className="p-3 pt-0">
-              {performanceDistribution.length > 0 ? (
+              {performanceDistribution.some((d) => d.value > 0) ? (
                 <div className="space-y-3">
                   <ResponsiveContainer width="100%" height={220}>
                     <PieChart>
                       <Pie
-                        data={performanceDistribution}
+                        data={performanceDistribution.filter((d) => d.value > 0)}
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ percent }) => (percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : '')}
+                        label={({ name, percent }) => (percent > 0.05 ? `${name.split(':')[0]} ${(percent * 100).toFixed(0)}%` : '')}
                         outerRadius={80}
                         innerRadius={32}
                         fill="#8884d8"
                         dataKey="value"
                         stroke="none"
                       >
-                        {performanceDistribution.map((entry, index) => (
+                        {performanceDistribution.filter((d) => d.value > 0).map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
@@ -558,7 +592,7 @@ export function ReviewsPage() {
                               <div className="bg-background border rounded-lg shadow-lg p-2.5 text-sm">
                                 <p className="font-semibold">{data.name}</p>
                                 <p className="text-xs text-muted-foreground">{data.range}</p>
-                                <p className="font-medium mt-0.5" style={{ color: data.color }}>{data.value} employees</p>
+                                <p className="font-medium mt-0.5" style={{ color: data.color }}>{data.value} response{data.value !== 1 ? 's' : ''}</p>
                               </div>
                             );
                           }
@@ -573,7 +607,7 @@ export function ReviewsPage() {
                         <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
                         <div className="flex-1 min-w-0">
                           <div className="font-semibold text-xs truncate">{item.name}</div>
-                          <div className="text-xs text-muted-foreground">{item.range}</div>
+                          <div className="text-xs text-muted-foreground">responses</div>
                         </div>
                         <div className="text-sm font-bold flex-shrink-0">{item.value}</div>
                       </div>
@@ -598,24 +632,22 @@ export function ReviewsPage() {
           <CardHeader className="p-3 pb-2">
             <CardTitle className="text-base font-semibold flex items-center gap-2">
               <ChartBar size={18} weight="duotone" className="text-purple-600/80" />
-              Performance Scores
+              Performance Scores (Top 10)
             </CardTitle>
-            <CardDescription className="text-xs">Top 10 for {periodLabel}</CardDescription>
+            <CardDescription className="text-xs">Horizontal bar by score; color = 1–5 rating band · {periodLabel}</CardDescription>
           </CardHeader>
           <CardContent className="p-3 pt-0">
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={chartData} margin={{ top: 12, right: 20, left: 12, bottom: 50 }}>
-                <defs>
-                  <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.9} />
-                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0.7} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                <XAxis dataKey="name" angle={-45} textAnchor="end" height={60} tick={{ fontSize: 11 }} interval={0} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={chartData} layout="vertical" margin={{ top: 8, right: 24, left: 4, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} horizontal={false} />
+                <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} tickFormatter={(v) => `${v}%`} />
+                <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="score" fill="url(#colorScore)" radius={[6, 6, 0, 0]} stroke="#6366f1" strokeWidth={1} />
+                <Bar dataKey="score" radius={[0, 4, 4, 0]} barSize={20} minPointSize={8}>
+                  {chartData.map((entry, index) => (
+                    <Cell key={`bar-${index}`} fill={entry.fill} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </CardContent>

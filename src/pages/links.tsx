@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { useUser } from '@/contexts/user-context';
 import { PeriodSelector } from '@/components/periods/period-selector';
-import { getReviewPeriod, saveAppraisalAssignments, deleteAssignmentsByPeriod } from '@/lib/storage';
+import { getReviewPeriod, saveAppraisalAssignments, deleteAssignmentsByPeriod, deleteAppraisal, deleteAppraisalAssignment } from '@/lib/storage';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -22,7 +22,7 @@ type LinkMode = 'manual' | 'auto';
 type AutoWizardStep = 1 | 2 | 3;
 
 export function LinksPage() {
-  const { employees, templates, links, activePeriods, assignments, reviewPeriods, refresh } = useApp();
+  const { employees, templates, links, activePeriods, assignments, appraisals, reviewPeriods, refresh } = useApp();
   const { isAdmin } = useUser();
   const [mode, setMode] = useState<LinkMode>('manual');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -42,6 +42,8 @@ export function LinksPage() {
     periodName: '',
   });
   const [bulkRemoving, setBulkRemoving] = useState(false);
+  const [deleteFormAssignment, setDeleteFormAssignment] = useState<typeof assignments[0] | null>(null);
+  const [deletingForm, setDeletingForm] = useState(false);
   const { toast } = useToast();
 
   // Auto-assignment wizard state
@@ -244,6 +246,31 @@ export function LinksPage() {
     }
   };
 
+  const handleDeleteFormConfirm = async () => {
+    if (!deleteFormAssignment) return;
+    setDeletingForm(true);
+    try {
+      const matchingAppraisal = appraisals.find(
+        (x) =>
+          x.appraiserId === deleteFormAssignment.appraiserId &&
+          x.employeeId === deleteFormAssignment.employeeId &&
+          x.templateId === deleteFormAssignment.templateId &&
+          x.reviewPeriodId === deleteFormAssignment.reviewPeriodId &&
+          x.completedAt
+      );
+      if (matchingAppraisal) await deleteAppraisal(matchingAppraisal.id);
+      await deleteAppraisalAssignment(deleteFormAssignment.id);
+      await refresh();
+      setDeleteFormAssignment(null);
+      toast({ title: 'Form removed', description: 'Assignment and any submitted form have been deleted.', variant: 'success' });
+    } catch (error) {
+      console.error('Delete form error:', error);
+      toast({ title: 'Error', description: 'Failed to remove form. Please try again.', variant: 'error' });
+    } finally {
+      setDeletingForm(false);
+    }
+  };
+
   const formsForPeriod = useMemo(
     () => (selectedPeriod ? assignments.filter((a) => a.reviewPeriodId === selectedPeriod) : []),
     [assignments, selectedPeriod]
@@ -336,6 +363,7 @@ export function LinksPage() {
                         <th className="text-left font-medium py-2.5 px-3">Type</th>
                         <th className="text-left font-medium py-2.5 px-3">Status</th>
                         <th className="text-left font-medium py-2.5 px-3 w-20">Open</th>
+                        <th className="text-left font-medium py-2.5 px-3 w-20">Delete</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -373,6 +401,15 @@ export function LinksPage() {
                               >
                                 Open
                               </a>
+                            </td>
+                            <td className="py-2 px-3">
+                              <button
+                                type="button"
+                                onClick={() => setDeleteFormAssignment(a)}
+                                className="text-destructive hover:underline text-xs"
+                              >
+                                Delete
+                              </button>
                             </td>
                           </tr>
                         );
@@ -1016,6 +1053,18 @@ export function LinksPage() {
         cancelText="Cancel"
         variant="danger"
         loading={bulkRemoving}
+      />
+
+      <ConfirmDialog
+        open={deleteFormAssignment != null}
+        onClose={() => setDeleteFormAssignment(null)}
+        onConfirm={handleDeleteFormConfirm}
+        title="Remove this form?"
+        description={deleteFormAssignment ? `Remove the form for ${deleteFormAssignment.appraiserName} → ${deleteFormAssignment.employeeName}? Any submitted appraisal will also be deleted.` : ''}
+        confirmText="Remove form"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deletingForm}
       />
     </div>
   );

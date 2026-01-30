@@ -3,7 +3,7 @@
  * Uses Reports To first; falls back to same-team (member's team = leader's department) when Reports To is missing.
  * Executives and chairman are never appraised by anyone. Exec/leads do Exec→Leader and, when they have a teamId, Leader→Member for their department.
  * Pure leaders (hierarchy='leader' or 'department-leader') do Leader→Member, Leader→Leader, and are targets of Member→Leader and Exec→Leader.
- * Temporary, terminated, and resigned employees never get auto-created appraisal forms (targets only).
+ * Temporary, terminated, and resigned employees: no forms created *for* them (targets) and they do not act as appraisers.
  */
 import type { Employee, AppraisalAssignment, AssignmentRelationshipType } from '@/types';
 import { LOCKING_STATUSES } from '@/types';
@@ -19,6 +19,14 @@ const isManagerForLeaderToMember = (e: Employee): boolean =>
 
 /** True if we should auto-create an appraisal form *for* this employee (they are the one being appraised). Excludes temporary, terminated, resigned. */
 function isAppraisableForAutoAssignment(e: Employee): boolean {
+  const status = e.employmentStatus ?? 'permanent';
+  if (status === 'temporary') return false;
+  if (LOCKING_STATUSES.includes(status)) return false;
+  return true;
+}
+
+/** True if this person can act as appraiser (fill out a form). Excludes temporary, terminated, resigned. */
+function canActAsAppraiser(e: Employee): boolean {
   const status = e.employmentStatus ?? 'permanent';
   if (status === 'temporary') return false;
   if (LOCKING_STATUSES.includes(status)) return false;
@@ -91,10 +99,12 @@ export function previewAutoAssignments(
     warnings.push(`${membersNoReportNoTeam.length} member(s) have no "Reports To" and no team – set one on the Employees tab to include them.`);
   }
 
-  // Employees excluded from auto-assignment (temporary, terminated, resigned) never get forms created for them
+  // Employees excluded from auto-assignment (temporary, terminated, resigned): no forms for them as target or as appraiser
   const excludedFromAuto = employees.filter((e) => !isAppraisableForAutoAssignment(e));
-  if (excludedFromAuto.length > 0) {
-    warnings.push(`${excludedFromAuto.length} employee(s) are temporary, terminated, or resigned – no appraisal forms will be auto-created for them.`);
+  const excludedAsAppraiser = employees.filter((e) => !canActAsAppraiser(e));
+  if (excludedFromAuto.length > 0 || excludedAsAppraiser.length > 0) {
+    const totalExcluded = new Set([...excludedFromAuto, ...excludedAsAppraiser].map((e) => e.id)).size;
+    warnings.push(`${totalExcluded} employee(s) are temporary, terminated, or resigned – no forms will be auto-created for them to appraise or to be appraised.`);
   }
 
   const seenL2M = new Set<string>();
@@ -102,7 +112,7 @@ export function previewAutoAssignments(
   const seenM2M = new Set<string>();
 
   // RULE 1: Leader → Member — pure leaders and exec/leads (executives with teamId) appraise their department members.
-  // Skip members who are temporary/terminated/resigned (no auto-created forms for them).
+  // Skip members who are temporary/terminated/resigned (no forms for them). Skip managers who cannot act as appraisers (temporary/terminated/resigned).
   if (opts.includeLeaderToMember) {
     for (const member of employees) {
       if (member.hierarchy !== 'member') continue;
@@ -110,10 +120,10 @@ export function previewAutoAssignments(
       let managers: Employee[] = [];
       if (member.reportsTo) {
         const m = byId.get(member.reportsTo);
-        if (m && isManagerForLeaderToMember(m)) managers = [m];
+        if (m && isManagerForLeaderToMember(m) && canActAsAppraiser(m)) managers = [m];
       }
       if (member.teamId) {
-        const teamManagers = employees.filter((e) => isManagerForLeaderToMember(e) && e.teamId === member.teamId);
+        const teamManagers = employees.filter((e) => isManagerForLeaderToMember(e) && e.teamId === member.teamId && canActAsAppraiser(e));
         managers = [...new Map([...managers, ...teamManagers].map((e) => [e.id, e])).values()];
       }
       for (const manager of managers) {
@@ -128,9 +138,9 @@ export function previewAutoAssignments(
         });
       }
     }
-    // Ensure every department head (pure leader or exec/lead) gets all members in their department (skip temporary/terminated/resigned)
+    // Ensure every department head (pure leader or exec/lead) who can act as appraiser gets all members in their department
     for (const manager of employees) {
-      if (!isManagerForLeaderToMember(manager) || !manager.teamId) continue;
+      if (!isManagerForLeaderToMember(manager) || !manager.teamId || !canActAsAppraiser(manager)) continue;
       const deptMembers = employees.filter((e) => e.hierarchy === 'member' && e.teamId === manager.teamId && isAppraisableForAutoAssignment(e));
       for (const member of deptMembers) {
         const key = `${manager.id}:${member.id}`;
@@ -146,12 +156,14 @@ export function previewAutoAssignments(
     }
   }
 
-  // RULE 2: Member → Leader — members only appraise pure leaders (never executives). Skip if leader is temporary/terminated/resigned.
+  // RULE 2: Member → Leader — members only appraise pure leaders (never executives). Skip if leader is temporary/terminated/resigned. Skip if member (appraiser) cannot act as appraiser.
   if (opts.includeMemberToLeader) {
     for (const pair of leaderToMember) {
       const leader = byId.get(pair.appraiserId);
+      const member = byId.get(pair.employeeId);
       if (!leader || !isPureLeader(leader)) continue; // defensive: never target executives
       if (!isAppraisableForAutoAssignment(leader)) continue;
+      if (!member || !canActAsAppraiser(member)) continue; // member is the appraiser
       const key = `${pair.employeeId}:${pair.appraiserId}`;
       if (seenM2L.has(key)) continue;
       seenM2L.add(key);
@@ -165,10 +177,11 @@ export function previewAutoAssignments(
   }
 
   // RULE 3: Leader → Leader — only pure leaders; executives (including exec/leads) do NOT participate (isPureLeader excludes execs).
-  // Skip targets who are temporary/terminated/resigned.
+  // Skip targets who are temporary/terminated/resigned. Skip appraisers who cannot act as appraisers.
   if (opts.includeLeaderToLeader) {
     const leaders = employees.filter(isPureLeader);
-    for (const appraiser of leaders) {
+    const leadersWhoCanAppraise = leaders.filter(canActAsAppraiser);
+    for (const appraiser of leadersWhoCanAppraise) {
       for (const target of leaders) {
         if (appraiser.id === target.id) continue;
         if (!isAppraisableForAutoAssignment(target)) continue;
@@ -185,9 +198,9 @@ export function previewAutoAssignments(
     }
   }
 
-  // RULE 4: Executive → Leader — executives appraise only pure leaders; executives are never targets. Skip leaders who are temporary/terminated/resigned.
+  // RULE 4: Executive → Leader — executives appraise only pure leaders; executives are never targets. Skip leaders who are temporary/terminated/resigned. Skip execs who cannot act as appraisers.
   if (opts.includeExecToLeader) {
-    const execs = employees.filter(isExecutive);
+    const execs = employees.filter((e) => isExecutive(e) && canActAsAppraiser(e));
     const leadersForExec = employees.filter((e) => isPureLeader(e) && isAppraisableForAutoAssignment(e));
     for (const exec of execs) {
       for (const leader of leadersForExec) {
@@ -207,9 +220,9 @@ export function previewAutoAssignments(
     }
   }
 
-  // RULE 5: HR → All — HR appraises non-HR employees; executives and chairman are never targets. Skip temporary/terminated/resigned.
+  // RULE 5: HR → All — HR appraises non-HR employees; executives and chairman are never targets. Skip temporary/terminated/resigned. Skip HR who cannot act as appraisers.
   if (opts.includeHrToAll) {
-    const hrStaff = employees.filter((e) => e.hierarchy === 'hr');
+    const hrStaff = employees.filter((e) => e.hierarchy === 'hr' && canActAsAppraiser(e));
     const allOthers = employees.filter(
       (e) => e.hierarchy !== 'hr' && !isExecutive(e) && !isChairman(e) && isAppraisableForAutoAssignment(e)
     );
@@ -231,11 +244,11 @@ export function previewAutoAssignments(
     }
   }
 
-  // RULE 6: Member → Member (same department only) — each appraisable member in a department rates every other appraisable member in that department.
+  // RULE 6: Member → Member (same department only) — each appraisable member who can act as appraiser rates every other appraisable member in that department.
   if (opts.includeMemberToMember) {
     const membersByTeam = new Map<string, Employee[]>();
     for (const e of employees) {
-      if (e.hierarchy !== 'member' || !isAppraisableForAutoAssignment(e) || !e.teamId) continue;
+      if (e.hierarchy !== 'member' || !isAppraisableForAutoAssignment(e) || !canActAsAppraiser(e) || !e.teamId) continue;
       const list = membersByTeam.get(e.teamId) ?? [];
       list.push(e);
       membersByTeam.set(e.teamId, list);

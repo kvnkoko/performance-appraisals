@@ -2,9 +2,12 @@ import { useMemo, useState } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
-import { ListChecks, CheckCircle, Clock, Hourglass, Eye } from 'phosphor-react';
+import { ListChecks, CheckCircle, Clock, Hourglass, Eye, Trash } from 'phosphor-react';
 import type { AppraisalAssignment, Appraisal, Template, ReviewPeriod, Employee } from '@/types';
 import { formatDate } from '@/lib/utils';
+import { deleteAppraisal, deleteAppraisalAssignment } from '@/lib/storage';
+import { useToast } from '@/contexts/toast-context';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { CompletedFormViewModal } from '@/components/shared/completed-form-view-modal';
 
 const PAGE_SIZE = 50;
@@ -135,13 +138,16 @@ function buildRowsFromAppraisals(
 }
 
 export function SubmissionTrackerPage() {
-  const { assignments, appraisals, templates, reviewPeriods, employees } = useApp();
+  const { assignments, appraisals, templates, reviewPeriods, employees, refresh } = useApp();
+  const { toast } = useToast();
   const [filterPeriodId, setFilterPeriodId] = useState<string | null>(null);
   const [filterTemplateId, setFilterTemplateId] = useState<string | null>(null);
   const [filterAppraiserId, setFilterAppraiserId] = useState<string | null>(null);
   const [filterEmployeeId, setFilterEmployeeId] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [viewAppraisalId, setViewAppraisalId] = useState<string | null>(null);
+  const [deleteRow, setDeleteRow] = useState<Row | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const rows = useMemo(() => {
     const assignmentRows =
@@ -243,6 +249,22 @@ export function SubmissionTrackerPage() {
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / PAGE_SIZE));
   const canPrev = page > 0;
   const canNext = page < totalPages - 1;
+
+  const handleDeleteForm = async () => {
+    if (!deleteRow) return;
+    setDeleting(true);
+    try {
+      if (deleteRow.appraisalId) await deleteAppraisal(deleteRow.appraisalId);
+      await deleteAppraisalAssignment(deleteRow.assignmentId);
+      await refresh();
+      setDeleteRow(null);
+      toast({ title: 'Form removed', description: 'Assignment and any submitted form have been deleted.', variant: 'success' });
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to delete form. Please try again.', variant: 'error' });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
@@ -378,6 +400,7 @@ export function SubmissionTrackerPage() {
                       <th className="text-right py-3 px-3 font-semibold text-foreground">Score</th>
                       <th className="text-left py-3 px-3 font-semibold text-foreground">Submitted at</th>
                       <th className="text-right py-3 px-3 font-semibold text-foreground w-20">View</th>
+                      <th className="text-right py-3 px-3 font-semibold text-foreground w-20">Delete</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -431,6 +454,17 @@ export function SubmissionTrackerPage() {
                             <span className="text-muted-foreground text-sm">—</span>
                           )}
                         </td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setDeleteRow(r)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                            title="Remove this form (assignment and any submission)"
+                          >
+                            <Trash size={16} weight="duotone" />
+                            Delete
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -465,6 +499,18 @@ export function SubmissionTrackerPage() {
           )}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={deleteRow != null}
+        onClose={() => setDeleteRow(null)}
+        onConfirm={handleDeleteForm}
+        title="Remove this form?"
+        description={deleteRow ? `Remove the form "${deleteRow.formName}" for ${deleteRow.appraiserName} → ${deleteRow.employeeName}?${deleteRow.appraisalId ? ' Any submitted appraisal will also be deleted.' : ''}` : ''}
+        confirmText="Remove form"
+        cancelText="Cancel"
+        variant="danger"
+        loading={deleting}
+      />
 
       <CompletedFormViewModal
         open={viewAppraisalId != null}
