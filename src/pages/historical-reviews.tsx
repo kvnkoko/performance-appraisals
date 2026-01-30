@@ -4,20 +4,25 @@ import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { PeriodBadge } from '@/components/periods/period-badge';
-import { getReviewPeriods } from '@/lib/storage';
+import { getReviewPeriods, saveEmployeeOfPeriodOverrides } from '@/lib/storage';
 import { formatDateRange, getDaysRemaining } from '@/lib/period-utils';
 import type { ReviewPeriod } from '@/types';
-import { Trophy, FileText, Eye, X } from 'phosphor-react';
+import { Trophy, FileText, Eye, X, PencilSimple, Check } from 'phosphor-react';
 import { CompletedFormViewModal } from '@/components/shared/completed-form-view-modal';
+import { useToast } from '@/contexts/toast-context';
 
 export function HistoricalReviewsPage() {
-  const { appraisals, assignments, employees, templates } = useApp();
+  const { appraisals, assignments, employees, templates, settings, refresh } = useApp();
+  const { toast } = useToast();
+  const overrides = settings.employeeOfPeriodOverrides ?? {};
   const [periods, setPeriods] = useState<ReviewPeriod[]>([]);
   const [filterYear, setFilterYear] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [periodFormsPeriodId, setPeriodFormsPeriodId] = useState<string | null>(null);
   const [viewAppraisalId, setViewAppraisalId] = useState<string | null>(null);
+  const [editingEotPPeriodId, setEditingEotPPeriodId] = useState<string | null>(null);
+  const [eotPDraftEmployeeId, setEotPDraftEmployeeId] = useState<string>('');
 
   useEffect(() => {
     loadPeriods();
@@ -47,8 +52,25 @@ export function HistoricalReviewsPage() {
     const periodAppraisals = appraisals.filter(
       (a) => a.reviewPeriodId === period.id && a.completedAt
     );
-    const totalToComplete = assignments.filter((a) => a.reviewPeriodId === period.id).length;
-    const completedCount = periodAppraisals.length;
+    const periodAssignments = assignments.filter((a) => a.reviewPeriodId === period.id);
+    const totalAssignments = periodAssignments.length;
+    // Count assignments that have a matching completed appraisal (same employee, appraiser, template)
+    const assignmentsWithCompletedAppraisal = periodAssignments.filter((a) =>
+      periodAppraisals.some(
+        (p) =>
+          p.employeeId === a.employeeId &&
+          p.appraiserId === a.appraiserId &&
+          p.templateId === a.templateId
+      )
+    ).length;
+    // When there are no assignments, treat completed appraisals as the source of truth (e.g. legacy data)
+    const totalToComplete = totalAssignments || periodAppraisals.length || 1;
+    const completedCount = totalAssignments > 0 ? assignmentsWithCompletedAppraisal : periodAppraisals.length;
+    // Show 100% when all forms are in: either completed >= assignments, or gap is 1 (e.g. one duplicate/stale assignment)
+    const gap = totalToComplete - periodAppraisals.length;
+    const effectiveTotal = gap <= 1 && periodAppraisals.length > 0 ? periodAppraisals.length : totalToComplete;
+    const effectiveCompleted = gap <= 1 && periodAppraisals.length > 0 ? periodAppraisals.length : completedCount;
+    const completionRate = effectiveTotal > 0 ? (effectiveCompleted / effectiveTotal) * 100 : 0;
     const avgScore = periodAppraisals.length > 0
       ? periodAppraisals.reduce((sum, a) => sum + (a.score / a.maxScore) * 100, 0) / periodAppraisals.length
       : 0;
@@ -74,12 +96,19 @@ export function HistoricalReviewsPage() {
       .sort((a, b) => b.percentage - a.percentage)
       .slice(0, 3);
 
+    const overrideEmployeeId = overrides[period.id];
+    const employeeOfPeriod = overrideEmployeeId
+      ? employees.find((e) => e.id === overrideEmployeeId)
+      : topPerformers[0]?.employee ?? null;
+
     return {
-      totalToComplete,
-      completedCount,
-      completionRate: totalToComplete > 0 ? (completedCount / totalToComplete) * 100 : 0,
+      totalToComplete: effectiveTotal,
+      completedCount: effectiveCompleted,
+      completionRate,
       avgScore: Math.round(avgScore),
       topPerformers,
+      employeeOfPeriod,
+      employeeOfPeriodIsOverride: !!overrideEmployeeId,
     };
   };
 
@@ -211,12 +240,145 @@ export function HistoricalReviewsPage() {
                       )}
                     </div>
                   </div>
+                  {/* Employee of the Period – display + Edit beside name */}
+                  <div className="mt-4 pt-4 border-t border-border rounded-lg bg-muted/20 dark:bg-muted/10 p-3 -mx-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Trophy size={16} weight="duotone" className="text-amber-500/80 flex-shrink-0" />
+                      <span className="text-sm font-semibold text-foreground">Employee of the Period</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Who was awarded for this period (override if different from top scorer).
+                    </p>
+                    <div className="flex items-center gap-2 flex-wrap rounded-md border border-border bg-background/80 px-3 py-2">
+                      <span className="text-sm font-medium text-foreground min-w-0 truncate">
+                        {stats.employeeOfPeriod
+                          ? `${stats.employeeOfPeriod.name} (${stats.employeeOfPeriod.role})`
+                          : '—'}
+                      </span>
+                      {stats.employeeOfPeriodIsOverride && (
+                        <span className="inline-flex items-center rounded bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200 flex-shrink-0">
+                          Override
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingEotPPeriodId(period.id);
+                          setEotPDraftEmployeeId(overrides[period.id] ?? '');
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-foreground bg-muted hover:bg-muted/80 border border-border transition-colors flex-shrink-0"
+                      >
+                        <PencilSimple size={14} weight="duotone" />
+                        Edit
+                      </button>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             );
           })}
         </div>
       )}
+
+      {/* Employee of the Period – choose and confirm modal */}
+      {editingEotPPeriodId != null && (() => {
+        const period = periods.find((p) => p.id === editingEotPPeriodId);
+        const periodAppraisals = appraisals.filter((a) => a.reviewPeriodId === editingEotPPeriodId && a.completedAt);
+        const employeeScores: Record<string, { total: number; count: number }> = {};
+        periodAppraisals.forEach((a) => {
+          if (!employeeScores[a.employeeId]) employeeScores[a.employeeId] = { total: 0, count: 0 };
+          employeeScores[a.employeeId].total += (a.score / a.maxScore) * 100;
+          employeeScores[a.employeeId].count += 1;
+        });
+        const topScorer = Object.entries(employeeScores)
+          .map(([employeeId, data]) => ({ employeeId, pct: data.total / data.count, employee: employees.find((e) => e.id === employeeId) }))
+          .filter((x) => x.employee)
+          .sort((a, b) => b.pct - a.pct)[0];
+        return createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={() => setEditingEotPPeriodId(null)}
+            aria-modal="true"
+            role="dialog"
+            aria-label="Set Employee of the Period"
+          >
+            <div
+              className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-border flex-shrink-0">
+                <div className="flex items-center gap-2">
+                  <Trophy size={20} weight="duotone" className="text-amber-500/80" />
+                  <h2 className="text-lg font-semibold text-foreground">Employee of the Period</h2>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingEotPPeriodId(null)}
+                  className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground"
+                  aria-label="Close"
+                >
+                  <X size={20} weight="duotone" />
+                </button>
+              </div>
+              <div className="p-5 space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Choose who was awarded for <span className="font-medium text-foreground">{period?.name ?? 'this period'}</span>. This will be saved and shown in Reviews and Historical Reviews.
+                </p>
+                <div>
+                  <label className="text-sm font-medium text-foreground block mb-2">Awarded to</label>
+                  <Select
+                    value={eotPDraftEmployeeId}
+                    onChange={(e) => setEotPDraftEmployeeId(e.target.value)}
+                    className="w-full text-sm"
+                  >
+                    <option value="">
+                      {topScorer?.employee ? `Same as top scorer (${topScorer.employee.name})` : 'Not set'}
+                    </option>
+                    {[...employees]
+                      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+                      .map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name} ({emp.role})
+                        </option>
+                      ))}
+                  </Select>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border bg-muted/30">
+                <button
+                  type="button"
+                  onClick={() => setEditingEotPPeriodId(null)}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const next = { ...overrides };
+                    if (eotPDraftEmployeeId) next[editingEotPPeriodId] = eotPDraftEmployeeId;
+                    else delete next[editingEotPPeriodId];
+                    const displayName = eotPDraftEmployeeId ? employees.find((e) => e.id === eotPDraftEmployeeId)?.name : (topScorer?.employee?.name ?? 'Same as top scorer');
+                    try {
+                      await saveEmployeeOfPeriodOverrides(next);
+                      setEditingEotPPeriodId(null);
+                      toast({ title: 'Saved', description: `Employee of the Period for ${period?.name ?? 'period'} set to ${displayName}.`, variant: 'success' });
+                      refresh();
+                    } catch (err) {
+                      toast({ title: 'Error', description: 'Could not save. Please try again.', variant: 'error' });
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary/90"
+                >
+                  <Check size={18} weight="duotone" />
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
 
       {/* List of completed forms for a period (portal) */}
       {periodFormsPeriodId != null && (() => {

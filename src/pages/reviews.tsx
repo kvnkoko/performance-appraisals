@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,7 +31,7 @@ const RATING_BAND_COLORS: Record<1 | 2 | 3 | 4 | 5, string> = {
 };
 
 export function ReviewsPage() {
-  const { employees, appraisals, templates, reviewPeriods } = useApp();
+  const { employees, appraisals, templates, reviewPeriods, settings } = useApp();
   const [viewAppraisalId, setViewAppraisalId] = useState<string | null>(null);
   const [showAllRankings, setShowAllRankings] = useState(false);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
@@ -39,6 +39,8 @@ export function ReviewsPage() {
   const [summary, setSummary] = useState<PerformanceInsight | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showNeedsAttentionPopup, setShowNeedsAttentionPopup] = useState(false);
+  const summarySectionRef = useRef<HTMLDivElement>(null);
 
   const selectedPeriod = useMemo(
     () => (selectedPeriodId ? reviewPeriods.find((p) => p.id === selectedPeriodId) : null),
@@ -120,6 +122,15 @@ export function ReviewsPage() {
     .sort((a, b) => b.percentage - a.percentage);
 
   const topPerformer = sortedScores[0];
+  const overrideEmployeeId = selectedPeriodId ? (settings.employeeOfPeriodOverrides ?? {})[selectedPeriodId] : undefined;
+  const effectiveEmployeeOfPeriod = useMemo(() => {
+    if (overrideEmployeeId) {
+      const emp = employees.find((e) => e.id === overrideEmployeeId);
+      const scoreEntry = sortedScores.find((s) => s.employee.id === overrideEmployeeId);
+      if (emp) return { employee: emp, percentage: scoreEntry?.percentage ?? 0, totalScore: scoreEntry?.totalScore ?? 0, totalMaxScore: scoreEntry?.totalMaxScore ?? 0, isOverride: true };
+    }
+    return topPerformer ? { ...topPerformer, isOverride: false } : null;
+  }, [overrideEmployeeId, employees, sortedScores, topPerformer]);
 
   // Chart data: full names for horizontal bar, color by 1–5 band
   const chartData = sortedScores.slice(0, 10).map((item) => {
@@ -160,6 +171,13 @@ export function ReviewsPage() {
     : 0;
   const excellentCount = sortedScores.filter((e) => e.percentage >= 90).length;
   const needsImprovementCount = sortedScores.filter((e) => e.percentage < 60).length;
+  const needsAttentionScores = useMemo(
+    () =>
+      [...sortedScores]
+        .filter((e) => e.percentage < 60)
+        .sort((a, b) => a.percentage - b.percentage),
+    [sortedScores]
+  );
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -255,11 +273,85 @@ export function ReviewsPage() {
           <CardContent className="p-3 pt-0">
             <div className="text-2xl font-bold text-red-700 dark:text-red-300">{needsImprovementCount}</div>
             <p className="text-xs text-red-600/70 dark:text-red-400/70 mt-0.5">Below 60% in {periodLabel}</p>
+            {needsImprovementCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowNeedsAttentionPopup(true)}
+                className="mt-2 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 underline underline-offset-2"
+              >
+                See who →
+              </button>
+            )}
           </CardContent>
         </Card>
       </div>
 
+      {/* Who needs attention – popup */}
+      {showNeedsAttentionPopup && needsAttentionScores.length > 0 && createPortal(
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setShowNeedsAttentionPopup(false)}
+          aria-modal="true"
+          role="dialog"
+          aria-label="Who needs attention"
+        >
+          <div
+            className="bg-card border border-red-200/60 dark:border-red-800/40 rounded-xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-4 px-4 py-3 border-b border-border flex-shrink-0 bg-gradient-to-br from-red-50/50 to-transparent dark:from-red-950/20">
+              <div className="flex items-center gap-2">
+                <TrendDown size={20} weight="duotone" className="text-red-600/80 dark:text-red-400/80" />
+                <div>
+                  <h2 className="text-base font-semibold text-foreground">Who needs attention</h2>
+                  <p className="text-xs text-muted-foreground">Below 60% in {periodLabel}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNeedsAttentionPopup(false)}
+                className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground"
+                aria-label="Close"
+              >
+                <X size={20} weight="duotone" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {needsAttentionScores.map(({ employee, percentage }) => (
+                <div
+                  key={employee.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-red-200/50 dark:border-red-800/50 bg-background/80 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm truncate">{employee.name}</p>
+                    <p className="text-xs text-muted-foreground">{employee.role}</p>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <span className="text-sm font-semibold text-red-600 dark:text-red-400">{Math.round(percentage)}%</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/50"
+                      onClick={() => {
+                        setSelectedEmployee(employee.id);
+                        setShowNeedsAttentionPopup(false);
+                        setTimeout(() => summarySectionRef.current?.scrollIntoView({ behavior: 'smooth' }), 300);
+                      }}
+                    >
+                      <Eye size={14} weight="duotone" />
+                      View review
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Employee detail – compact */}
+      <div ref={summarySectionRef}>
       <Card className="border">
         <CardHeader className="p-3 pb-2">
           <CardTitle className="text-base font-semibold">View employee review</CardTitle>
@@ -272,11 +364,13 @@ export function ReviewsPage() {
             className="w-full max-w-md"
           >
             <option value="">Select employee...</option>
-            {employees.map((emp) => (
-              <option key={emp.id} value={emp.id}>
-                {emp.name} ({emp.role})
-              </option>
-            ))}
+            {[...employees]
+              .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+              .map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.name} ({emp.role})
+                </option>
+              ))}
           </Select>
         </CardContent>
       </Card>
@@ -354,6 +448,8 @@ export function ReviewsPage() {
         </div>
       )}
 
+      </div>
+
       {/* Individual completed forms for selected employee in selected period */}
       {selectedEmployee && selectedPeriodId && (() => {
         const employeeForms = validAppraisals.filter((a) => a.employeeId === selectedEmployee);
@@ -428,34 +524,68 @@ export function ReviewsPage() {
         </Card>
       )}
 
-      {/* Employee of the Period spotlight – compact */}
-      {topPerformer && (
-        <Card className="border bg-gradient-to-br from-amber-50/80 via-orange-50/60 to-yellow-50/80 dark:from-amber-950/30 dark:via-orange-950/20 dark:to-yellow-950/20 border-amber-300/70 dark:border-amber-700/50 overflow-hidden">
-          <CardContent className="p-4">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="bg-gradient-to-br from-amber-400 to-orange-500 p-3 rounded-xl shadow-md">
-                  <Trophy size={28} weight="duotone" className="text-white" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <Trophy size={14} weight="duotone" className="text-amber-600/90 dark:text-amber-400/90" />
-                    <span className="text-xs font-semibold text-amber-700/90 dark:text-amber-400/90 uppercase tracking-wide">
-                      Employee of the Period · {periodLabel}
+      {/* Recognition: Top performer (data) + Who was awarded for this period */}
+      {(topPerformer || effectiveEmployeeOfPeriod) && (
+        <Card className="border overflow-hidden bg-gradient-to-br from-muted/30 via-background to-muted/20 dark:from-muted/20 dark:to-muted/10">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Trophy size={16} weight="duotone" className="text-amber-500/80" />
+              Recognition · {periodLabel}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4 pt-0">
+            <div className="grid gap-4 sm:grid-cols-2">
+              {/* Left: Top performer from data */}
+              {topPerformer && (
+                <div className="rounded-xl border bg-card p-4 shadow-sm border-blue-200/50 dark:border-blue-800/40 bg-gradient-to-br from-blue-50/40 to-transparent dark:from-blue-950/20 dark:to-transparent">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ChartBar size={18} weight="duotone" className="text-blue-600/90 dark:text-blue-400/90" />
+                    <span className="text-xs font-semibold uppercase tracking-wide text-blue-700/90 dark:text-blue-300/90">
+                      Highest score (data)
                     </span>
                   </div>
-                  <h3 className="text-xl font-bold text-foreground">{topPerformer.employee.name}</h3>
-                  <p className="text-xs text-muted-foreground">{topPerformer.employee.role}</p>
+                  <p className="font-semibold text-foreground">{topPerformer.employee.name}</p>
+                  <p className="text-xs text-muted-foreground mb-2">{topPerformer.employee.role}</p>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {Math.round(topPerformer.percentage)}%
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {topPerformer.totalScore}/{topPerformer.totalMaxScore} pts
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <div className="text-4xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 dark:from-amber-400 dark:to-orange-400 bg-clip-text text-transparent">
-                  {Math.round(topPerformer.percentage)}%
+              )}
+              {/* Right: Employee of the Period (awarded for this period) */}
+              {effectiveEmployeeOfPeriod && (
+                <div className="rounded-xl border bg-card p-4 shadow-sm border-amber-200/60 dark:border-amber-700/40 bg-gradient-to-br from-amber-50/50 to-transparent dark:from-amber-950/30 dark:to-transparent">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Trophy size={18} weight="duotone" className="text-amber-600/90 dark:text-amber-400/90" />
+                    <span className="text-xs font-semibold uppercase tracking-wide text-amber-700/90 dark:text-amber-300/90">
+                      Awarded for this period
+                    </span>
+                  </div>
+                  <p className="font-semibold text-foreground">{effectiveEmployeeOfPeriod.employee.name}</p>
+                  <p className="text-xs text-muted-foreground mb-2">{effectiveEmployeeOfPeriod.employee.role}</p>
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                      {Math.round(effectiveEmployeeOfPeriod.percentage)}%
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {effectiveEmployeeOfPeriod.totalScore}/{effectiveEmployeeOfPeriod.totalMaxScore} pts
+                    </span>
+                    {effectiveEmployeeOfPeriod.isOverride ? (
+                      <span className="inline-flex items-center rounded-md bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">
+                        Override
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-md bg-emerald-100 dark:bg-emerald-900/40 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:text-emerald-200">
+                        Same as top scorer
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {topPerformer.totalScore}/{topPerformer.totalMaxScore} points
-                </p>
-              </div>
+              )}
             </div>
           </CardContent>
         </Card>

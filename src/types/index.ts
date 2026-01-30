@@ -214,6 +214,8 @@ export interface CompanySettings {
   hrScoreWeight?: number;
   /** When true, include HR scores in final ranking; when false, HR is optional. Default false. */
   requireHrForRanking?: boolean;
+  /** Override who was awarded Employee of the Period per review period (e.g. fairness, past wins). Key = reviewPeriodId, value = employeeId. */
+  employeeOfPeriodOverrides?: Record<string, string>;
 }
 
 export interface PerformanceSummary {

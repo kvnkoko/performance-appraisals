@@ -931,6 +931,10 @@ export async function getSettings(): Promise<CompanySettings> {
           if (idbSettings.hrScoreWeight != null) merged.hrScoreWeight = idbSettings.hrScoreWeight;
           if (idbSettings.requireHrForRanking != null) merged.requireHrForRanking = idbSettings.requireHrForRanking;
         }
+        const overridesRow = await database.get('settings', 'employeeOfPeriodOverrides') as { key: string; employeeOfPeriodOverrides?: Record<string, string> } | undefined;
+        if (overridesRow?.employeeOfPeriodOverrides && typeof overridesRow.employeeOfPeriodOverrides === 'object') {
+          merged.employeeOfPeriodOverrides = overridesRow.employeeOfPeriodOverrides;
+        }
         const toStore = { ...merged, key: 'company' };
         if (database.objectStoreNames.contains('settings')) {
           await database.put('settings', toStore as any);
@@ -943,14 +947,38 @@ export async function getSettings(): Promise<CompanySettings> {
   }
   const merged = { ...defaultSettings, ...(stored as CompanySettings) };
   if (stored && (stored as any).key) delete (merged as any).key;
+  // Merge Employee of the Period overrides from dedicated IDB key (not in Supabase settings table)
+  const overridesRow = await database.get('settings', 'employeeOfPeriodOverrides') as { key: string; employeeOfPeriodOverrides?: Record<string, string> } | undefined;
+  if (overridesRow?.employeeOfPeriodOverrides && typeof overridesRow.employeeOfPeriodOverrides === 'object') {
+    merged.employeeOfPeriodOverrides = overridesRow.employeeOfPeriodOverrides;
+  }
   return merged as CompanySettings;
 }
 
-export async function saveSettings(settings: CompanySettings): Promise<void> {
-  // ALWAYS save to IndexedDB first to ensure data persistence
+/** Employee of the Period overrides: who was awarded per period (IDB only, so it always persists). */
+export async function getEmployeeOfPeriodOverrides(): Promise<Record<string, string>> {
   const database = await initDB();
-  await database.put('settings', { ...settings, key: 'company' } as any);
+  const row = await database.get('settings', 'employeeOfPeriodOverrides') as { key: string; employeeOfPeriodOverrides?: Record<string, string> } | undefined;
+  return row?.employeeOfPeriodOverrides && typeof row.employeeOfPeriodOverrides === 'object' ? row.employeeOfPeriodOverrides : {};
+}
+
+export async function saveEmployeeOfPeriodOverrides(overrides: Record<string, string>): Promise<void> {
+  const database = await initDB();
+  await database.put('settings', { key: 'employeeOfPeriodOverrides', employeeOfPeriodOverrides: overrides } as any);
+}
+
+export async function saveSettings(settings: CompanySettings): Promise<void> {
+  const database = await initDB();
+  const { employeeOfPeriodOverrides, ...rest } = settings;
+  // Save company settings (no overrides) to IDB and Supabase
+  await database.put('settings', { ...rest, key: 'company' } as any);
   console.log('Settings saved to IndexedDB');
+  // Persist overrides in dedicated IDB key only (avoids Supabase schema / 400)
+  if (employeeOfPeriodOverrides && Object.keys(employeeOfPeriodOverrides).length > 0) {
+    await database.put('settings', { key: 'employeeOfPeriodOverrides', employeeOfPeriodOverrides } as any);
+  } else {
+    await database.delete('settings', 'employeeOfPeriodOverrides');
+  }
 
   // Try Supabase if configured (but don't let Supabase errors prevent IndexedDB save)
   try {
@@ -958,16 +986,13 @@ export async function saveSettings(settings: CompanySettings): Promise<void> {
     if (isSupabaseConfigured()) {
       const { saveSettingsToSupabase } = await import('./supabase-storage');
       try {
-        await saveSettingsToSupabase(settings);
+        await saveSettingsToSupabase(rest as CompanySettings);
         console.log('Settings saved to Supabase');
       } catch (supabaseError: any) {
-        // Log Supabase errors but don't throw - IndexedDB save already succeeded
         console.warn('Failed to save settings to Supabase (but saved to IndexedDB):', supabaseError);
-        // Don't re-throw - IndexedDB save is sufficient
       }
     }
   } catch (error) {
-    // If Supabase import or config check fails, that's fine - IndexedDB save already succeeded
     console.log('Supabase not available, data saved to IndexedDB only:', error);
   }
 }
