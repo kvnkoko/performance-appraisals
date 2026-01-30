@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
 import { PeriodSelector } from '@/components/periods/period-selector';
-import { TrendUp, Trophy, Target, Lightning, TrendDown, Users, ChartBar, Calendar, FileText, Eye } from 'phosphor-react';
+import { Button } from '@/components/ui/button';
+import { TrendUp, Trophy, Target, Lightning, TrendDown, Users, ChartBar, Calendar, FileText, Eye, ListBullets, X } from 'phosphor-react';
 import { generatePerformanceSummary } from '@/lib/ai-summary';
 import { getAppraisals } from '@/lib/storage';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -13,6 +15,7 @@ import { CompletedFormViewModal } from '@/components/shared/completed-form-view-
 export function ReviewsPage() {
   const { employees, appraisals, templates, reviewPeriods } = useApp();
   const [viewAppraisalId, setViewAppraisalId] = useState<string | null>(null);
+  const [showAllRankings, setShowAllRankings] = useState(false);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [summary, setSummary] = useState<PerformanceInsight | null>(null);
@@ -429,11 +432,27 @@ export function ReviewsPage() {
         <div className="grid gap-3 lg:grid-cols-2">
           <Card className="border">
             <CardHeader className="p-3 pb-2">
-              <CardTitle className="text-base font-semibold flex items-center gap-2">
-                <Trophy size={18} weight="duotone" className="text-amber-600/80" />
-                Top Performers
-              </CardTitle>
-              <CardDescription className="text-xs">Ranking for {periodLabel}</CardDescription>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Trophy size={18} weight="duotone" className="text-amber-600/80" />
+                    Top Performers
+                  </CardTitle>
+                  <CardDescription className="text-xs">Ranking for {periodLabel}</CardDescription>
+                </div>
+                {sortedScores.length > 10 && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="flex items-center gap-1.5"
+                    onClick={() => setShowAllRankings(true)}
+                  >
+                    <ListBullets size={16} weight="duotone" />
+                    View all ({sortedScores.length})
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="p-3 pt-0">
               <div className="space-y-1.5 max-h-[380px] overflow-y-auto pr-1 scrollbar-thin">
@@ -487,6 +506,18 @@ export function ReviewsPage() {
                   );
                 })}
               </div>
+              {sortedScores.length > 0 && sortedScores.length <= 10 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full mt-2 flex items-center justify-center gap-1.5 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowAllRankings(true)}
+                >
+                  <ListBullets size={16} weight="duotone" />
+                  View full rankings ({sortedScores.length})
+                </Button>
+              )}
             </CardContent>
           </Card>
 
@@ -592,6 +623,90 @@ export function ReviewsPage() {
       )}
         </>
       )}
+
+      {/* Full rankings modal – portal so overlay covers viewport */}
+      {showAllRankings &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="all-rankings-title"
+            onClick={() => setShowAllRankings(false)}
+          >
+            <div
+              className="bg-card border rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-4 border-b shrink-0">
+                <h2 id="all-rankings-title" className="text-lg font-semibold flex items-center gap-2">
+                  <Trophy size={20} weight="duotone" className="text-amber-600/80" />
+                  Full rankings · {periodLabel}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setShowAllRankings(false)}
+                  className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  aria-label="Close"
+                >
+                  <X size={20} weight="bold" />
+                </button>
+              </div>
+              <div className="overflow-y-auto flex-1 p-4 space-y-1.5 min-h-0">
+                {sortedScores.map((item, idx) => {
+                  const isTopThree = idx < 3;
+                  return (
+                    <div
+                      key={item.employee.id}
+                      className={`flex items-center justify-between py-2.5 px-3 rounded-lg border transition-colors ${
+                        isTopThree
+                          ? 'bg-gradient-to-r from-amber-50/50 to-orange-50/50 dark:from-amber-950/20 dark:to-orange-950/20 border-amber-200/70 dark:border-amber-800/50'
+                          : 'bg-muted/30 border-border'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 ${
+                            idx === 0
+                              ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow'
+                              : idx === 1
+                              ? 'bg-gradient-to-br from-gray-300 to-gray-400 dark:from-gray-600 dark:to-gray-700 text-white'
+                              : idx === 2
+                              ? 'bg-gradient-to-br from-amber-300 to-amber-400 text-white'
+                              : 'bg-muted text-foreground'
+                          }`}
+                        >
+                          {idx + 1}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-sm truncate">{item.employee.name}</div>
+                          <div className="text-xs text-muted-foreground truncate">{item.employee.role}</div>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-3">
+                        <div
+                          className={`text-base font-bold ${
+                            item.percentage >= 90
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : item.percentage >= 75
+                              ? 'text-blue-600 dark:text-blue-400'
+                              : item.percentage >= 60
+                              ? 'text-amber-600 dark:text-amber-400'
+                              : 'text-red-600 dark:text-red-400'
+                          }`}
+                        >
+                          {Math.round(item.percentage)}%
+                        </div>
+                        <div className="text-xs text-muted-foreground">{item.totalScore}/{item.totalMaxScore}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
 
       <CompletedFormViewModal
         open={viewAppraisalId != null}
