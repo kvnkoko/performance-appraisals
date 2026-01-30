@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select } from '@/components/ui/select';
@@ -6,14 +7,17 @@ import { PeriodBadge } from '@/components/periods/period-badge';
 import { getReviewPeriods } from '@/lib/storage';
 import { formatDateRange, getDaysRemaining } from '@/lib/period-utils';
 import type { ReviewPeriod } from '@/types';
-import { Trophy } from 'phosphor-react';
+import { Trophy, FileText, Eye, X } from 'phosphor-react';
+import { CompletedFormViewModal } from '@/components/shared/completed-form-view-modal';
 
 export function HistoricalReviewsPage() {
-  const { appraisals, employees } = useApp();
+  const { appraisals, employees, templates } = useApp();
   const [periods, setPeriods] = useState<ReviewPeriod[]>([]);
   const [filterYear, setFilterYear] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [periodFormsPeriodId, setPeriodFormsPeriodId] = useState<string | null>(null);
+  const [viewAppraisalId, setViewAppraisalId] = useState<string | null>(null);
 
   useEffect(() => {
     loadPeriods();
@@ -146,8 +150,17 @@ export function HistoricalReviewsPage() {
                 <CardHeader>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
+                      <div className="flex items-center gap-3 mb-2 flex-wrap">
                         <PeriodBadge period={period} />
+                        {stats.completedCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setPeriodFormsPeriodId(period.id)}
+                            className="text-sm font-medium text-primary hover:underline"
+                          >
+                            View completed forms ({stats.completedCount})
+                          </button>
+                        )}
                       </div>
                       <CardTitle className="text-xl">{period.name}</CardTitle>
                       <CardDescription className="mt-1">
@@ -204,6 +217,90 @@ export function HistoricalReviewsPage() {
           })}
         </div>
       )}
+
+      {/* List of completed forms for a period (portal) */}
+      {periodFormsPeriodId != null && (() => {
+        const period = periods.find((p) => p.id === periodFormsPeriodId);
+        const list = appraisals.filter(
+          (a) => a.reviewPeriodId === periodFormsPeriodId && a.completedAt
+        );
+        const nameById = Object.fromEntries(employees.map((e) => [e.id, e.name]));
+        const templateById = Object.fromEntries(templates.map((t) => [t.id, t]));
+        return createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={() => setPeriodFormsPeriodId(null)}
+            aria-modal="true"
+            role="dialog"
+            aria-label="Completed forms for period"
+          >
+            <div
+              className="bg-card border border-border rounded-xl shadow-xl w-full max-w-xl max-h-[85vh] flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-4 px-5 py-4 border-b border-border flex-shrink-0">
+                <h2 className="text-lg font-semibold text-foreground truncate">
+                  <FileText size={20} weight="duotone" className="inline-block mr-2 align-middle text-muted-foreground" />
+                  {period?.name ?? 'Period'} – completed forms
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setPeriodFormsPeriodId(null)}
+                  className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground"
+                  aria-label="Close"
+                >
+                  <X size={20} weight="duotone" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                {list.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">No completed forms for this period.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {list.map((a) => {
+                      const formName = templateById[a.templateId]?.name ?? a.templateId;
+                      const appraiserName = nameById[a.appraiserId] ?? a.appraiserId;
+                      const employeeName = nameById[a.employeeId] ?? a.employeeId;
+                      return (
+                        <li
+                          key={a.id}
+                          className="flex items-center justify-between gap-3 py-2.5 px-3 rounded-lg border border-border bg-muted/20 hover:bg-muted/40 transition-colors"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-foreground truncate">{formName}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {appraiserName} → {employeeName} · {a.score}/{a.maxScore}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPeriodFormsPeriodId(null);
+                              setViewAppraisalId(a.id);
+                            }}
+                            className="flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-foreground bg-muted hover:bg-muted/80"
+                            title="View form"
+                          >
+                            <Eye size={16} weight="duotone" />
+                            View
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
+
+      <CompletedFormViewModal
+        open={viewAppraisalId != null}
+        onClose={() => setViewAppraisalId(null)}
+        appraisalId={viewAppraisalId}
+      />
     </div>
   );
 }
