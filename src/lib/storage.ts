@@ -284,13 +284,27 @@ export async function getEmployees(): Promise<Employee[]> {
         const supabaseEmployees = await getEmployeesFromSupabase();
         if (import.meta.env.DEV) console.log('getEmployees: Found', supabaseEmployees.length, 'employees in Supabase');
         if (supabaseEmployees.length > 0) {
+          // Merge IndexedDB over Supabase for employment_status, team_id, reports_to so local saves persist when Supabase lacks columns
+          let merged = supabaseEmployees;
           if (database.objectStoreNames.contains('employees')) {
+            const idbEmployees = await database.getAll('employees');
+            const idbById = new Map(idbEmployees.map((e) => [e.id, e]));
+            merged = supabaseEmployees.map((se) => {
+              const local = idbById.get(se.id);
+              if (!local) return se;
+              return {
+                ...se,
+                employmentStatus: local.employmentStatus ?? se.employmentStatus,
+                teamId: local.teamId ?? se.teamId,
+                reportsTo: local.reportsTo ?? se.reportsTo,
+              };
+            });
             const tx = database.transaction('employees', 'readwrite');
             const store = tx.objectStore('employees');
             await store.clear();
-            for (const e of supabaseEmployees) await store.put(e);
+            for (const e of merged) await store.put(e);
           }
-          return supabaseEmployees;
+          return merged;
         }
         // Supabase returned empty — do not overwrite IndexedDB; return existing data so directory does not disappear
         if (database.objectStoreNames.contains('employees')) {
@@ -322,7 +336,21 @@ export async function getEmployee(id: string): Promise<Employee | undefined> {
     if (isSupabaseConfigured()) {
       const { getEmployeeFromSupabase } = await import('./supabase-storage');
       const supabaseEmployee = await getEmployeeFromSupabase(id);
-      if (supabaseEmployee) return supabaseEmployee;
+      if (supabaseEmployee) {
+        // Merge employment_status, team_id, reports_to from IndexedDB so local saves persist when Supabase lacks columns
+        if (database.objectStoreNames.contains('employees')) {
+          const local = await database.get('employees', id);
+          if (local) {
+            return {
+              ...supabaseEmployee,
+              employmentStatus: local.employmentStatus ?? supabaseEmployee.employmentStatus,
+              teamId: local.teamId ?? supabaseEmployee.teamId,
+              reportsTo: local.reportsTo ?? supabaseEmployee.reportsTo,
+            };
+          }
+        }
+        return supabaseEmployee;
+      }
       // Supabase returned nothing – employee was deleted; clear local cache so other devices don't see stale employee
       try {
         if (database.objectStoreNames.contains('employees')) {
@@ -342,22 +370,26 @@ export async function getEmployee(id: string): Promise<Employee | undefined> {
 export async function saveEmployee(employee: Employee): Promise<void> {
   const database = await initDB();
 
+  // Always write to IndexedDB first so employment_status / team_id / reports_to persist even if Supabase is missing columns
+  if (database.objectStoreNames.contains('employees')) {
+    await database.put('employees', employee);
+  }
+
   const { isSupabaseConfigured } = await import('./supabase');
   if (isSupabaseConfigured()) {
-    // Supabase is source of truth: write there first; surface errors so UI doesn't show false success
-    const { saveEmployeeToSupabase } = await import('./supabase-storage');
-    await saveEmployeeToSupabase(employee);
-    console.log('Employee saved to Supabase:', employee.id, 'teamId:', employee.teamId);
-    // Sync to IndexedDB for read-your-writes / offline fallback
-    if (database.objectStoreNames.contains('employees')) {
-      await database.put('employees', employee);
+    try {
+      const { saveEmployeeToSupabase } = await import('./supabase-storage');
+      await saveEmployeeToSupabase(employee);
+      if (import.meta.env.DEV) console.log('Employee saved to Supabase:', employee.id);
+    } catch (e) {
+      // IndexedDB already has the correct data; surface error so user knows cloud sync failed
+      console.warn('Employee saved locally but Supabase sync failed:', e);
+      throw e;
     }
     return;
   }
 
-  // IndexedDB-only: persist locally
-  await database.put('employees', employee);
-  console.log('Employee saved to IndexedDB:', employee.id, 'teamId:', employee.teamId);
+  if (import.meta.env.DEV) console.log('Employee saved to IndexedDB:', employee.id);
 }
 
 /** Update only an employee's team (assign/remove as department leader). Uses PATCH when Supabase is configured to avoid upsert 400s. */
