@@ -43,9 +43,11 @@ interface AvatarProps {
   hierarchy?: Employee['hierarchy'];
   className?: string;
   showRing?: boolean;
+  /** CSS object-position for the image (e.g. "50% 30%" to favor top-center). */
+  objectPosition?: string;
 }
 
-export function Avatar({ src, name, size = 'md', hierarchy, className, showRing = true }: AvatarProps) {
+export function Avatar({ src, name, size = 'md', hierarchy, className, showRing = true, objectPosition }: AvatarProps) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const initials = getInitials(name);
@@ -72,9 +74,10 @@ export function Avatar({ src, name, size = 'md', hierarchy, className, showRing 
             src={src}
             alt=""
             className={cn(
-              'h-full w-full object-cover object-center transition-opacity duration-300',
+              'h-full w-full object-cover transition-opacity duration-300',
               loaded ? 'opacity-100' : 'opacity-0'
             )}
+            style={objectPosition ? { objectPosition } : undefined}
             onLoad={() => setLoaded(true)}
             onError={() => setError(true)}
             loading="lazy"

@@ -39,7 +39,18 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
           'flex items-center gap-3 w-full rounded-lg border border-border bg-card p-3 text-left transition-all hover:bg-muted/50 hover:shadow-card'
         )}
       >
-        <Avatar src={profile?.profilePicture} name={employee.name} size="sm" hierarchy={employee.hierarchy} showRing={false} />
+        <Avatar
+          src={profile?.profilePicture}
+          name={employee.name}
+          size="sm"
+          hierarchy={employee.hierarchy}
+          showRing={false}
+          objectPosition={
+            profile?.profilePicture && (profile.profilePicturePositionX != null || profile.profilePicturePositionY != null)
+              ? `${profile.profilePicturePositionX ?? 50}% ${profile.profilePicturePositionY ?? 50}%`
+              : undefined
+          }
+        />
         <div className="min-w-0 flex-1">
           <p className="font-medium truncate">{employee.name}</p>
           <p className="text-xs text-muted-foreground truncate">{employee.role}</p>
@@ -50,10 +61,11 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
   }
 
   const handleCardKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      onClick();
-    }
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return;
+    e.preventDefault();
+    onClick();
   };
 
   if (variant === 'list') {
@@ -66,7 +78,17 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
           onKeyDown={handleCardKeyDown}
           className="flex w-full items-center gap-4 text-left cursor-pointer rounded-lg hover:bg-muted/50 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
-          <Avatar src={profile?.profilePicture} name={employee.name} size="lg" hierarchy={employee.hierarchy} />
+          <Avatar
+            src={profile?.profilePicture}
+            name={employee.name}
+            size="lg"
+            hierarchy={employee.hierarchy}
+            objectPosition={
+              profile?.profilePicture && (profile.profilePicturePositionX != null || profile.profilePicturePositionY != null)
+                ? `${profile.profilePicturePositionX ?? 50}% ${profile.profilePicturePositionY ?? 50}%`
+                : undefined
+            }
+          />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-semibold text-foreground">{employee.name}</h3>
@@ -119,7 +141,14 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
               <img
                 src={profile.profilePicture}
                 alt=""
-                className="w-full h-full object-cover object-center"
+                className="w-full h-full object-cover"
+                style={
+                  profile.profilePicturePositionX != null || profile.profilePicturePositionY != null
+                    ? {
+                        objectPosition: `${profile.profilePicturePositionX ?? 50}% ${profile.profilePicturePositionY ?? 50}%`,
+                      }
+                    : undefined
+                }
                 loading="lazy"
               />
             ) : (

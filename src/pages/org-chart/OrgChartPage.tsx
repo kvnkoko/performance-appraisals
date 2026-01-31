@@ -7,6 +7,7 @@ import { OrgChartControls } from './OrgChartControls';
 import { OrgChartFilterPanel } from './OrgChartFilterPanel';
 import { DepartmentView } from './DepartmentView';
 import { ProfileModal } from '@/pages/directory/ProfileModal';
+import { ProfileEditModal } from '@/pages/directory/ProfileEditModal';
 import { useApp } from '@/contexts/app-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +30,7 @@ export function OrgChartPage() {
   } = useOrgChartData();
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const zoomApiRef = useRef<{ zoomIn: () => void; zoomOut: () => void; resetTransform: () => void } | null>(null);
 
   const searchMatchIds = useMemo(() => {
@@ -185,7 +187,17 @@ export function OrgChartPage() {
           employee={selectedEmployee}
           profile={selectedProfile}
           onClose={() => setSelectedEmployee(null)}
-          onEdit={() => {}}
+          onEdit={() => {
+            setEditEmployee(selectedEmployee);
+            setSelectedEmployee(null);
+          }}
+        />
+      )}
+      {editEmployee && (
+        <ProfileEditModal
+          employee={editEmployee}
+          onClose={() => setEditEmployee(null)}
+          onSaved={() => setEditEmployee(null)}
         />
       )}
     </div>

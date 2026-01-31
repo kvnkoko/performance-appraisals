@@ -282,7 +282,13 @@ export interface EmployeeProfile {
   id: string;
   employeeId: string;
   profilePicture?: string;
+  /** Horizontal position for profile picture in circle (0 = left, 50 = center, 100 = right). */
+  profilePicturePositionX?: number;
+  /** Vertical position for profile picture in circle (0 = top, 50 = center, 100 = bottom). */
+  profilePicturePositionY?: number;
   coverPhoto?: string;
+  /** Vertical position for cover photo crop (0 = top, 50 = center, 100 = bottom). Used as object-position percentage. */
+  coverPhotoPosition?: number;
   bio?: string;
   headline?: string;
   location?: string;

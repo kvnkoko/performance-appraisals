@@ -20,26 +20,40 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
   const { getOrCreateProfile, saveProfile } = useEmployeeProfiles();
   const [form, setForm] = useState<Partial<EmployeeProfile> & { employeeId: string }>(() => getOrCreateProfile(employee.id));
   const [saving, setSaving] = useState(false);
+  // Raw string values for Skills, Fun facts, Achievements so spaces are preserved while typing (no trim on every keystroke)
+  const [skillsRaw, setSkillsRaw] = useState('');
+  const [funFactsRaw, setFunFactsRaw] = useState('');
+  const [achievementsRaw, setAchievementsRaw] = useState('');
 
   useEffect(() => {
-    setForm(getOrCreateProfile(employee.id));
+    const next = getOrCreateProfile(employee.id);
+    setForm(next);
+    setSkillsRaw((next.skills ?? []).join(', '));
+    setFunFactsRaw((next.funFacts ?? []).join('\n'));
+    setAchievementsRaw((next.achievements ?? []).join('\n'));
   }, [employee.id, getOrCreateProfile]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
       const now = new Date().toISOString();
+      const skills = skillsRaw ? skillsRaw.split(',').map((x) => x.trim()).filter(Boolean) : [];
+      const funFacts = funFactsRaw ? funFactsRaw.split('\n').map((x) => x.trim()).filter(Boolean) : [];
+      const achievements = achievementsRaw ? achievementsRaw.split('\n').map((x) => x.trim()).filter(Boolean) : [];
       await saveProfile({
         id: form.id || form.employeeId,
         employeeId: form.employeeId,
         profilePicture: form.profilePicture,
+        profilePicturePositionX: form.profilePicturePositionX,
+        profilePicturePositionY: form.profilePicturePositionY,
         coverPhoto: form.coverPhoto,
+        coverPhotoPosition: form.coverPhotoPosition,
         bio: form.bio?.slice(0, 500) ?? undefined,
         headline: form.headline?.slice(0, 100) ?? undefined,
         location: form.location,
-        skills: form.skills ?? [],
-        funFacts: form.funFacts ?? [],
-        achievements: form.achievements ?? [],
+        skills,
+        funFacts,
+        achievements,
         socialLinks: form.socialLinks ?? {},
         createdAt: form.createdAt ?? now,
         updatedAt: now,
@@ -52,16 +66,6 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
       setSaving(false);
     }
   };
-
-  const skillsText = (form.skills ?? []).join(', ');
-  const setSkills = (s: string) =>
-    setForm((prev) => ({ ...prev, skills: s ? s.split(',').map((x) => x.trim()).filter(Boolean) : [] }));
-  const funFactsText = (form.funFacts ?? []).join('\n');
-  const setFunFacts = (s: string) =>
-    setForm((prev) => ({ ...prev, funFacts: s ? s.split('\n').map((x) => x.trim()).filter(Boolean) : [] }));
-  const achievementsText = (form.achievements ?? []).join('\n');
-  const setAchievements = (s: string) =>
-    setForm((prev) => ({ ...prev, achievements: s ? s.split('\n').map((x) => x.trim()).filter(Boolean) : [] }));
 
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -87,6 +91,59 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
                 size="md"
               />
             </div>
+            {form.profilePicture && (
+              <div className="mt-3">
+                <Label className="text-xs text-muted-foreground">Adjust placement</Label>
+                <p className="text-xs text-muted-foreground mt-0.5 mb-2">
+                  Choose which part of the image is visible in the circle.
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground block mb-1">Horizontal</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={form.profilePicturePositionX ?? 50}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, profilePicturePositionX: Number(e.target.value) }))
+                      }
+                      className="w-full h-2 rounded-lg appearance-none bg-muted accent-primary cursor-pointer"
+                      aria-label="Profile picture horizontal position"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground block mb-1">Vertical</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={form.profilePicturePositionY ?? 50}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, profilePicturePositionY: Number(e.target.value) }))
+                      }
+                      className="w-full h-2 rounded-lg appearance-none bg-muted accent-primary cursor-pointer"
+                      aria-label="Profile picture vertical position"
+                    />
+                  </div>
+                </div>
+                <div className="mt-2 flex items-center gap-3">
+                  <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-border bg-muted shrink-0">
+                    <img
+                      src={form.profilePicture}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      style={{
+                        objectPosition: `${form.profilePicturePositionX ?? 50}% ${form.profilePicturePositionY ?? 50}%`,
+                      }}
+                    />
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {form.profilePicturePositionX ?? 50}% horizontal, {form.profilePicturePositionY ?? 50}% vertical
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <Label>Cover photo (optional)</Label>
@@ -98,6 +155,43 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
                 size="lg"
               />
             </div>
+            {form.coverPhoto && (
+              <div className="mt-3">
+                <Label className="text-xs text-muted-foreground">Adjust crop position</Label>
+                <p className="text-xs text-muted-foreground mt-0.5 mb-2">
+                  Choose which part of the image is visible in the cover (wide crop).
+                </p>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={form.coverPhotoPosition ?? 50}
+                    onChange={(e) =>
+                      setForm((prev) => ({ ...prev, coverPhotoPosition: Number(e.target.value) }))
+                    }
+                    className="flex-1 h-2 rounded-lg appearance-none bg-muted accent-primary cursor-pointer"
+                    aria-label="Cover photo vertical position"
+                  />
+                  <span className="text-xs font-medium text-muted-foreground w-8">
+                    {form.coverPhotoPosition ?? 50}%
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                  <span>Top</span>
+                  <span>Center</span>
+                  <span>Bottom</span>
+                </div>
+                <div className="mt-2 rounded-lg overflow-hidden border border-border bg-muted/30 aspect-[21/9] max-h-24">
+                  <img
+                    src={form.coverPhoto}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    style={{ objectPosition: `center ${form.coverPhotoPosition ?? 50}%` }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <Label htmlFor="headline">Headline (max 100 chars)</Label>
@@ -108,6 +202,7 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
               placeholder="e.g. Senior Engineer · Product"
               maxLength={100}
               className="mt-1"
+              autoFocus
             />
           </div>
           <div>
@@ -136,8 +231,8 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
             <Label htmlFor="skills">Skills (comma-separated)</Label>
             <Input
               id="skills"
-              value={skillsText}
-              onChange={(e) => setSkills(e.target.value)}
+              value={skillsRaw}
+              onChange={(e) => setSkillsRaw(e.target.value)}
               placeholder="e.g. React, TypeScript, Leadership"
               className="mt-1"
             />
@@ -146,8 +241,8 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
             <Label htmlFor="funFacts">Fun facts (one per line)</Label>
             <Textarea
               id="funFacts"
-              value={funFactsText}
-              onChange={(e) => setFunFacts(e.target.value)}
+              value={funFactsRaw}
+              onChange={(e) => setFunFactsRaw(e.target.value)}
               placeholder={'e.g. Coffee enthusiast\nLoves hiking'}
               rows={3}
               className="mt-1"
@@ -157,8 +252,8 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
             <Label htmlFor="achievements">Achievements (one per line)</Label>
             <Textarea
               id="achievements"
-              value={achievementsText}
-              onChange={(e) => setAchievements(e.target.value)}
+              value={achievementsRaw}
+              onChange={(e) => setAchievementsRaw(e.target.value)}
               placeholder={'e.g. Q4 MVP\nCertified Scrum Master'}
               rows={3}
               className="mt-1"

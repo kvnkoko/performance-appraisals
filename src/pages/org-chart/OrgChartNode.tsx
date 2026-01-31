@@ -53,6 +53,11 @@ export function OrgChartNode({ node, depth, onSelect, highlightEmployeeId, searc
           size={depth === 0 ? '2xl' : 'xl'}
           hierarchy={employee.hierarchy}
           showRing={depth === 0}
+          objectPosition={
+            profile?.profilePicture && (profile.profilePicturePositionX != null || profile.profilePicturePositionY != null)
+              ? `${profile.profilePicturePositionX ?? 50}% ${profile.profilePicturePositionY ?? 50}%`
+              : undefined
+          }
         />
         <p className={cn('mt-3 font-semibold text-foreground truncate w-full text-center', depth === 0 ? 'text-base' : 'text-sm')}>
           {employee.name}
