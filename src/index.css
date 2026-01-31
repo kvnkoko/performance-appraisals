@@ -247,7 +247,12 @@
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.5);
   }
-  
+
+  /* Reserve scrollbar space so content doesn't shift when scrollbar appears */
+  .scrollbar-gutter-stable {
+    scrollbar-gutter: stable;
+  }
+
   /* Enhanced Glassmorphism effects */
   .glass {
     background: rgba(255, 255, 255, 0.7);

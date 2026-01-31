@@ -113,8 +113,8 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
   }
 
   return (
-    <AnimatedCard delay={index * 0.03} className="p-0 overflow-hidden rounded-xl aspect-[4/5] hover:translate-y-0 hover:shadow-card">
-      <div className="relative flex flex-col h-full w-full rounded-xl border border-border bg-card overflow-hidden transition-shadow duration-200 hover:shadow-lg">
+    <div className="rounded-xl border border-border bg-card shadow-card p-0 overflow-hidden aspect-[4/5]">
+      <div className="relative flex flex-col h-full w-full rounded-xl border-0 bg-card overflow-hidden transition-[box-shadow,transform] duration-200 hover:shadow-lg hover:scale-[1.02] origin-center">
         {/* Edit button top right */}
         {canEdit && onEdit && (
           <div className="absolute top-1.5 right-1.5 z-10">
@@ -186,6 +186,6 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
           </div>
         </button>
       </div>
-    </AnimatedCard>
+    </div>
   );
 }
