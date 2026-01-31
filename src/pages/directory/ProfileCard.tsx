@@ -36,7 +36,7 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
         type="button"
         onClick={onClick}
         className={cn(
-          'flex items-center gap-3 w-full rounded-lg border border-border bg-card p-3 text-left transition-all hover:bg-muted/50 hover:shadow-card'
+          'flex items-center gap-3 w-full rounded-lg border border-border bg-card shadow-card p-3 text-left transition-colors hover:bg-muted/50'
         )}
       >
         <Avatar
@@ -70,7 +70,7 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
 
   if (variant === 'list') {
     return (
-      <AnimatedCard delay={index * 0.03} className="hover:translate-y-0">
+      <AnimatedCard delay={index * 0.03}>
         <div
           role="button"
           tabIndex={0}
@@ -113,8 +113,8 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
   }
 
   return (
-    <div className="directory-card-cell rounded-xl border border-border bg-card shadow-card p-0 overflow-hidden aspect-[4/5]">
-      <div className="relative flex flex-col h-full w-full rounded-xl border-0 bg-card overflow-hidden transition-[box-shadow] duration-200 hover:shadow-lg origin-center">
+    <div className="rounded-xl border border-border bg-card shadow-card p-0 overflow-hidden aspect-[4/5] min-h-0 overflow-anchor-none [contain:layout] transition-colors duration-200 hover:border-primary/40 [transform:translateZ(0)]">
+      <div className="relative flex flex-col h-full w-full rounded-xl border-0 bg-card overflow-hidden origin-center">
         {/* Edit button top right */}
         {canEdit && onEdit && (
           <div className="absolute top-1.5 right-1.5 z-10">
@@ -133,7 +133,7 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
         <button
           type="button"
           onClick={onClick}
-          className="relative flex flex-col h-full w-full text-left rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border-0 bg-transparent p-0 cursor-pointer overflow-hidden"
+          className="relative flex flex-col h-full w-full text-left rounded-xl outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring border-0 bg-transparent p-0 cursor-pointer overflow-hidden"
         >
           {/* Image fills card; object-cover so no blank areas */}
           <div className="absolute inset-0 rounded-xl overflow-hidden bg-muted">
@@ -142,13 +142,11 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
                 src={profile.profilePicture}
                 alt=""
                 className="w-full h-full object-cover"
-                style={
-                  profile.profilePicturePositionX != null || profile.profilePicturePositionY != null
-                    ? {
-                        objectPosition: `${profile.profilePicturePositionX ?? 50}% ${profile.profilePicturePositionY ?? 50}%`,
-                      }
-                    : undefined
-                }
+                style={{
+                  objectPosition: `${profile.profilePicturePositionX ?? 50}% ${profile.profilePicturePositionY ?? 50}%`,
+                  transform: `scale(${profile.profilePictureZoom ?? 1})`,
+                  transformOrigin: 'center center',
+                }}
                 loading="lazy"
               />
             ) : (

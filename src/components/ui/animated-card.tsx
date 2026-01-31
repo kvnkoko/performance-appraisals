@@ -12,7 +12,7 @@ export function AnimatedCard({ children, className, delay = 0 }: AnimatedCardPro
     <div
       className={cn(
         'rounded-xl border border-border bg-card p-5 shadow-card',
-        'animate-fade-in-up transition-all duration-200 hover:-translate-y-1 hover:shadow-card-hover',
+        'animate-fade-in-up transition-colors duration-200 hover:border-primary/30',
         className
       )}
       style={{ animationDelay: `${delay}ms` }}

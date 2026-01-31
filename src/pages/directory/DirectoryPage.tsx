@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Users, UserCircle } from 'phosphor-react';
 import { useApp } from '@/contexts/app-context';
 import { useUser } from '@/contexts/user-context';
 import { DirectoryFilters } from './DirectoryFilters';
 import { DirectoryGrid } from './DirectoryGrid';
-import { ProfileModal } from './ProfileModal';
 import { ProfileEditModal } from './ProfileEditModal';
 import type { Employee, EmployeeProfile, DirectoryFilters as DirectoryFiltersType } from '@/types';
 import { cn } from '@/lib/utils';
@@ -22,12 +22,12 @@ type ViewMode = 'grid' | 'list' | 'compact';
 type SortOption = 'name' | 'department' | 'recent';
 
 export function DirectoryPage() {
+  const navigate = useNavigate();
   const { employees, employeeProfiles, settings, loading, refresh } = useApp();
   const { user, isAdmin } = useUser();
   const [filters, setFilters] = useState<DirectoryFiltersType>(defaultFilters);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [sort, setSort] = useState<SortOption>('name');
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const recoveryAttempted = useRef(false);
 
@@ -40,10 +40,6 @@ export function DirectoryPage() {
     });
   }, [loading, employees.length, refresh]);
 
-  const selectedProfile = useMemo(() => {
-    if (!selectedEmployee) return null;
-    return employeeProfiles.find((p) => p.employeeId === selectedEmployee.id) ?? null;
-  }, [selectedEmployee, employeeProfiles]);
 
   if (loading) {
     return (
@@ -100,7 +96,7 @@ export function DirectoryPage() {
             viewMode={viewMode}
             sort={sort}
             employeeProfiles={employeeProfiles}
-            onCardClick={setSelectedEmployee}
+            onCardClick={(emp) => navigate(`/profile/${emp.id}`)}
             onEditClick={(emp) => {
               if (user?.employeeId === emp.id || isAdmin()) setEditEmployee(emp);
             }}
@@ -108,17 +104,6 @@ export function DirectoryPage() {
         )}
       </section>
 
-      {selectedEmployee && (
-        <ProfileModal
-          employee={selectedEmployee}
-          profile={selectedProfile}
-          onClose={() => setSelectedEmployee(null)}
-          onEdit={() => {
-            setSelectedEmployee(null);
-            setEditEmployee(selectedEmployee);
-          }}
-        />
-      )}
       {editEmployee && (user?.employeeId === editEmployee.id || isAdmin()) && (
         <ProfileEditModal
           employee={editEmployee}

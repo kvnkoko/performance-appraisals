@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { TreeStructure, SquaresFour, Funnel } from 'phosphor-react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { useOrgChartData } from '@/hooks/use-org-chart-data';
@@ -6,7 +7,6 @@ import { OrgChartTree } from './OrgChartTree';
 import { OrgChartControls } from './OrgChartControls';
 import { OrgChartFilterPanel } from './OrgChartFilterPanel';
 import { DepartmentView } from './DepartmentView';
-import { ProfileModal } from '@/pages/directory/ProfileModal';
 import { ProfileEditModal } from '@/pages/directory/ProfileEditModal';
 import { useApp } from '@/contexts/app-context';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,8 @@ import { cn } from '@/lib/utils';
 type ViewMode = 'tree' | 'department';
 
 export function OrgChartPage() {
-  const { employees, employeeProfiles, loading } = useApp();
+  const navigate = useNavigate();
+  const { employees, loading } = useApp();
   const {
     levels,
     config,
@@ -29,7 +30,6 @@ export function OrgChartPage() {
     highlightEmployeeId,
   } = useOrgChartData();
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
-  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const zoomApiRef = useRef<{ zoomIn: () => void; zoomOut: () => void; resetTransform: () => void } | null>(null);
 
@@ -41,10 +41,6 @@ export function OrgChartPage() {
       .map((e) => e.id);
     return ids.length > 0 ? new Set(ids) : undefined;
   }, [employees, filterSearch]);
-
-  const selectedProfile = selectedEmployee
-    ? employeeProfiles.find((p) => p.employeeId === selectedEmployee.id) ?? null
-    : null;
 
   if (loading) {
     return (
@@ -161,7 +157,7 @@ export function OrgChartPage() {
                   <OrgChartTree
                     levels={levels}
                     showDepartmentLabels={config.groupByDepartment}
-                    onSelectEmployee={setSelectedEmployee}
+                    onSelectEmployee={(emp) => navigate(`/profile/${emp.id}`)}
                     highlightEmployeeId={highlightEmployeeId ?? undefined}
                     searchMatchIds={searchMatchIds}
                   />
@@ -177,22 +173,11 @@ export function OrgChartPage() {
           </TransformWrapper>
         ) : (
           <div className="px-6 pt-6 pb-4">
-            <DepartmentView onSelectEmployee={setSelectedEmployee} />
+            <DepartmentView onSelectEmployee={(emp) => navigate(`/profile/${emp.id}`)} />
           </div>
         )}
       </div>
 
-      {selectedEmployee && (
-        <ProfileModal
-          employee={selectedEmployee}
-          profile={selectedProfile}
-          onClose={() => setSelectedEmployee(null)}
-          onEdit={() => {
-            setEditEmployee(selectedEmployee);
-            setSelectedEmployee(null);
-          }}
-        />
-      )}
       {editEmployee && (
         <ProfileEditModal
           employee={editEmployee}

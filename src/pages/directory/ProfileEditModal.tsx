@@ -46,8 +46,10 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
         profilePicture: form.profilePicture,
         profilePicturePositionX: form.profilePicturePositionX,
         profilePicturePositionY: form.profilePicturePositionY,
+        profilePictureZoom: form.profilePictureZoom,
         coverPhoto: form.coverPhoto,
         coverPhotoPosition: form.coverPhotoPosition,
+        coverPhotoZoom: form.coverPhotoZoom,
         bio: form.bio?.slice(0, 500) ?? undefined,
         headline: form.headline?.slice(0, 100) ?? undefined,
         location: form.location,
@@ -82,64 +84,86 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
         </h2>
         <div className="space-y-4">
           <div>
-            <Label>Profile picture</Label>
+            <Label>Profile picture (square crop)</Label>
             <div className="mt-2">
               <ImageUploader
                 value={form.profilePicture}
                 onChange={(v) => setForm((prev) => ({ ...prev, profilePicture: v ?? undefined }))}
-                shape="circle"
+                shape="square"
                 size="md"
               />
             </div>
             {form.profilePicture && (
-              <div className="mt-3">
-                <Label className="text-xs text-muted-foreground">Adjust placement</Label>
-                <p className="text-xs text-muted-foreground mt-0.5 mb-2">
-                  Choose which part of the image is visible in the circle.
-                </p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <span className="text-xs font-medium text-muted-foreground block mb-1">Horizontal</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={form.profilePicturePositionX ?? 50}
-                      onChange={(e) =>
-                        setForm((prev) => ({ ...prev, profilePicturePositionX: Number(e.target.value) }))
-                      }
-                      className="w-full h-2 rounded-lg appearance-none bg-muted accent-primary cursor-pointer"
-                      aria-label="Profile picture horizontal position"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-xs font-medium text-muted-foreground block mb-1">Vertical</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={form.profilePicturePositionY ?? 50}
-                      onChange={(e) =>
-                        setForm((prev) => ({ ...prev, profilePicturePositionY: Number(e.target.value) }))
-                      }
-                      className="w-full h-2 rounded-lg appearance-none bg-muted accent-primary cursor-pointer"
-                      aria-label="Profile picture vertical position"
-                    />
+              <div className="mt-3 space-y-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Crop position</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5 mb-2">
+                    Choose which part of the image is visible in the square.
+                  </p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-xs font-medium text-muted-foreground block mb-1">Horizontal</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={form.profilePicturePositionX ?? 50}
+                        onChange={(e) =>
+                          setForm((prev) => ({ ...prev, profilePicturePositionX: Number(e.target.value) }))
+                        }
+                        className="w-full h-2 rounded-lg appearance-none bg-muted accent-primary cursor-pointer"
+                        aria-label="Profile picture horizontal position"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-xs font-medium text-muted-foreground block mb-1">Vertical</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={form.profilePicturePositionY ?? 50}
+                        onChange={(e) =>
+                          setForm((prev) => ({ ...prev, profilePicturePositionY: Number(e.target.value) }))
+                        }
+                        className="w-full h-2 rounded-lg appearance-none bg-muted accent-primary cursor-pointer"
+                        aria-label="Profile picture vertical position"
+                      />
+                    </div>
                   </div>
                 </div>
-                <div className="mt-2 flex items-center gap-3">
-                  <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-border bg-muted shrink-0">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Zoom</Label>
+                  <div className="flex items-center gap-3 mt-1">
+                    <input
+                      type="range"
+                      min={100}
+                      max={200}
+                      value={Math.round((form.profilePictureZoom ?? 1) * 100)}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, profilePictureZoom: Number(e.target.value) / 100 }))
+                      }
+                      className="flex-1 h-2 rounded-lg appearance-none bg-muted accent-primary cursor-pointer"
+                      aria-label="Profile picture zoom"
+                    />
+                    <span className="text-xs font-medium text-muted-foreground w-10">
+                      {Math.round((form.profilePictureZoom ?? 1) * 100)}%
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-20 h-20 rounded-xl overflow-hidden border-2 border-border bg-muted shrink-0">
                     <img
                       src={form.profilePicture}
                       alt=""
                       className="w-full h-full object-cover"
                       style={{
                         objectPosition: `${form.profilePicturePositionX ?? 50}% ${form.profilePicturePositionY ?? 50}%`,
+                        transform: `scale(${form.profilePictureZoom ?? 1})`,
                       }}
                     />
                   </div>
                   <span className="text-xs text-muted-foreground">
-                    {form.profilePicturePositionX ?? 50}% horizontal, {form.profilePicturePositionY ?? 50}% vertical
+                    Square · {(form.profilePictureZoom ?? 1) * 100}% zoom
                   </span>
                 </div>
               </div>
@@ -156,28 +180,46 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
               />
             </div>
             {form.coverPhoto && (
-              <div className="mt-3">
-                <Label className="text-xs text-muted-foreground">Adjust crop position</Label>
-                <p className="text-xs text-muted-foreground mt-0.5 mb-2">
-                  Choose which part of the image is visible in the cover (wide crop).
-                </p>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={form.coverPhotoPosition ?? 50}
-                    onChange={(e) =>
-                      setForm((prev) => ({ ...prev, coverPhotoPosition: Number(e.target.value) }))
-                    }
-                    className="flex-1 h-2 rounded-lg appearance-none bg-muted accent-primary cursor-pointer"
-                    aria-label="Cover photo vertical position"
-                  />
-                  <span className="text-xs font-medium text-muted-foreground w-8">
-                    {form.coverPhotoPosition ?? 50}%
-                  </span>
+              <div className="mt-3 space-y-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Crop position (vertical)</Label>
+                  <div className="flex items-center gap-3 mt-1">
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={form.coverPhotoPosition ?? 50}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, coverPhotoPosition: Number(e.target.value) }))
+                      }
+                      className="flex-1 h-2 rounded-lg appearance-none bg-muted accent-primary cursor-pointer"
+                      aria-label="Cover photo vertical position"
+                    />
+                    <span className="text-xs font-medium text-muted-foreground w-8">
+                      {form.coverPhotoPosition ?? 50}%
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Zoom</Label>
+                  <div className="flex items-center gap-3 mt-1">
+                    <input
+                      type="range"
+                      min={100}
+                      max={200}
+                      value={Math.round((form.coverPhotoZoom ?? 1) * 100)}
+                      onChange={(e) =>
+                        setForm((prev) => ({ ...prev, coverPhotoZoom: Number(e.target.value) / 100 }))
+                      }
+                      className="flex-1 h-2 rounded-lg appearance-none bg-muted accent-primary cursor-pointer"
+                      aria-label="Cover photo zoom"
+                    />
+                    <span className="text-xs font-medium text-muted-foreground w-10">
+                      {Math.round((form.coverPhotoZoom ?? 1) * 100)}%
+                    </span>
+                  </div>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
                   <span>Top</span>
                   <span>Center</span>
                   <span>Bottom</span>
@@ -187,7 +229,10 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
                     src={form.coverPhoto}
                     alt=""
                     className="w-full h-full object-cover"
-                    style={{ objectPosition: `center ${form.coverPhotoPosition ?? 50}%` }}
+                    style={{
+                      objectPosition: `center ${form.coverPhotoPosition ?? 50}%`,
+                      transform: `scale(${form.coverPhotoZoom ?? 1})`,
+                    }}
                   />
                 </div>
               </div>

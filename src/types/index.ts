@@ -286,9 +286,13 @@ export interface EmployeeProfile {
   profilePicturePositionX?: number;
   /** Vertical position for profile picture in circle (0 = top, 50 = center, 100 = bottom). */
   profilePicturePositionY?: number;
+  /** Zoom scale for profile picture (1 = 100%, 1.5 = 150%). Default 1. */
+  profilePictureZoom?: number;
   coverPhoto?: string;
   /** Vertical position for cover photo crop (0 = top, 50 = center, 100 = bottom). Used as object-position percentage. */
   coverPhotoPosition?: number;
+  /** Zoom scale for cover photo (1 = 100%, 1.5 = 150%). Default 1. */
+  coverPhotoZoom?: number;
   bio?: string;
   headline?: string;
   location?: string;

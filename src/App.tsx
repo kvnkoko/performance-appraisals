@@ -29,6 +29,7 @@ import { MyAppraisalsPage } from '@/pages/my-appraisals';
 import { MyPerformancePage } from '@/pages/my-performance';
 import { DirectoryPage } from '@/pages/directory/DirectoryPage';
 import { OrgChartPage } from '@/pages/org-chart/OrgChartPage';
+import { ProfilePage } from '@/pages/profile/ProfilePage';
 import { OrganizationAnalyticsPage } from '@/pages/organization-analytics/OrganizationAnalyticsPage';
 import { useUser } from '@/contexts/user-context';
 
@@ -153,6 +154,7 @@ function App() {
                         {/* Shared: Directory & Org Chart (admin + staff) */}
                         <Route path="/directory" element={<DirectoryPage />} />
                         <Route path="/org-chart" element={<OrgChartPage />} />
+                        <Route path="/profile/:employeeId" element={<ProfilePage />} />
                         <Route path="/organization-analytics" element={<AdminRoute><OrganizationAnalyticsPage /></AdminRoute>} />
                         
                         {/* Shared routes */}
