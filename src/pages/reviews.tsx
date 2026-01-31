@@ -50,11 +50,7 @@ export function ReviewsPage() {
 
   useEffect(() => {
     if (reviewPeriods.length > 0 && !selectedPeriodId) {
-      const sorted = [...reviewPeriods].sort((a, b) => {
-        if (b.year !== a.year) return b.year - a.year;
-        const order = ['Q1', 'Q2', 'Q3', 'Q4', 'H1', 'H2', 'Annual', 'Custom'];
-        return order.indexOf(a.type) - order.indexOf(b.type);
-      });
+      const sorted = [...reviewPeriods].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
       setSelectedPeriodId(sorted[0].id);
     }
   }, [reviewPeriods, selectedPeriodId]);

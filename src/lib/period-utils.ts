@@ -1,5 +1,15 @@
 import type { ReviewPeriod } from '@/types';
 
+/** Month names for Monthly period type (1-based index) */
+export const MONTH_NAMES: Record<number, string> = {
+  1: 'January', 2: 'February', 3: 'March', 4: 'April', 5: 'May', 6: 'June',
+  7: 'July', 8: 'August', 9: 'September', 10: 'October', 11: 'November', 12: 'December',
+};
+
+export function getCurrentMonth(): number {
+  return new Date().getMonth() + 1; // 1–12
+}
+
 export function getCurrentQuarter(): 'Q1' | 'Q2' | 'Q3' | 'Q4' {
   const month = new Date().getMonth();
   if (month < 3) return 'Q1';
@@ -41,7 +51,17 @@ export function getHalfDates(half: 'H1' | 'H2', year: number): { start: Date; en
   }
 }
 
-export function generatePeriodName(type: ReviewPeriod['type'], year: number): string {
+/** Get first and last day of a calendar month (month 1–12) */
+export function getMonthDates(month: number, year: number): { start: Date; end: Date } {
+  const start = new Date(year, month - 1, 1);
+  const end = new Date(year, month, 0, 23, 59, 59);
+  return { start, end };
+}
+
+export function generatePeriodName(type: ReviewPeriod['type'], year: number, month?: number): string {
+  if (type === 'Monthly' && month != null && month >= 1 && month <= 12) {
+    return `${MONTH_NAMES[month]} ${year}`;
+  }
   if (type === 'Annual') {
     return `Annual ${year}`;
   }

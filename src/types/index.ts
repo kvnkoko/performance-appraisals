@@ -168,7 +168,7 @@ export interface AppraisalResponse {
 export interface ReviewPeriod {
   id: string;
   name: string; // "Q1 2025"
-  type: 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'H1' | 'H2' | 'Annual' | 'Custom';
+  type: 'Monthly' | 'Q1' | 'Q2' | 'Q3' | 'Q4' | 'H1' | 'H2' | 'Annual' | 'Custom';
   year: number;
   startDate: string; // ISO date string
   endDate: string; // ISO date string

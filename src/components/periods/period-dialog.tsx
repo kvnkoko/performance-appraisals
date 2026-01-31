@@ -11,14 +11,15 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { getReviewPeriod, saveReviewPeriod } from '@/lib/storage';
 import { generateId } from '@/lib/utils';
-import { getCurrentQuarter, getQuarterDates as getQDates, getHalfDates as getHDates, generatePeriodName as genPeriodName } from '@/lib/period-utils';
+import { getCurrentQuarter, getCurrentMonth, getQuarterDates as getQDates, getHalfDates as getHDates, getMonthDates, MONTH_NAMES, generatePeriodName as genPeriodName } from '@/lib/period-utils';
 import type { ReviewPeriod } from '@/types';
 import { useToast } from '@/contexts/toast-context';
 
 const periodSchema = z.object({
   name: z.string().min(1, 'Period name is required'),
-  type: z.enum(['Q1', 'Q2', 'Q3', 'Q4', 'H1', 'H2', 'Annual', 'Custom']),
+  type: z.enum(['Monthly', 'Q1', 'Q2', 'Q3', 'Q4', 'H1', 'H2', 'Annual', 'Custom']),
   year: z.number().min(2000).max(2100),
+  month: z.number().min(1).max(12).optional(), // 1–12, used when type is Monthly
   startDate: z.string().min(1, 'Start date is required'),
   endDate: z.string().min(1, 'End date is required'),
   status: z.enum(['planning', 'active', 'completed', 'archived']),
@@ -53,8 +54,9 @@ export function PeriodDialog({ open, onOpenChange, periodId, onSuccess }: Period
     resolver: zodResolver(periodSchema),
     defaultValues: {
       name: '',
-      type: getCurrentQuarter(),
+      type: 'Monthly',
       year: currentYear,
+      month: getCurrentMonth(),
       startDate: '',
       endDate: '',
       status: 'planning',
@@ -64,37 +66,41 @@ export function PeriodDialog({ open, onOpenChange, periodId, onSuccess }: Period
 
   const type = watch('type');
   const year = watch('year');
+  const month = watch('month');
 
   useEffect(() => {
     if (open && periodId) {
       loadPeriod();
     } else if (open && !periodId) {
-      // Auto-fill dates based on type
-      const currentType = getCurrentQuarter();
       const currentYr = currentYear;
+      const currentMonthNum = getCurrentMonth();
       reset({
-        name: genPeriodName(currentType, currentYr),
-        type: currentType,
+        name: genPeriodName('Monthly', currentYr, currentMonthNum),
+        type: 'Monthly',
         year: currentYr,
+        month: currentMonthNum,
         startDate: '',
         endDate: '',
         status: 'planning',
         description: '',
       });
-      updateDates(currentType, currentYr);
+      updateDates('Monthly', currentYr, currentMonthNum);
     }
   }, [open, periodId]);
 
   useEffect(() => {
     if (open && !periodId && type && year) {
-      updateDates(type, year);
-      setValue('name', genPeriodName(type, year));
+      const m = type === 'Monthly' ? (month ?? getCurrentMonth()) : undefined;
+      updateDates(type, year, m);
+      setValue('name', genPeriodName(type, year, m));
     }
-  }, [type, year, open, periodId]);
+  }, [type, year, month, open, periodId]);
 
-  const updateDates = (periodType: ReviewPeriod['type'], periodYear: number) => {
+  const updateDates = (periodType: ReviewPeriod['type'], periodYear: number, periodMonth?: number) => {
     let dates: { start: Date; end: Date };
-    if (['Q1', 'Q2', 'Q3', 'Q4'].includes(periodType)) {
+    if (periodType === 'Monthly' && periodMonth != null && periodMonth >= 1 && periodMonth <= 12) {
+      dates = getMonthDates(periodMonth, periodYear);
+    } else if (['Q1', 'Q2', 'Q3', 'Q4'].includes(periodType)) {
       dates = getQDates(periodType as 'Q1' | 'Q2' | 'Q3' | 'Q4', periodYear);
     } else if (['H1', 'H2'].includes(periodType)) {
       dates = getHDates(periodType as 'H1' | 'H2', periodYear);
@@ -116,10 +122,12 @@ export function PeriodDialog({ open, onOpenChange, periodId, onSuccess }: Period
     try {
       const period = await getReviewPeriod(periodId);
       if (period) {
+        const startMonth = period.type === 'Monthly' ? new Date(period.startDate).getMonth() + 1 : undefined;
         reset({
           name: period.name,
           type: period.type,
           year: period.year,
+          month: startMonth ?? getCurrentMonth(),
           startDate: period.startDate.split('T')[0],
           endDate: period.endDate.split('T')[0],
           status: period.status,
@@ -183,6 +191,7 @@ export function PeriodDialog({ open, onOpenChange, periodId, onSuccess }: Period
             <div className="space-y-2">
               <Label htmlFor="type">Period Type</Label>
               <Select id="type" {...register('type')}>
+                <option value="Monthly">Monthly</option>
                 <option value="Q1">Q1 (Quarter 1)</option>
                 <option value="Q2">Q2 (Quarter 2)</option>
                 <option value="Q3">Q3 (Quarter 3)</option>
@@ -207,6 +216,18 @@ export function PeriodDialog({ open, onOpenChange, periodId, onSuccess }: Period
               {errors.year && <p className="text-sm text-destructive">{errors.year.message}</p>}
             </div>
           </div>
+
+          {type === 'Monthly' && (
+            <div className="space-y-2">
+              <Label htmlFor="month">Month</Label>
+              <Select id="month" {...register('month', { valueAsNumber: true })}>
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => (
+                  <option key={m} value={m}>{MONTH_NAMES[m]}</option>
+                ))}
+              </Select>
+              {errors.month && <p className="text-sm text-destructive">{errors.month?.message}</p>}
+            </div>
+          )}
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">

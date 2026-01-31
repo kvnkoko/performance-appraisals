@@ -1029,7 +1029,7 @@ export async function saveSummary(summary: PerformanceSummary): Promise<void> {
   await database.put('summaries', summary);
 }
 
-// Review Periods - Supabase as single source of truth when configured; else IndexedDB
+// Review Periods - Supabase when configured; merge with IndexedDB so locally-created periods still appear
 export async function getReviewPeriods(): Promise<ReviewPeriod[]> {
   const database = await initDB();
   try {
@@ -1038,13 +1038,23 @@ export async function getReviewPeriods(): Promise<ReviewPeriod[]> {
       const { getReviewPeriodsFromSupabase } = await import('./supabase-storage');
       const supabasePeriods = await getReviewPeriodsFromSupabase();
       if (import.meta.env.DEV) console.log('getReviewPeriods: Found', supabasePeriods.length, 'periods in Supabase');
+      // Merge with IndexedDB so periods created locally (e.g. when Supabase save failed) still appear
+      let merged: ReviewPeriod[] = [...supabasePeriods];
       if (database.objectStoreNames.contains('reviewPeriods')) {
+        const idbPeriods = await database.getAll('reviewPeriods');
+        const supabaseIds = new Set(supabasePeriods.map((p) => p.id));
+        for (const p of idbPeriods) {
+          if (!supabaseIds.has(p.id)) {
+            merged.push(p);
+            if (import.meta.env.DEV) console.log('getReviewPeriods: Including period from IndexedDB (not in Supabase):', p.id, p.name);
+          }
+        }
         const tx = database.transaction('reviewPeriods', 'readwrite');
         const store = tx.objectStore('reviewPeriods');
         await store.clear();
-        for (const p of supabasePeriods) await store.put(p);
+        for (const p of merged) await store.put(p);
       }
-      return supabasePeriods;
+      return merged;
     }
   } catch (error) {
     if (import.meta.env.DEV) console.log('getReviewPeriods: Supabase not available, using IndexedDB:', error);
@@ -1060,16 +1070,19 @@ export async function getReviewPeriods(): Promise<ReviewPeriod[]> {
 }
 
 export async function getReviewPeriod(id: string): Promise<ReviewPeriod | undefined> {
+  const database = await initDB();
   try {
     const { isSupabaseConfigured } = await import('./supabase');
     if (isSupabaseConfigured()) {
       const { getReviewPeriodFromSupabase } = await import('./supabase-storage');
-      return await getReviewPeriodFromSupabase(id);
+      const fromSupabase = await getReviewPeriodFromSupabase(id);
+      if (fromSupabase) return fromSupabase;
+      // Period may exist only in IndexedDB (e.g. created when Supabase save failed)
+      return database.get('reviewPeriods', id);
     }
   } catch (error) {
     console.log('Supabase not available, using IndexedDB fallback');
   }
-  const database = await initDB();
   return database.get('reviewPeriods', id);
 }
 

@@ -47,7 +47,6 @@ const adminNavItems = [
   { path: '/links', label: 'Appraisal Links', icon: LinkIcon },
   { path: '/periods', label: 'Review Periods', icon: Calendar },
   { path: '/reviews', label: 'Reviews', icon: ChartBar },
-  { path: '/historical', label: 'Historical Reviews', icon: Clock },
   { path: '/submission-tracker', label: 'Submission Tracker', icon: ListChecks },
   { path: '/organization-analytics', label: 'Organization Analytics', icon: ChartPieSlice },
   { path: '/settings', label: 'Settings', icon: Gear },

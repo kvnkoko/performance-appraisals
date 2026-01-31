@@ -14,7 +14,6 @@ const PATH_TO_TITLE: Record<string, string> = {
   '/links': 'Send Appraisals',
   '/periods': 'Review Periods',
   '/reviews': 'Reviews',
-  '/historical': 'Historical Reviews',
   '/submission-tracker': 'Submission Tracker',
   '/my-dashboard': 'My Dashboard',
   '/my-appraisals': 'My Appraisals',

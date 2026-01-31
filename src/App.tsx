@@ -18,7 +18,6 @@ import { UsersPage } from '@/pages/users';
 import { LinksPage } from '@/pages/links';
 import { PeriodsPage } from '@/pages/periods';
 import { ReviewsPage } from '@/pages/reviews';
-import { HistoricalReviewsPage } from '@/pages/historical-reviews';
 import { SubmissionTrackerPage } from '@/pages/submission-tracker';
 import { SettingsPage } from '@/pages/settings';
 import { AppraisalFormPage } from '@/pages/appraisal-form';
@@ -145,7 +144,7 @@ function App() {
                         <Route path="/links" element={<AdminRoute><LinksPage /></AdminRoute>} />
                         <Route path="/periods" element={<AdminRoute><PeriodsPage /></AdminRoute>} />
                         <Route path="/reviews" element={<AdminRoute><ReviewsPage /></AdminRoute>} />
-                        <Route path="/historical" element={<AdminRoute><HistoricalReviewsPage /></AdminRoute>} />
+                        <Route path="/historical" element={<Navigate to="/periods" replace />} />
                         <Route path="/submission-tracker" element={<AdminRoute><SubmissionTrackerPage /></AdminRoute>} />
                         
                         {/* Employee routes — admins always see admin dashboard instead */}

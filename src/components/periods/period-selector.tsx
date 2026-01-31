@@ -32,12 +32,7 @@ export function PeriodSelector({
   const loadPeriods = async () => {
     try {
       const data = showActiveOnly ? await getActiveReviewPeriods() : await getReviewPeriods();
-      // Sort by year desc, then by type
-      const sorted = data.sort((a, b) => {
-        if (b.year !== a.year) return b.year - a.year;
-        const typeOrder = ['Q1', 'Q2', 'Q3', 'Q4', 'H1', 'H2', 'Annual', 'Custom'];
-        return typeOrder.indexOf(a.type) - typeOrder.indexOf(b.type);
-      });
+      const sorted = data.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
       setPeriods(sorted);
     } catch (error) {
       console.error('Failed to load periods:', error);
