@@ -9,15 +9,23 @@ interface ImageUploaderProps {
   className?: string;
   shape?: 'circle' | 'square';
   size?: 'sm' | 'md' | 'lg';
+  /** Max width/height (long edge). Higher = sharper on retina, more bandwidth. Default 1200. */
+  maxDimension?: number;
+  /** JPEG quality 0–1. Default 0.88 for good sharpness without huge files. */
+  jpegQuality?: number;
 }
 
 const sizeMap = { sm: 24, md: 32, lg: 40 };
 
-const MAX_DIMENSION = 800;
-const JPEG_QUALITY = 0.82;
+const DEFAULT_MAX_DIMENSION = 1200;
+const DEFAULT_JPEG_QUALITY = 0.88;
 
-/** Resize and compress image to reduce bandwidth and storage; returns data URL. */
-function resizeAndCompressImage(file: File): Promise<string> {
+/** Resize and compress image; returns data URL. Uses higher resolution/quality for sharper photos. */
+function resizeAndCompressImage(
+  file: File,
+  maxDimension: number = DEFAULT_MAX_DIMENSION,
+  jpegQuality: number = DEFAULT_JPEG_QUALITY
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
@@ -25,7 +33,7 @@ function resizeAndCompressImage(file: File): Promise<string> {
       URL.revokeObjectURL(url);
       const w = img.naturalWidth;
       const h = img.naturalHeight;
-      const scale = Math.min(1, MAX_DIMENSION / Math.max(w, h));
+      const scale = Math.min(1, maxDimension / Math.max(w, h));
       const width = Math.round(w * scale);
       const height = Math.round(h * scale);
       const canvas = document.createElement('canvas');
@@ -38,7 +46,7 @@ function resizeAndCompressImage(file: File): Promise<string> {
       }
       ctx.drawImage(img, 0, 0, width, height);
       const isPng = file.type === 'image/png';
-      const dataUrl = canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', isPng ? undefined : JPEG_QUALITY);
+      const dataUrl = canvas.toDataURL(isPng ? 'image/png' : 'image/jpeg', isPng ? undefined : jpegQuality);
       resolve(dataUrl);
     };
     img.onerror = () => {
@@ -49,7 +57,15 @@ function resizeAndCompressImage(file: File): Promise<string> {
   });
 }
 
-export function ImageUploader({ value, onChange, className, shape = 'circle', size = 'md' }: ImageUploaderProps) {
+export function ImageUploader({
+  value,
+  onChange,
+  className,
+  shape = 'circle',
+  size = 'md',
+  maxDimension = DEFAULT_MAX_DIMENSION,
+  jpegQuality = DEFAULT_JPEG_QUALITY,
+}: ImageUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(value ?? null);
   const [uploading, setUploading] = useState(false);
@@ -63,7 +79,7 @@ export function ImageUploader({ value, onChange, className, shape = 'circle', si
     if (!file || !file.type.startsWith('image/')) return;
     e.target.value = '';
     setUploading(true);
-    resizeAndCompressImage(file)
+    resizeAndCompressImage(file, maxDimension, jpegQuality)
       .then((dataUrl) => {
         setPreview(dataUrl);
         onChange(dataUrl);

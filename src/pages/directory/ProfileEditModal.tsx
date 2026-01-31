@@ -91,6 +91,8 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
                 onChange={(v) => setForm((prev) => ({ ...prev, profilePicture: v ?? undefined }))}
                 shape="square"
                 size="md"
+                maxDimension={1200}
+                jpegQuality={0.88}
               />
             </div>
             {form.profilePicture && (
@@ -177,6 +179,8 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
                 onChange={(v) => setForm((prev) => ({ ...prev, coverPhoto: v ?? undefined }))}
                 shape="square"
                 size="lg"
+                maxDimension={1400}
+                jpegQuality={0.88}
               />
             </div>
             {form.coverPhoto && (
