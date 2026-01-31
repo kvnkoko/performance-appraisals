@@ -46,9 +46,10 @@ export function DirectoryFilters({
       <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <MagnifyingGlass
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-foreground/70 pointer-events-none"
             size={20}
             weight="duotone"
+            aria-hidden
           />
           <Input
             type="search"
