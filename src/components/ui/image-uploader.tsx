@@ -57,6 +57,37 @@ function resizeAndCompressImage(
   });
 }
 
+/** Re-encode an existing data URL at new quality (for already-uploaded images). Keeps dimensions, caps at maxDimension. */
+export function recompressDataUrl(
+  dataUrl: string,
+  maxDimension: number = DEFAULT_MAX_DIMENSION,
+  jpegQuality: number = DEFAULT_JPEG_QUALITY
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      const scale = Math.min(1, maxDimension / Math.max(w, h));
+      const width = Math.round(w * scale);
+      const height = Math.round(h * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Canvas not available'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      const out = canvas.toDataURL('image/jpeg', jpegQuality);
+      resolve(out);
+    };
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = dataUrl;
+  });
+}
+
 export function ImageUploader({
   value,
   onChange,

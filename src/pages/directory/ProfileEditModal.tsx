@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ImageUploader } from '@/components/ui/image-uploader';
+import { ImageUploader, recompressDataUrl } from '@/components/ui/image-uploader';
 import { useEmployeeProfiles } from '@/hooks/use-employee-profiles';
 import type { Employee, EmployeeProfile } from '@/types';
 import { cn } from '@/lib/utils';
@@ -31,6 +31,21 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
     setSkillsRaw((next.skills ?? []).join(', '));
     setFunFactsRaw((next.funFacts ?? []).join('\n'));
     setAchievementsRaw((next.achievements ?? []).join('\n'));
+    // Re-encode already-uploaded images at new quality so they benefit from compression settings
+    const profilePic = next.profilePicture?.startsWith('data:') ? next.profilePicture : null;
+    const cover = next.coverPhoto?.startsWith('data:') ? next.coverPhoto : null;
+    if (profilePic || cover) {
+      Promise.all([
+        profilePic ? recompressDataUrl(profilePic, 1200, 0.88) : null,
+        cover ? recompressDataUrl(cover, 1400, 0.88) : null,
+      ]).then(([newProfile, newCover]) => {
+        setForm((prev) => ({
+          ...prev,
+          ...(newProfile != null && { profilePicture: newProfile }),
+          ...(newCover != null && { coverPhoto: newCover }),
+        }));
+      }).catch(() => { /* keep existing data on recompress failure */ });
+    }
   }, [employee.id, getOrCreateProfile]);
 
   const handleSave = async () => {
