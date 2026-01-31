@@ -96,21 +96,3 @@
   animation: none !important;
   transform: none;
 }
-
-/* Directory profile cards: no layout shift on hover/focus – no transform, no scale, no outline/ring that affects layout */
-.directory-grid-cards .directory-profile-card,
-.directory-grid-cards .directory-profile-card * {
-  transition-property: background-color, border-color, color, opacity, box-shadow;
-}
-.directory-grid-cards .directory-profile-card:hover,
-.directory-grid-cards .directory-profile-card *:hover,
-.directory-grid-cards .directory-profile-card *:focus,
-.directory-grid-cards .directory-profile-card *:focus-visible {
-  transform: none;
-}
-.directory-grid-cards .directory-card-edit-btn {
-  transition-property: background-color, border-color, color, opacity;
-}
-.directory-grid-cards .directory-card-edit-btn:hover {
-  transform: none;
-}

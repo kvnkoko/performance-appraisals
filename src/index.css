@@ -405,3 +405,15 @@
     margin-top: 0.25rem;
   }
 }
+
+/* Directory profile cards: no layout shift on hover/focus (must load after Tailwind) */
+.directory-grid-cards .directory-profile-card,
+.directory-grid-cards .directory-profile-card * {
+  transition-property: background-color, border-color, color, opacity, box-shadow !important;
+}
+.directory-grid-cards .directory-profile-card:hover,
+.directory-grid-cards .directory-profile-card *:hover,
+.directory-grid-cards .directory-profile-card *:focus,
+.directory-grid-cards .directory-profile-card *:focus-visible {
+  transform: none !important;
+}

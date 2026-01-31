@@ -115,21 +115,20 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
   }
 
   return (
-    <div className="directory-profile-card rounded-xl border border-border bg-card shadow-card p-0 overflow-hidden aspect-[4/5] min-h-0 overflow-anchor-none [contain:layout] transition-[border-color,color] duration-200 hover:border-primary/40">
+    <div className="directory-profile-card isolate rounded-xl border border-border bg-card shadow-card p-0 overflow-hidden aspect-[4/5] min-h-0 overflow-anchor-none [contain:layout] transition-[border-color,color] duration-200 hover:border-primary/40">
       <div className="relative flex flex-col h-full w-full rounded-xl border-0 bg-card overflow-hidden origin-center">
-        {/* Edit button top right - no scale/shadow change to avoid layout shift */}
+        {/* Edit: plain button so no transition-all/shadow from shared Button */}
         {canEdit && onEdit && (
           <div className="absolute top-1.5 right-1.5 z-10">
-            <Button
+            <button
               type="button"
-              variant="secondary"
-              size="sm"
-              className="directory-card-edit-btn h-7 w-7 p-0 shrink-0 bg-black/40 hover:bg-black/60 border-0 text-white backdrop-blur-sm hover:scale-100"
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(); }}
               title={isAdmin() ? 'Edit profile (admin)' : 'Edit profile'}
+              aria-label={isAdmin() ? 'Edit profile (admin)' : 'Edit profile'}
+              className="h-7 w-7 p-0 shrink-0 rounded-lg border-0 bg-black/40 hover:bg-black/60 text-white backdrop-blur-sm transition-colors inline-flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
             >
               <PencilSimple size={14} />
-            </Button>
+            </button>
           </div>
         )}
         <button
