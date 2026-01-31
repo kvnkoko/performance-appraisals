@@ -248,7 +248,7 @@ export function AuthPage() {
   // Password change screen
   if (showPasswordChange && currentUser) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 pb-10 sm:pb-12">
+      <div className="flex h-full min-h-0 flex-col items-center justify-center overflow-y-auto bg-background p-4 pb-10 sm:pb-12">
         <div className="mb-8 flex justify-center">
           <BrandLogo className="max-h-10" />
         </div>
@@ -333,7 +333,7 @@ export function AuthPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 pb-10 sm:pb-12">
+    <div className="flex h-full min-h-0 flex-col items-center justify-center overflow-y-auto bg-background p-4 pb-10 sm:pb-12">
       <div className="mb-8 flex justify-center">
         <BrandLogo className="max-h-10" />
       </div>
