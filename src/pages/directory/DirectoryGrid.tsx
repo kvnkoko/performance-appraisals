@@ -86,7 +86,7 @@ export function DirectoryGrid({
 
   if (viewMode === 'compact') {
     return (
-      <div className="directory-grid-cards grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+      <div className="directory-grid-cards grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 min-w-0 w-full">
         {filteredAndSorted.map((employee, i) => (
           <ProfileCard
             key={employee.id}
@@ -103,7 +103,7 @@ export function DirectoryGrid({
   }
 
   return (
-    <div className="directory-grid-cards grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 overflow-hidden items-start content-start">
+    <div className="directory-grid-cards grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3 min-w-0 w-full items-start content-start">
       {filteredAndSorted.map((employee, i) => (
         <ProfileCard
           key={employee.id}

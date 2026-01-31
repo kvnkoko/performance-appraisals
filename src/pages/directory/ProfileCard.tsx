@@ -115,7 +115,7 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
   }
 
   return (
-    <div className="directory-profile-card isolate rounded-xl border border-border bg-card shadow-card p-0 overflow-hidden aspect-[4/5] min-h-0 overflow-anchor-none [contain:layout] transition-[border-color,color] duration-200 hover:border-primary/40">
+    <div className="directory-profile-card isolate rounded-xl border border-border bg-card shadow-card p-0 overflow-hidden aspect-[4/5] min-h-0 min-w-0 overflow-anchor-none [contain:layout] transition-[border-color,color] duration-200 hover:border-primary/40">
       <div className="relative flex flex-col h-full w-full rounded-xl border-0 bg-card overflow-hidden origin-center">
         {/* Edit: plain button so no transition-all/shadow from shared Button */}
         {canEdit && onEdit && (

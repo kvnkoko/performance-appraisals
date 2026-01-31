@@ -109,7 +109,7 @@ export function TemplatesPage() {
   };
 
   return (
-    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12 min-w-0 w-full max-w-full">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="page-title text-foreground">Templates</h1>
@@ -138,7 +138,7 @@ export function TemplatesPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 min-w-0">
           {templates.map((template) => {
             // Calculate total items and weight from categories
             const totalItems = template.categories 
@@ -151,7 +151,7 @@ export function TemplatesPage() {
               : (template.questions?.reduce((sum, q) => sum + q.weight, 0) || 0);
             
             return (
-              <Card key={template.id} className="border-0 hover:scale-[1.02] transition-all duration-300 relative overflow-hidden group">
+              <Card key={template.id} className="border-0 hover:scale-[1.02] transition-all duration-300 relative overflow-hidden group min-w-0">
                 <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 <CardHeader className="relative z-10">
                   <div className="flex items-start justify-between">
@@ -190,7 +190,7 @@ export function TemplatesPage() {
                     <div className="text-xs text-muted-foreground/70 pt-2 border-t border-border/30">
                       Updated {formatDate(template.updatedAt)}
                     </div>
-                    <div className="flex gap-2 pt-2">
+                    <div className="flex flex-wrap gap-2 pt-2 min-w-0">
                       <Button
                         type="button"
                         variant="outline"

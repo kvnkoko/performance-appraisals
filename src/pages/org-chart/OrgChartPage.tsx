@@ -60,7 +60,7 @@ export function OrgChartPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 gap-6">
+    <div className="flex-1 flex flex-col min-h-0 min-w-0 w-full max-w-full gap-6">
       <header className="flex-shrink-0 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground tracking-tight">Organization chart</h1>

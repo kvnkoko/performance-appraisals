@@ -113,7 +113,7 @@ export function TeamsPage() {
   };
 
   return (
-    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12 min-w-0 max-w-full">
       {/* Header – award-worthy hierarchy */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -174,7 +174,7 @@ export function TeamsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 min-w-0">
           {filteredTeams.map((team) => {
             const memberCount = getTeamMemberCount(team.id);
             const leaders = getTeamLeaders(team.id);

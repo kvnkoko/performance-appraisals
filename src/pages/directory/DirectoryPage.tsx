@@ -50,7 +50,7 @@ export function DirectoryPage() {
   }
 
   return (
-    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12 min-w-0 w-full max-w-full">
       <header
         className={cn(
           'relative rounded-2xl overflow-hidden px-4 py-6 sm:px-6 sm:py-10',
@@ -73,7 +73,7 @@ export function DirectoryPage() {
         </div>
       </header>
 
-      <section>
+      <section className="min-w-0 w-full">
         <DirectoryFilters
           filters={filters}
           onFiltersChange={setFilters}
@@ -84,7 +84,7 @@ export function DirectoryPage() {
         />
       </section>
 
-      <section>
+      <section className="min-w-0 w-full">
         {employees.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border bg-card/50 py-16 text-center">
             <UserCircle size={48} weight="duotone" className="mx-auto text-muted-foreground" />

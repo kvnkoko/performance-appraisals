@@ -103,7 +103,7 @@ export function Dashboard() {
   }
 
   return (
-    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12 min-w-0 max-w-full">
       {/* Header – award-worthy hierarchy */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="space-y-1">
@@ -116,7 +116,7 @@ export function Dashboard() {
       </div>
 
       {/* Stats Grid – Proxel/Finvero: clean cards, chart colors */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 min-w-0">
         <Card className="overflow-hidden border-border/50 hover:shadow-dropdown transition-shadow duration-200">
           <CardHeader className="pb-2 pt-5 px-5">
             <div className="flex items-center justify-between">

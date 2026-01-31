@@ -120,12 +120,12 @@ function App() {
   }
 
   return (
-    <div className="h-full min-h-screen min-h-[100dvh] flex flex-col">
+    <div className="h-full min-h-screen min-h-[100dvh] flex flex-col overflow-x-hidden w-full max-w-full">
       <ThemeProvider>
         <ToastProvider>
           <UserProvider>
             <AppProvider>
-              <div className="flex-1 min-h-0 flex flex-col">
+              <div className="flex-1 min-h-0 flex flex-col min-w-0 overflow-x-hidden w-full max-w-full">
                 <Routes>
               <Route path="/auth" element={<AuthPage />} />
               <Route path="/appraisal/assignment/:assignmentId" element={<PrivateRoute><AppraisalFormByAssignmentPage /></PrivateRoute>} />

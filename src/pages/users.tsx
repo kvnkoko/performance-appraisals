@@ -667,7 +667,7 @@ export function UsersPage() {
   }
 
   return (
-    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12 min-w-0 max-w-full">
       {/* Header Section */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -700,7 +700,7 @@ export function UsersPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-4 min-w-0">
         <Card className="border-2">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -787,7 +787,7 @@ export function UsersPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 min-w-0">
           {filteredUsers.map((user) => (
             <Card 
               key={user.id} 

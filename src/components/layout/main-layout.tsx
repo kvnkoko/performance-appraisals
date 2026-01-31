@@ -40,7 +40,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
   const pageTitle = getPageTitle(location.pathname);
 
   return (
-    <div className="flex-1 min-h-0 min-h-screen min-h-[100dvh] w-full flex flex-col">
+    <div className="flex-1 min-h-0 min-h-screen min-h-[100dvh] w-full max-w-full min-w-0 flex flex-col overflow-x-hidden">
       <Sidebar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} />
       {/* Mobile top bar: hamburger + page title so content doesn't shift and title is never covered */}
       <header
@@ -60,8 +60,8 @@ export function MainLayout({ children }: { children: ReactNode }) {
           {pageTitle}
         </h1>
       </header>
-      <main className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden ml-0 lg:ml-60 bg-background text-foreground flex flex-col scrollbar-gutter-stable overflow-anchor-none">
-        <div className="flex-1 flex flex-col min-h-0 w-full pt-20 px-4 pb-10 sm:px-6 sm:pb-12 lg:pt-8 lg:px-8 lg:pb-16">
+      <main className="flex-1 min-h-0 min-w-0 w-full lg:w-[calc(100%-15rem)] lg:ml-60 overflow-y-auto overflow-x-hidden bg-background text-foreground flex flex-col scrollbar-gutter-stable overflow-anchor-none">
+        <div className="flex-1 flex flex-col min-h-0 min-w-0 w-full max-w-full pt-20 px-4 pb-10 sm:px-6 sm:pb-12 lg:pt-8 lg:px-8 lg:pb-16 overflow-x-hidden">
           {children}
         </div>
       </main>

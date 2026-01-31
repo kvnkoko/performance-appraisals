@@ -182,14 +182,14 @@ export function EmployeesPage() {
   })();
 
   return (
-    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12 min-w-0 max-w-full">
       {/* Header – award-worthy hierarchy */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <h1 className="page-title text-foreground">Employees</h1>
           <p className="page-subtitle">Manage your employee database</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3 shrink-0">
           <Button 
             type="button" 
             onClick={async () => {
@@ -233,8 +233,8 @@ export function EmployeesPage() {
       </div>
 
       {/* Search and view filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
+      <div className="flex flex-col sm:flex-row gap-3 min-w-0">
+        <div className="relative flex-1 min-w-0">
           <Input
             placeholder="Search employees by name or role..."
             value={searchQuery}
@@ -299,15 +299,15 @@ export function EmployeesPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-8 min-w-0">
           {groups.map((group) => (
-            <section key={group.key}>
+            <section key={group.key} className="min-w-0">
               <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
                 <UsersThree size={20} weight="duotone" className="text-muted-foreground" />
                 {group.label}
                 <span className="text-sm font-normal text-muted-foreground">({group.employees.length})</span>
               </h2>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 min-w-0">
                 {group.employees.map((employee) => (
                   <Card 
                     key={employee.id} 
@@ -321,7 +321,7 @@ export function EmployeesPage() {
                     </CardHeader>
                     <CardContent className="space-y-3">
                       <div className="flex items-center gap-2 text-sm flex-wrap">
-                        <span className="text-muted-foreground min-w-[80px]">Hierarchy:</span>
+                        <span className="text-muted-foreground shrink-0">Hierarchy:</span>
                         <span className={employee.hierarchy === 'hr' ? 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300 border border-teal-200 dark:border-teal-700' : 'font-semibold'}>
                           {HIERARCHY_LABELS[employee.hierarchy]}
                         </span>
@@ -332,7 +332,7 @@ export function EmployeesPage() {
                         )}
                       </div>
                       <div className="flex items-center gap-2 text-sm flex-wrap">
-                        <span className="text-muted-foreground min-w-[80px]">Status:</span>
+                        <span className="text-muted-foreground shrink-0">Status:</span>
                         <span className={
                           (employee.employmentStatus ?? 'permanent') === 'terminated' || (employee.employmentStatus ?? 'permanent') === 'resigned'
                             ? 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300 border border-red-200 dark:border-red-700'
@@ -342,32 +342,32 @@ export function EmployeesPage() {
                         </span>
                       </div>
                 {employee.teamId && getTeamName(employee.teamId) && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground min-w-[80px]">Team:</span>
-                    <span className="inline-flex items-center gap-1 text-primary">
-                      <UsersThree size={14} weight="duotone" />
-                      {getTeamName(employee.teamId)}
+                  <div className="flex items-center gap-2 text-sm min-w-0">
+                    <span className="text-muted-foreground shrink-0">Team:</span>
+                    <span className="inline-flex items-center gap-1 text-primary min-w-0 truncate">
+                      <UsersThree size={14} weight="duotone" className="shrink-0" />
+                      <span className="truncate">{getTeamName(employee.teamId)}</span>
                     </span>
                   </div>
                 )}
                 {employee.email && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground min-w-[80px]">Email:</span>
-                    <span className="truncate">{employee.email}</span>
+                  <div className="flex items-center gap-2 text-sm min-w-0">
+                    <span className="text-muted-foreground shrink-0">Email:</span>
+                    <span className="min-w-0 truncate">{employee.email}</span>
                   </div>
                 )}
                 {linkedUsers[employee.id] && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground min-w-[80px]">User:</span>
-                    <span className="inline-flex items-center gap-1 text-green-600">
-                      <CheckCircle size={14} weight="duotone" />
-                      {linkedUsers[employee.id].name} (@{linkedUsers[employee.id].username})
+                  <div className="flex items-center gap-2 text-sm min-w-0">
+                    <span className="text-muted-foreground shrink-0">User:</span>
+                    <span className="inline-flex items-center gap-1 text-green-600 min-w-0 truncate">
+                      <CheckCircle size={14} weight="duotone" className="shrink-0" />
+                      <span className="truncate">{linkedUsers[employee.id].name} (@{linkedUsers[employee.id].username})</span>
                     </span>
                   </div>
                 )}
                 {!linkedUsers[employee.id] && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground min-w-[80px]">User:</span>
+                  <div className="flex items-center gap-2 text-sm min-w-0">
+                    <span className="text-muted-foreground shrink-0">User:</span>
                     <span className="text-xs text-muted-foreground italic">Not linked</span>
                   </div>
                 )}

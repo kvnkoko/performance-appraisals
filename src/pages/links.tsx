@@ -282,7 +282,7 @@ export function LinksPage() {
   const existingForPeriod = selectedPeriod ? assignments.filter((a) => a.reviewPeriodId === selectedPeriod).length : 0;
 
   return (
-    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
+    <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12 min-w-0 max-w-full">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="page-title text-foreground">Send Appraisals</h1>
@@ -298,9 +298,9 @@ export function LinksPage() {
 
       {isAdmin() && (
         <Card className="border-primary/30 bg-primary/5">
-          <CardContent className="py-3 px-4 flex items-center gap-3">
+          <CardContent className="py-3 px-4 flex items-center gap-3 min-w-0">
             <Info size={20} weight="duotone" className="text-primary flex-shrink-0" />
-            <div className="text-sm">
+            <div className="text-sm min-w-0 break-words">
               <span className="font-medium text-foreground">Sync forms to all staff:</span>
               <span className="text-muted-foreground ml-1">Run <code className="text-xs bg-muted px-1.5 py-0.5 rounded">supabase-appraisal-assignments.sql</code> in Supabase Dashboard → SQL Editor so execs and staff see their appraisal forms on every device.</span>
             </div>
