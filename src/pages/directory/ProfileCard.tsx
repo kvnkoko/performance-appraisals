@@ -113,8 +113,8 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card shadow-card p-0 overflow-hidden aspect-[4/5]">
-      <div className="relative flex flex-col h-full w-full rounded-xl border-0 bg-card overflow-hidden transition-[box-shadow,transform] duration-200 hover:shadow-lg hover:scale-[1.02] origin-center">
+    <div className="directory-card-cell rounded-xl border border-border bg-card shadow-card p-0 overflow-hidden aspect-[4/5]">
+      <div className="relative flex flex-col h-full w-full rounded-xl border-0 bg-card overflow-hidden transition-[box-shadow] duration-200 hover:shadow-lg origin-center">
         {/* Edit button top right */}
         {canEdit && onEdit && (
           <div className="absolute top-1.5 right-1.5 z-10">

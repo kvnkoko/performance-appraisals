@@ -253,6 +253,16 @@
     scrollbar-gutter: stable;
   }
 
+  /* Disable scroll anchoring so hover transforms don't shift the scroll position */
+  .overflow-anchor-none {
+    overflow-anchor: none;
+  }
+
+  /* Contain directory card layout so hover transform doesn't affect main scroll */
+  .directory-card-cell {
+    contain: layout paint;
+  }
+
   /* Enhanced Glassmorphism effects */
   .glass {
     background: rgba(255, 255, 255, 0.7);

@@ -59,7 +59,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
           {pageTitle}
         </h1>
       </header>
-      <main className="h-screen overflow-y-auto ml-0 lg:ml-60 bg-background text-foreground flex flex-col scrollbar-gutter-stable">
+      <main className="h-screen overflow-y-auto ml-0 lg:ml-60 bg-background text-foreground flex flex-col scrollbar-gutter-stable overflow-anchor-none">
         <div className="flex-1 flex flex-col min-h-0 w-full pt-20 px-4 pb-10 sm:px-6 sm:pb-12 lg:pt-8 lg:px-8 lg:pb-16">
           {children}
         </div>
