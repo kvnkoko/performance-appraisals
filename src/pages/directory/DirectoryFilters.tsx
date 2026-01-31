@@ -43,8 +43,8 @@ export function DirectoryFilters({
 
   return (
     <div className={cn('space-y-4', className)}>
-      <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px]">
+      <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-stretch gap-3">
+        <div className="relative flex-1 w-full min-w-0 sm:min-w-[200px]">
           <MagnifyingGlass
             className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-foreground/70 pointer-events-none"
             size={20}
@@ -63,7 +63,7 @@ export function DirectoryFilters({
         <Select
           value={filters.department ?? ''}
           onChange={(e) => onFiltersChange({ ...filters, department: e.target.value || null })}
-          className="w-[180px]"
+          className="w-full sm:w-[180px] min-w-0"
         >
           <option value="">All departments</option>
           {teams.map((t) => (
@@ -75,7 +75,7 @@ export function DirectoryFilters({
         <Select
           value={filters.hierarchy ?? ''}
           onChange={(e) => onFiltersChange({ ...filters, hierarchy: (e.target.value as keyof typeof HIERARCHY_LABELS) || null })}
-          className="w-[160px]"
+          className="w-full sm:w-[160px] min-w-0"
         >
           <option value="">All levels</option>
           {HIERARCHY_FILTER_OPTIONS.map((h) => (
@@ -84,20 +84,20 @@ export function DirectoryFilters({
             </option>
           ))}
         </Select>
-        <Select value={sort} onChange={(e) => onSortChange(e.target.value as SortOption)} className="w-[160px]">
+        <Select value={sort} onChange={(e) => onSortChange(e.target.value as SortOption)} className="w-full sm:w-[160px] min-w-0">
           <option value="name">Name A–Z</option>
           <option value="department">Department</option>
           <option value="recent">Recently joined</option>
         </Select>
-        <div className="flex rounded-lg border border-border overflow-hidden">
+        <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
           {(['grid', 'list', 'compact'] as const).map((mode) => (
             <button
               key={mode}
               type="button"
               onClick={() => onViewModeChange(mode)}
               className={cn(
-                'px-3 py-2 text-sm font-medium capitalize transition-colors',
-                viewMode === mode ? 'bg-accent text-accent-foreground' : 'bg-card hover:bg-muted'
+                'flex-1 sm:flex-none px-3 py-2.5 sm:py-2 text-sm font-medium capitalize transition-colors min-h-[44px] sm:min-h-0 touch-manipulation',
+                viewMode === mode ? 'bg-accent text-accent-foreground' : 'bg-card hover:bg-muted active:bg-muted'
               )}
             >
               {mode}

@@ -70,7 +70,7 @@ export function ProfilePage() {
           className="relative w-[calc(100%+2rem)] sm:w-[calc(100%+3rem)] lg:w-[calc(100%+4rem)] max-w-none min-w-0 -mx-4 sm:-mx-6 lg:-mx-8 -mt-20 lg:-mt-8 overflow-hidden bg-muted"
           style={{
             aspectRatio: '21 / 9',
-            minHeight: 'clamp(380px, 48vh, 560px)',
+            minHeight: 'clamp(260px, 36vh, 560px)',
           }}
         >
           <img

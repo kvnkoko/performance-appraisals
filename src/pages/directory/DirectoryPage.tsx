@@ -53,20 +53,20 @@ export function DirectoryPage() {
     <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
       <header
         className={cn(
-          'relative rounded-2xl overflow-hidden px-6 py-10',
+          'relative rounded-2xl overflow-hidden px-4 py-6 sm:px-6 sm:py-10',
           'bg-gradient-to-br from-accent/15 via-accent/5 to-transparent',
           'border border-border/60'
         )}
       >
         <div className="relative z-10">
-          <h1 className="text-3xl font-bold text-foreground tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">
             {settings.name || 'Our People'}
           </h1>
-          <p className="text-muted-foreground mt-1">Meet the team</p>
-          <div className="flex items-center gap-4 mt-4">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Users size={24} weight="duotone" />
-              <span className="text-2xl font-semibold text-foreground">{employees.length}</span>
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">Meet the team</p>
+          <div className="flex items-center gap-4 mt-3 sm:mt-4">
+            <div className="flex items-center gap-2 text-muted-foreground text-sm sm:text-base">
+              <Users size={20} weight="duotone" className="sm:w-6 sm:h-6 shrink-0" />
+              <span className="text-xl sm:text-2xl font-semibold text-foreground">{employees.length}</span>
               <span>people</span>
             </div>
           </div>
