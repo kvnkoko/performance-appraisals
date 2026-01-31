@@ -45,6 +45,7 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
           size="sm"
           hierarchy={employee.hierarchy}
           showRing={false}
+          noHoverScale
           objectPosition={
             profile?.profilePicture && (profile.profilePicturePositionX != null || profile.profilePicturePositionY != null)
               ? `${profile.profilePicturePositionX ?? 50}% ${profile.profilePicturePositionY ?? 50}%`
@@ -76,13 +77,14 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
           tabIndex={0}
           onClick={onClick}
           onKeyDown={handleCardKeyDown}
-          className="flex w-full items-center gap-4 text-left cursor-pointer rounded-lg hover:bg-muted/50 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          className="flex w-full items-center gap-4 text-left cursor-pointer rounded-lg hover:bg-muted/50 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 [outline-offset:2px]"
         >
           <Avatar
             src={profile?.profilePicture}
             name={employee.name}
             size="lg"
             hierarchy={employee.hierarchy}
+            noHoverScale
             objectPosition={
               profile?.profilePicture && (profile.profilePicturePositionX != null || profile.profilePicturePositionY != null)
                 ? `${profile.profilePicturePositionX ?? 50}% ${profile.profilePicturePositionY ?? 50}%`
@@ -113,16 +115,16 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card shadow-card p-0 overflow-hidden aspect-[4/5] min-h-0 overflow-anchor-none [contain:layout] transition-colors duration-200 hover:border-primary/40 [transform:translateZ(0)]">
+    <div className="directory-profile-card rounded-xl border border-border bg-card shadow-card p-0 overflow-hidden aspect-[4/5] min-h-0 overflow-anchor-none [contain:layout] transition-[border-color,color] duration-200 hover:border-primary/40">
       <div className="relative flex flex-col h-full w-full rounded-xl border-0 bg-card overflow-hidden origin-center">
-        {/* Edit button top right */}
+        {/* Edit button top right - no scale/shadow change to avoid layout shift */}
         {canEdit && onEdit && (
           <div className="absolute top-1.5 right-1.5 z-10">
             <Button
               type="button"
               variant="secondary"
               size="sm"
-              className="h-7 w-7 p-0 shrink-0 bg-black/40 hover:bg-black/60 border-0 text-white backdrop-blur-sm"
+              className="directory-card-edit-btn h-7 w-7 p-0 shrink-0 bg-black/40 hover:bg-black/60 border-0 text-white backdrop-blur-sm hover:scale-100"
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); onEdit(); }}
               title={isAdmin() ? 'Edit profile (admin)' : 'Edit profile'}
             >
@@ -133,7 +135,7 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
         <button
           type="button"
           onClick={onClick}
-          className="relative flex flex-col h-full w-full text-left rounded-xl outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring border-0 bg-transparent p-0 cursor-pointer overflow-hidden"
+          className="relative flex flex-col h-full w-full text-left rounded-xl outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring border-0 bg-transparent p-0 cursor-pointer overflow-hidden [outline-offset:2px]"
         >
           {/* Image fills card; object-cover so no blank areas */}
           <div className="absolute inset-0 rounded-xl overflow-hidden bg-muted">

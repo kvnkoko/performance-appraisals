@@ -45,9 +45,11 @@ interface AvatarProps {
   showRing?: boolean;
   /** CSS object-position for the image (e.g. "50% 30%" to favor top-center). */
   objectPosition?: string;
+  /** When true, no hover scale (avoids layout shift in grids/lists). */
+  noHoverScale?: boolean;
 }
 
-export function Avatar({ src, name, size = 'md', hierarchy, className, showRing = true, objectPosition }: AvatarProps) {
+export function Avatar({ src, name, size = 'md', hierarchy, className, showRing = true, objectPosition, noHoverScale }: AvatarProps) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const initials = getInitials(name);
@@ -59,7 +61,8 @@ export function Avatar({ src, name, size = 'md', hierarchy, className, showRing 
   return (
     <div
       className={cn(
-        'relative flex shrink-0 items-center justify-center rounded-full overflow-hidden transition-transform duration-200 hover:scale-105',
+        'relative flex shrink-0 items-center justify-center rounded-full overflow-hidden',
+        noHoverScale ? 'transition-opacity duration-200' : 'transition-transform duration-200 hover:scale-105',
         sizeClasses[size],
         showRing && hierarchy && ringByHierarchy[hierarchy],
         !useFallback && 'bg-muted',
