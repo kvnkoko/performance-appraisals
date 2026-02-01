@@ -4,6 +4,7 @@ import { List, X } from 'phosphor-react';
 import { Sidebar } from './sidebar';
 import { ToastContainer } from '@/components/ui/toast';
 import { useToast } from '@/contexts/toast-context';
+import { useUser } from '@/contexts/user-context';
 
 const PATH_TO_TITLE: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -36,7 +37,11 @@ export function MainLayout({ children }: { children: ReactNode }) {
   const { toasts, dismiss } = useToast();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const pageTitle = getPageTitle(location.pathname);
+  const { isAdmin: checkIsAdmin } = useUser();
+  const pageTitle =
+    location.pathname === '/directory' && checkIsAdmin()
+      ? 'Employees'
+      : getPageTitle(location.pathname);
 
   return (
     <div className="flex-1 min-h-0 min-h-screen min-h-[100dvh] w-full max-w-full min-w-0 flex flex-col overflow-x-hidden">

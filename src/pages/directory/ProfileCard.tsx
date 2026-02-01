@@ -1,4 +1,4 @@
-import { MapPin, Buildings, PencilSimple } from 'phosphor-react';
+import { MapPin, Buildings, PencilSimple, IdentificationCard, Trash } from 'phosphor-react';
 import { Avatar, getInitials, hashToHue } from '@/components/ui/avatar';
 import { HierarchyBadge } from '@/components/shared/hierarchy-badge';
 import { SkillBadge } from '@/components/ui/skill-badge';
@@ -18,9 +18,13 @@ interface ProfileCardProps {
   onEdit?: () => void;
   variant?: 'grid' | 'list' | 'compact';
   index?: number;
+  showAdminActions?: boolean;
+  linkedUser?: { name: string; username: string } | null;
+  onEditRecord?: () => void;
+  onDelete?: () => void;
 }
 
-export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'grid', index = 0 }: ProfileCardProps) {
+export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'grid', index = 0, showAdminActions, linkedUser, onEditRecord, onDelete }: ProfileCardProps) {
   const { teams } = useApp();
   const { user, isAdmin } = useUser();
   const team = employee.teamId ? teams.find((t) => t.id === employee.teamId) : undefined;
@@ -31,33 +35,55 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
   const extraSkills = (profile?.skills?.length ?? 0) - MAX_SKILLS;
 
   if (variant === 'compact') {
+    const showAdmin = showAdminActions && isAdmin() && (onEditRecord != null || onDelete != null);
     return (
-      <button
-        type="button"
-        onClick={onClick}
+      <div
         className={cn(
-          'flex items-center gap-3 w-full rounded-lg border border-border bg-card shadow-card p-3 text-left transition-colors hover:bg-muted/50'
+          'flex flex-col w-full rounded-lg border border-border bg-card shadow-card overflow-hidden transition-colors hover:bg-muted/50'
         )}
       >
-        <Avatar
-          src={profile?.profilePicture}
-          name={employee.name}
-          size="sm"
-          hierarchy={employee.hierarchy}
-          showRing={false}
-          noHoverScale
-          objectPosition={
-            profile?.profilePicture && (profile.profilePicturePositionX != null || profile.profilePicturePositionY != null)
-              ? `${profile.profilePicturePositionX ?? 50}% ${profile.profilePicturePositionY ?? 50}%`
-              : undefined
-          }
-        />
-        <div className="min-w-0 flex-1">
-          <p className="font-medium truncate">{employee.name}</p>
-          <p className="text-xs text-muted-foreground truncate">{employee.role}</p>
-        </div>
-        <HierarchyBadge hierarchy={employee.hierarchy} size="sm" />
-      </button>
+        <button
+          type="button"
+          onClick={onClick}
+          className="flex items-center gap-3 w-full p-3 text-left min-w-0"
+        >
+          <Avatar
+            src={profile?.profilePicture}
+            name={employee.name}
+            size="sm"
+            hierarchy={employee.hierarchy}
+            showRing={false}
+            noHoverScale
+            objectPosition={
+              profile?.profilePicture && (profile.profilePicturePositionX != null || profile.profilePicturePositionY != null)
+                ? `${profile.profilePicturePositionX ?? 50}% ${profile.profilePicturePositionY ?? 50}%`
+                : undefined
+            }
+          />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium truncate">{employee.name}</p>
+            <p className="text-xs text-muted-foreground truncate">{employee.role}</p>
+          </div>
+          <HierarchyBadge hierarchy={employee.hierarchy} size="sm" />
+        </button>
+        {showAdmin && (
+          <div className="flex items-center gap-2 px-3 pb-2 pt-0 border-t border-border/60 flex-wrap" onClick={(e) => e.stopPropagation()}>
+            {onEditRecord && (
+              <button type="button" onClick={onEditRecord} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1" aria-label="Edit record">
+                <IdentificationCard size={14} /> Edit record
+              </button>
+            )}
+            {onDelete && (
+              <button type="button" onClick={onDelete} className="text-xs text-muted-foreground hover:text-destructive inline-flex items-center gap-1" aria-label="Delete">
+                <Trash size={14} /> Delete
+              </button>
+            )}
+            <span className="text-[11px] text-muted-foreground ml-auto">
+              {linkedUser ? `Linked: @${linkedUser.username}` : 'Not linked'}
+            </span>
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -104,11 +130,30 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
             )}
             {headline && <p className="text-sm mt-2 line-clamp-2 text-muted-foreground">{headline}</p>}
           </div>
-          {canEdit && onEdit && (
-            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onEdit(); }} className="shrink-0" title={isAdmin() ? 'Edit profile (admin)' : 'Edit profile'}>
-              <PencilSimple size={18} />
-            </Button>
-          )}
+          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+            {showAdminActions && isAdmin() && (
+              <>
+                {onEditRecord && (
+                  <Button variant="ghost" size="sm" onClick={onEditRecord} className="text-muted-foreground" title="Edit record" aria-label="Edit record">
+                    <IdentificationCard size={18} />
+                  </Button>
+                )}
+                {onDelete && (
+                  <Button variant="ghost" size="sm" onClick={onDelete} className="text-muted-foreground hover:text-destructive" title="Delete" aria-label="Delete">
+                    <Trash size={18} />
+                  </Button>
+                )}
+                <span className="text-xs text-muted-foreground px-2 py-1 rounded bg-muted/60">
+                  {linkedUser ? `@${linkedUser.username}` : 'Not linked'}
+                </span>
+              </>
+            )}
+            {canEdit && onEdit && (
+              <Button variant="ghost" size="sm" onClick={() => onEdit()} className="shrink-0" title={isAdmin() ? 'Edit profile (admin)' : 'Edit profile'} aria-label={isAdmin() ? 'Edit profile (admin)' : 'Edit profile'}>
+                <PencilSimple size={18} />
+              </Button>
+            )}
+          </div>
         </div>
       </AnimatedCard>
     );
@@ -184,6 +229,23 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
             </span>
           </div>
         </button>
+        {showAdminActions && isAdmin() && (onEditRecord != null || onDelete != null) && (
+          <div className="flex items-center gap-2 px-3 py-2 border-t border-border/60 bg-card/80 flex-wrap" onClick={(e) => e.stopPropagation()}>
+            {onEditRecord && (
+              <button type="button" onClick={onEditRecord} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1" aria-label="Edit record" title="Edit record">
+                <IdentificationCard size={14} /> Edit record
+              </button>
+            )}
+            {onDelete && (
+              <button type="button" onClick={onDelete} className="text-xs text-muted-foreground hover:text-destructive inline-flex items-center gap-1" aria-label="Delete" title="Delete">
+                <Trash size={14} /> Delete
+              </button>
+            )}
+            <span className="text-[11px] text-muted-foreground ml-auto">
+              {linkedUser ? `Linked: @${linkedUser.username}` : 'Not linked'}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -22,6 +22,11 @@ function normalizeHierarchy(h: string | null | undefined): Employee['hierarchy']
   return 'member';
 }
 
+/** Value to send to Supabase. Maps 'department-leader' -> 'leader' for DBs that only allow legacy constraint. */
+function hierarchyForSupabase(h: Employee['hierarchy']): string {
+  return h === 'department-leader' ? 'leader' : h;
+}
+
 const TABLES = {
   TEMPLATES: 'templates',
   EMPLOYEES: 'employees',
@@ -270,6 +275,9 @@ export async function updateEmployeeTeamInSupabase(employeeId: string, teamId: s
 function isMissingColumnError(err: unknown): boolean {
   const e = err as { message?: string; code?: string };
   const msg = typeof e?.message === 'string' ? e.message : '';
+  // Do not treat check constraint / not-null as "missing column" — fix the payload instead
+  if (e?.code === '23514') return false; // check_violation
+  if (e?.code === '23502') return false; // not_null_violation
   // PostgreSQL 42703 = undefined_column; 400 often means column missing or invalid for this table
   if (e?.code === '42703') return true;
   return /reports_to|team_id|employment_status|schema cache|column.*employees|does not exist/i.test(msg);
@@ -281,12 +289,15 @@ export async function saveEmployeeToSupabase(employee: Employee): Promise<void> 
   const supabase = await getSupabaseClient();
   if (!supabase) throw new Error('Supabase client not available');
 
+  const hierarchy = normalizeHierarchy(employee.hierarchy as string | null | undefined);
+  const hierarchyValue = (hierarchy && VALID_HIERARCHIES.includes(hierarchy)) ? hierarchy : 'member';
+  const hierarchyForDb = hierarchyForSupabase(hierarchyValue);
   const fullPayload = {
     id: employee.id,
-    name: employee.name,
+    name: String(employee.name ?? ''),
     email: employee.email ?? null,
-    role: employee.role,
-    hierarchy: employee.hierarchy,
+    role: String(employee.role ?? ''),
+    hierarchy: hierarchyForDb,
     executive_type: employee.executiveType ?? null,
     team_id: employee.teamId ?? null,
     reports_to: employee.reportsTo ?? null,
@@ -303,10 +314,10 @@ export async function saveEmployeeToSupabase(employee: Employee): Promise<void> 
     // Minimal payload: only columns that exist on a basic employees table (no updated_at, employment_status, etc.)
     const basePayload = {
       id: employee.id,
-      name: employee.name,
+      name: fullPayload.name,
       email: employee.email ?? null,
-      role: employee.role,
-      hierarchy: employee.hierarchy,
+      role: fullPayload.role,
+      hierarchy: hierarchyForDb,
       created_at: fullPayload.created_at,
     };
     result = await supabase

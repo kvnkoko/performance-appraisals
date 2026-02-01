@@ -36,12 +36,12 @@ const sharedNavItems = [
   { path: '/org-chart', label: 'Org Chart', icon: TreeStructure },
 ];
 
-// Admin navigation items (Overview = system-wide dashboard)
+// Admin navigation items (Overview = system-wide dashboard; Employees = Directory + management at /directory)
 const adminNavItems = [
   { path: '/dashboard', label: 'Overview', icon: SquaresFour },
-  ...sharedNavItems,
+  { path: '/directory', label: 'Employees', icon: Users },
+  { path: '/org-chart', label: 'Org Chart', icon: TreeStructure },
   { path: '/templates', label: 'Templates', icon: FileText },
-  { path: '/employees', label: 'Employees', icon: Users },
   { path: '/teams', label: 'Teams', icon: UsersThree },
   { path: '/users', label: 'Users', icon: UserCircle },
   { path: '/links', label: 'Appraisal Links', icon: LinkIcon },

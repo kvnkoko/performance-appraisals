@@ -1,18 +1,18 @@
 import { useState } from 'react';
-import { MagnifyingGlass } from 'phosphor-react';
+import { MagnifyingGlass, UsersThree, Buildings, List } from 'phosphor-react';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { useApp } from '@/contexts/app-context';
 import type { DirectoryFilters as DirectoryFiltersType } from '@/types';
 import { HIERARCHY_LABELS } from '@/types';
+import { cn } from '@/lib/utils';
 
 /** Hierarchy options for filter (one "Department Leader" option; excludes legacy 'leader') */
 const HIERARCHY_FILTER_OPTIONS: Array<keyof typeof HIERARCHY_LABELS> = ['chairman', 'executive', 'department-leader', 'member', 'hr'];
-import { cn } from '@/lib/utils';
 
 type ViewMode = 'grid' | 'list' | 'compact';
 type SortOption = 'name' | 'department' | 'recent';
+export type GroupByOption = 'none' | 'hierarchy' | 'department' | 'flat';
 
 interface DirectoryFiltersProps {
   filters: DirectoryFiltersType;
@@ -22,6 +22,9 @@ interface DirectoryFiltersProps {
   sort: SortOption;
   onSortChange: (s: SortOption) => void;
   className?: string;
+  showGroupBy?: boolean;
+  groupBy?: GroupByOption;
+  onGroupByChange?: (g: GroupByOption) => void;
 }
 
 export function DirectoryFilters({
@@ -32,6 +35,9 @@ export function DirectoryFilters({
   sort,
   onSortChange,
   className,
+  showGroupBy,
+  groupBy = 'none',
+  onGroupByChange,
 }: DirectoryFiltersProps) {
   const { teams } = useApp();
   const [searchLocal, setSearchLocal] = useState(filters.search);
@@ -105,6 +111,63 @@ export function DirectoryFilters({
           ))}
         </div>
       </form>
+      {showGroupBy && onGroupByChange && (
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Group by">
+          <span className="text-sm font-medium text-muted-foreground shrink-0">Group by:</span>
+          <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
+            <button
+              type="button"
+              onClick={() => onGroupByChange('none')}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors',
+                groupBy === 'none' ? 'bg-accent text-accent-foreground' : 'bg-card hover:bg-muted text-muted-foreground'
+              )}
+              aria-pressed={groupBy === 'none'}
+            >
+              None
+            </button>
+            <button
+              type="button"
+              onClick={() => onGroupByChange('hierarchy')}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-l border-border',
+                groupBy === 'hierarchy' ? 'bg-accent text-accent-foreground' : 'bg-card hover:bg-muted text-muted-foreground'
+              )}
+              aria-pressed={groupBy === 'hierarchy'}
+              title="Group by hierarchy"
+            >
+              <UsersThree size={16} weight="duotone" />
+              Hierarchy
+            </button>
+            <button
+              type="button"
+              onClick={() => onGroupByChange('department')}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-l border-border',
+                groupBy === 'department' ? 'bg-accent text-accent-foreground' : 'bg-card hover:bg-muted text-muted-foreground'
+              )}
+              aria-pressed={groupBy === 'department'}
+              title="Group by department"
+            >
+              <Buildings size={16} weight="duotone" />
+              Department
+            </button>
+            <button
+              type="button"
+              onClick={() => onGroupByChange('flat')}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-l border-border',
+                groupBy === 'flat' ? 'bg-accent text-accent-foreground' : 'bg-card hover:bg-muted text-muted-foreground'
+              )}
+              aria-pressed={groupBy === 'flat'}
+              title="A–Z"
+            >
+              <List size={16} weight="duotone" />
+              A–Z
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -102,11 +102,14 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
     try {
       const employee = await getEmployee(employeeId);
       if (employee) {
+        const validHierarchy = ['chairman', 'executive', 'leader', 'department-leader', 'member', 'hr'].includes(employee.hierarchy as string)
+          ? employee.hierarchy
+          : 'member';
         reset({
           name: employee.name,
           email: employee.email || '',
           role: employee.role,
-          hierarchy: employee.hierarchy,
+          hierarchy: validHierarchy,
           executiveType: employee.executiveType,
           teamId: employee.teamId || '',
           reportsTo: employee.reportsTo || '',
@@ -296,12 +299,15 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
       }
       
       const employmentStatus = (data.employmentStatus ?? 'permanent') as EmploymentStatus;
+      const validHierarchy = ['chairman', 'executive', 'leader', 'department-leader', 'member', 'hr'].includes(data.hierarchy)
+        ? data.hierarchy
+        : 'member';
       const employee: Employee = {
         id: newEmployeeId,
         name: data.name,
         email: data.email || undefined,
         role: data.role,
-        hierarchy: data.hierarchy,
+        hierarchy: validHierarchy,
         executiveType: data.executiveType,
         teamId: data.teamId ? data.teamId : undefined,
         reportsTo,

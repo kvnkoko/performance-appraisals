@@ -14,6 +14,12 @@ interface DirectoryGridProps {
   employeeProfiles: EmployeeProfile[];
   onCardClick: (employee: Employee) => void;
   onEditClick: (employee: Employee) => void;
+  showAdminActions?: boolean;
+  linkedUsers?: Record<string, { name: string; username: string }>;
+  onEditRecord?: (employee: Employee) => void;
+  onDelete?: (id: string, name: string) => void;
+  /** When provided, show only these employees (no internal filter/sort). Used for sectioned layout. */
+  employeesOverride?: Employee[];
 }
 
 export function DirectoryGrid({
@@ -23,10 +29,16 @@ export function DirectoryGrid({
   employeeProfiles,
   onCardClick,
   onEditClick,
+  showAdminActions,
+  linkedUsers,
+  onEditRecord,
+  onDelete,
+  employeesOverride,
 }: DirectoryGridProps) {
   const { employees, teams } = useApp();
 
   const filteredAndSorted = useMemo(() => {
+    if (employeesOverride != null) return employeesOverride;
     let list = employees.slice();
     const search = filters.search.toLowerCase().trim();
     if (search) {
@@ -62,23 +74,27 @@ export function DirectoryGrid({
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
     return list;
-  }, [employees, teams, filters, sort, employeeProfiles]);
+  }, [employees, teams, filters, sort, employeeProfiles, employeesOverride]);
 
   const getProfile = (employeeId: string) => employeeProfiles.find((p) => p.employeeId === employeeId) ?? null;
+  const getLinkedUser = (employeeId: string) => (linkedUsers && linkedUsers[employeeId]) ?? null;
+
+  const commonCardProps = (employee: Employee) => ({
+    employee,
+    profile: getProfile(employee.id),
+    onClick: () => onCardClick(employee),
+    onEdit: () => onEditClick(employee),
+    showAdminActions,
+    linkedUser: showAdminActions ? getLinkedUser(employee.id) : undefined,
+    onEditRecord: showAdminActions && onEditRecord ? () => onEditRecord(employee) : undefined,
+    onDelete: showAdminActions && onDelete ? () => onDelete(employee.id, employee.name) : undefined,
+  });
 
   if (viewMode === 'list') {
     return (
       <div className="directory-grid-cards space-y-3">
         {filteredAndSorted.map((employee, i) => (
-          <ProfileCard
-            key={employee.id}
-            employee={employee}
-            profile={getProfile(employee.id)}
-            onClick={() => onCardClick(employee)}
-            onEdit={() => onEditClick(employee)}
-            variant="list"
-            index={i}
-          />
+          <ProfileCard key={employee.id} variant="list" index={i} {...commonCardProps(employee)} />
         ))}
       </div>
     );
@@ -88,15 +104,7 @@ export function DirectoryGrid({
     return (
       <div className="directory-grid-cards grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 min-w-0 w-full">
         {filteredAndSorted.map((employee, i) => (
-          <ProfileCard
-            key={employee.id}
-            employee={employee}
-            profile={getProfile(employee.id)}
-            onClick={() => onCardClick(employee)}
-            onEdit={() => onEditClick(employee)}
-            variant="compact"
-            index={i}
-          />
+          <ProfileCard key={employee.id} variant="compact" index={i} {...commonCardProps(employee)} />
         ))}
       </div>
     );
@@ -105,15 +113,7 @@ export function DirectoryGrid({
   return (
     <div className="directory-grid-cards grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3 min-w-0 w-full items-start content-start">
       {filteredAndSorted.map((employee, i) => (
-        <ProfileCard
-          key={employee.id}
-          employee={employee}
-          profile={getProfile(employee.id)}
-          onClick={() => onCardClick(employee)}
-          onEdit={() => onEditClick(employee)}
-          variant="grid"
-          index={i}
-        />
+        <ProfileCard key={employee.id} variant="grid" index={i} {...commonCardProps(employee)} />
       ))}
     </div>
   );

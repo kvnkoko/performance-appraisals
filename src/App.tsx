@@ -13,7 +13,6 @@ import { getEmployees, getTemplates, saveEmployee, saveTemplate } from '@/lib/st
 
 // Import pages directly for now (can be lazy loaded later if needed)
 import { TemplatesPage } from '@/pages/templates';
-import { EmployeesPage } from '@/pages/employees';
 import { UsersPage } from '@/pages/users';
 import { LinksPage } from '@/pages/links';
 import { PeriodsPage } from '@/pages/periods';
@@ -138,7 +137,7 @@ function App() {
                         {/* Admin routes */}
                         <Route path="/dashboard" element={<AdminRoute><Dashboard /></AdminRoute>} />
                         <Route path="/templates" element={<AdminRoute><TemplatesPage /></AdminRoute>} />
-                        <Route path="/employees" element={<AdminRoute><EmployeesPage /></AdminRoute>} />
+                        <Route path="/employees" element={<Navigate to="/directory" replace />} />
                         <Route path="/teams" element={<AdminRoute><TeamsPage /></AdminRoute>} />
                         <Route path="/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
                         <Route path="/links" element={<AdminRoute><LinksPage /></AdminRoute>} />
