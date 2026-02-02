@@ -28,6 +28,7 @@ export function OrgChartPage() {
     filterPanelOpen,
     setFilterPanelOpen,
     highlightEmployeeId,
+    employees: activeEmployees,
   } = useOrgChartData();
   const [viewMode, setViewMode] = useState<ViewMode>('tree');
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
@@ -36,11 +37,11 @@ export function OrgChartPage() {
   const searchMatchIds = useMemo(() => {
     if (!filterSearch.trim()) return undefined;
     const q = filterSearch.toLowerCase().trim();
-    const ids = employees
+    const ids = activeEmployees
       .filter((e) => e.name.toLowerCase().includes(q) || e.role?.toLowerCase().includes(q))
       .map((e) => e.id);
     return ids.length > 0 ? new Set(ids) : undefined;
-  }, [employees, filterSearch]);
+  }, [activeEmployees, filterSearch]);
 
   if (loading) {
     return (

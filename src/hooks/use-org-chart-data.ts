@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { buildOrgChartLevels, getDepartmentSubtree } from '@/lib/org-chart-utils';
 import type { OrgChartNode, OrgChartConfig } from '@/types';
+import { LOCKING_STATUSES } from '@/types';
 
 const defaultConfig: OrgChartConfig = {
   rootEmployeeId: null,
@@ -11,6 +12,11 @@ const defaultConfig: OrgChartConfig = {
   maxDepth: 15,
 };
 
+/** Exclude terminated/resigned from org chart – only show currently working employees. */
+function isActiveEmployee(e: { employmentStatus?: string }): boolean {
+  return !LOCKING_STATUSES.includes((e.employmentStatus ?? 'permanent') as 'terminated' | 'resigned');
+}
+
 export function useOrgChartData() {
   const { employees, teams, employeeProfiles } = useApp();
   const [config, setConfig] = useState<OrgChartConfig>(defaultConfig);
@@ -19,12 +25,17 @@ export function useOrgChartData() {
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [highlightEmployeeId, setHighlightEmployeeId] = useState<string | null>(null);
 
+  const activeEmployees = useMemo(
+    () => employees.filter(isActiveEmployee),
+    [employees]
+  );
+
   const filteredEmployees = useMemo(() => {
     const byHierarchy = config.includeHierarchy.length
-      ? employees.filter((e) => config.includeHierarchy.includes(e.hierarchy))
-      : employees;
+      ? activeEmployees.filter((e) => config.includeHierarchy.includes(e.hierarchy))
+      : activeEmployees;
     return byHierarchy;
-  }, [employees, config.includeHierarchy]);
+  }, [activeEmployees, config.includeHierarchy]);
 
   const levels = useMemo(() => {
     return buildOrgChartLevels(filteredEmployees, employeeProfiles, teams, config);
@@ -41,9 +52,9 @@ export function useOrgChartData() {
 
   const getDepartmentTree = useCallback(
     (teamId: string): OrgChartNode | null => {
-      return getDepartmentSubtree(teamId, employees, teams, employeeProfiles);
+      return getDepartmentSubtree(teamId, activeEmployees, teams, employeeProfiles);
     },
-    [employees, teams, employeeProfiles]
+    [activeEmployees, teams, employeeProfiles]
   );
 
   return {
@@ -53,7 +64,7 @@ export function useOrgChartData() {
     expandedIds,
     toggleExpand,
     getDepartmentTree,
-    employees,
+    employees: activeEmployees,
     teams,
     employeeProfiles,
     filterSearch,

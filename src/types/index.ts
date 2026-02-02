@@ -323,12 +323,17 @@ export interface EmployeeProfile {
   updatedAt: string;
 }
 
+/** 'active' = currently working (exclude terminated/resigned); 'all' = all employees */
+export type EmploymentStatusFilter = 'active' | 'all';
+
 export interface DirectoryFilters {
   search: string;
   department: string | null;
   hierarchy: string | null;
   location: string | null;
   skills: string[];
+  /** Default 'active' for HR: show only currently working. 'all' includes terminated/resigned. */
+  employmentStatus?: EmploymentStatusFilter;
 }
 
 export interface OrgChartNode {

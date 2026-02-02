@@ -10,8 +10,8 @@ import { useToast } from '@/contexts/toast-context';
 import { DirectoryFilters, type GroupByOption } from './DirectoryFilters';
 import { DirectoryGrid } from './DirectoryGrid';
 import { ProfileEditModal } from './ProfileEditModal';
-import type { Employee, DirectoryFilters as DirectoryFiltersType } from '@/types';
-import { isDepartmentLeader } from '@/types';
+import type { Employee, DirectoryFilters as DirectoryFiltersType, EmploymentStatusFilter } from '@/types';
+import { isDepartmentLeader, LOCKING_STATUSES } from '@/types';
 import { cn } from '@/lib/utils';
 import { getEmployees, getUserByEmployeeId, deleteEmployee } from '@/lib/storage';
 
@@ -21,7 +21,13 @@ const defaultFilters: DirectoryFiltersType = {
   hierarchy: null,
   location: null,
   skills: [],
+  employmentStatus: 'active',
 };
+
+function filterByEmploymentStatus(employees: Employee[], filter: EmploymentStatusFilter): Employee[] {
+  if (filter === 'all') return employees;
+  return employees.filter((e) => !LOCKING_STATUSES.includes((e.employmentStatus ?? 'permanent') as 'terminated' | 'resigned'));
+}
 
 const hierarchyOrder: Array<{ key: string; label: string; predicate: (e: Employee) => boolean }> = [
   { key: 'chairman', label: 'Chairman', predicate: (e) => e.hierarchy === 'chairman' },
@@ -125,7 +131,7 @@ export function DirectoryPage() {
   }, [admin, refresh, loadLinkedUsers]);
 
   const filteredForSections = useMemo(() => {
-    let list = employees.slice();
+    let list = filterByEmploymentStatus(employees, filters.employmentStatus ?? 'active');
     const search = filters.search.toLowerCase().trim();
     if (search) {
       const teamNames = new Map(teams.map((t) => [t.id, t.name.toLowerCase()]));
@@ -157,7 +163,7 @@ export function DirectoryPage() {
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
     return list;
-  }, [employees, teams, filters, sort, employeeProfiles]);
+  }, [employees, teams, filters, sort, employeeProfiles, filters.employmentStatus]);
 
   const groups = useMemo(() => {
     if (groupBy === 'none') return null;
@@ -229,6 +235,17 @@ export function DirectoryPage() {
     setTimeout(() => loadLinkedUsers(), 500);
   };
 
+  const showSectioned = admin && groupBy !== 'none' && groups && groups.length > 0;
+  const empty = employees.length === 0;
+  const emptyFiltered = !empty && filteredForSections.length === 0;
+  const displayCount = useMemo(
+    () =>
+      (filters.employmentStatus ?? 'active') === 'all'
+        ? employees.length
+        : employees.filter((e) => !LOCKING_STATUSES.includes((e.employmentStatus ?? 'permanent') as 'terminated' | 'resigned')).length,
+    [employees, filters.employmentStatus]
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[320px]">
@@ -236,10 +253,6 @@ export function DirectoryPage() {
       </div>
     );
   }
-
-  const showSectioned = admin && groupBy !== 'none' && groups && groups.length > 0;
-  const empty = employees.length === 0;
-  const emptyFiltered = !empty && filteredForSections.length === 0;
 
   return (
     <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12 min-w-0 w-full max-w-full">
@@ -261,8 +274,8 @@ export function DirectoryPage() {
             <div className="flex items-center gap-4 mt-3 sm:mt-4">
               <div className="flex items-center gap-2 text-muted-foreground text-sm sm:text-base">
                 <Users size={20} weight="duotone" className="sm:w-6 sm:h-6 shrink-0" />
-                <span className="text-xl sm:text-2xl font-semibold text-foreground">{employees.length}</span>
-                <span>people</span>
+                <span className="text-xl sm:text-2xl font-semibold text-foreground">{displayCount}</span>
+                <span>{(filters.employmentStatus ?? 'active') === 'active' ? 'currently working' : 'people'}</span>
               </div>
             </div>
           </div>

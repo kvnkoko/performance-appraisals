@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { ProfileCard } from './ProfileCard';
 import type { Employee, EmployeeProfile, DirectoryFilters } from '@/types';
-import { isDepartmentLeader } from '@/types';
+import { isDepartmentLeader, LOCKING_STATUSES } from '@/types';
 import { useApp } from '@/contexts/app-context';
 
 type ViewMode = 'grid' | 'list' | 'compact';
@@ -39,7 +39,11 @@ export function DirectoryGrid({
 
   const filteredAndSorted = useMemo(() => {
     if (employeesOverride != null) return employeesOverride;
-    let list = employees.slice();
+    const employmentFilter = filters.employmentStatus ?? 'active';
+    let list =
+      employmentFilter === 'all'
+        ? employees.slice()
+        : employees.filter((e) => !LOCKING_STATUSES.includes((e.employmentStatus ?? 'permanent') as 'terminated' | 'resigned'));
     const search = filters.search.toLowerCase().trim();
     if (search) {
       const teamNames = new Map(teams.map((t) => [t.id, t.name.toLowerCase()]));

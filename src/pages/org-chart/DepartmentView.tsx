@@ -12,14 +12,14 @@ interface DepartmentViewProps {
 
 export function DepartmentView({ onSelectEmployee, className }: DepartmentViewProps) {
   const { teams, employees } = useApp();
-  const { getDepartmentTree } = useOrgChartData();
+  const { getDepartmentTree, employees: activeEmployees } = useOrgChartData();
 
   return (
     <div className={cn('space-y-6', className)}>
       {teams.map((team) => {
         const root = getDepartmentTree(team.id);
         if (!root) return null;
-        const teamMembers = employees.filter((e) => e.teamId === team.id);
+        const teamMembers = activeEmployees.filter((e) => e.teamId === team.id);
         return (
           <section key={team.id} className="rounded-xl border border-border bg-card/50 p-5">
             <h3 className="text-lg font-semibold text-foreground mb-2">{team.name}</h3>

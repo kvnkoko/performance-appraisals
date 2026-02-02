@@ -3,7 +3,7 @@ import { MagnifyingGlass, UsersThree, Buildings, List } from 'phosphor-react';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { useApp } from '@/contexts/app-context';
-import type { DirectoryFilters as DirectoryFiltersType } from '@/types';
+import type { DirectoryFilters as DirectoryFiltersType, EmploymentStatusFilter } from '@/types';
 import { HIERARCHY_LABELS } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -25,6 +25,8 @@ interface DirectoryFiltersProps {
   showGroupBy?: boolean;
   groupBy?: GroupByOption;
   onGroupByChange?: (g: GroupByOption) => void;
+  /** Show employment status filter (Currently working / All employees). Default true. */
+  showEmploymentFilter?: boolean;
 }
 
 export function DirectoryFilters({
@@ -38,6 +40,7 @@ export function DirectoryFilters({
   showGroupBy,
   groupBy = 'none',
   onGroupByChange,
+  showEmploymentFilter = true,
 }: DirectoryFiltersProps) {
   const { teams } = useApp();
   const [searchLocal, setSearchLocal] = useState(filters.search);
@@ -66,6 +69,17 @@ export function DirectoryFilters({
             className="pl-10 bg-card/80 border-border/60 backdrop-blur-sm"
           />
         </div>
+        {showEmploymentFilter && (
+          <Select
+            value={filters.employmentStatus ?? 'active'}
+            onChange={(e) => onFiltersChange({ ...filters, employmentStatus: (e.target.value as EmploymentStatusFilter) || 'active' })}
+            className="w-full sm:w-[200px] min-w-0"
+            aria-label="Filter by employment status"
+          >
+            <option value="active">Currently working</option>
+            <option value="all">All employees</option>
+          </Select>
+        )}
         <Select
           value={filters.department ?? ''}
           onChange={(e) => onFiltersChange({ ...filters, department: e.target.value || null })}
