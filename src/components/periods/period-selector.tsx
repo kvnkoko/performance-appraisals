@@ -71,7 +71,7 @@ export function PeriodSelector({
         )}
         {periods.map((period) => (
           <option key={period.id} value={period.id}>
-            {period.name} {period.status === 'active' ? '✓' : period.status === 'completed' ? '✓' : ''}
+            {period.name}
           </option>
         ))}
         {showCreateOption && onCreateNew && periods.length > 0 && (
