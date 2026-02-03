@@ -39,13 +39,14 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
     return (
       <div
         className={cn(
-          'flex flex-col w-full rounded-lg border border-border bg-card shadow-card overflow-hidden transition-colors hover:bg-muted/50'
+          'flex flex-col w-full rounded-xl border border-border bg-card shadow-card overflow-hidden',
+          'transition-colors duration-200 hover:bg-muted/40 hover:border-border/80'
         )}
       >
         <button
           type="button"
           onClick={onClick}
-          className="flex items-center gap-3 w-full p-3 text-left min-w-0"
+          className="flex items-center gap-4 w-full p-4 text-left min-w-0"
         >
           <Avatar
             src={profile?.profilePicture}
@@ -60,25 +61,28 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
                 : undefined
             }
           />
-          <div className="min-w-0 flex-1">
-            <p className="font-medium truncate">{employee.name}</p>
-            <p className="text-xs text-muted-foreground truncate">{employee.role}</p>
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <p className="font-medium truncate text-sm leading-snug">{employee.name}</p>
+            <p className="text-xs text-muted-foreground truncate leading-relaxed">{employee.role}</p>
           </div>
-          <HierarchyBadge hierarchy={employee.hierarchy} size="sm" />
+          <HierarchyBadge hierarchy={employee.hierarchy} size="sm" className="shrink-0" />
         </button>
         {showAdmin && (
-          <div className="flex items-center gap-2 px-3 pb-2 pt-0 border-t border-border/60 flex-wrap" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="flex items-center gap-3 px-4 py-3 pt-2 border-t border-border/60 flex-wrap gap-y-2"
+            onClick={(e) => e.stopPropagation()}
+          >
             {onEditRecord && (
-              <button type="button" onClick={onEditRecord} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1" aria-label="Edit record">
-                <IdentificationCard size={14} /> Edit record
+              <button type="button" onClick={onEditRecord} className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 transition-colors" aria-label="Edit record">
+                <IdentificationCard size={14} className="shrink-0" /> Edit record
               </button>
             )}
             {onDelete && (
-              <button type="button" onClick={onDelete} className="text-xs text-muted-foreground hover:text-destructive inline-flex items-center gap-1" aria-label="Delete">
-                <Trash size={14} /> Delete
+              <button type="button" onClick={onDelete} className="text-xs text-muted-foreground hover:text-destructive inline-flex items-center gap-1.5 transition-colors" aria-label="Delete">
+                <Trash size={14} className="shrink-0" /> Delete
               </button>
             )}
-            <span className="text-[11px] text-muted-foreground ml-auto">
+            <span className="text-[11px] text-muted-foreground ml-auto shrink-0">
               {linkedUser ? `Linked: @${linkedUser.username}` : 'Not linked'}
             </span>
           </div>
@@ -97,13 +101,13 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
 
   if (variant === 'list') {
     return (
-      <AnimatedCard delay={index * 0.03}>
+      <AnimatedCard delay={index * 0.03} className="group/card transition-all duration-200 hover:shadow-md hover:border-primary/25">
         <div
           role="button"
           tabIndex={0}
           onClick={onClick}
           onKeyDown={handleCardKeyDown}
-          className="flex w-full items-center gap-4 text-left cursor-pointer rounded-lg hover:bg-muted/50 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 [outline-offset:2px]"
+          className="flex w-full items-center gap-5 text-left cursor-pointer rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 [outline-offset:2px] transition-colors duration-200 hover:bg-muted/40 -m-1 p-4"
         >
           <Avatar
             src={profile?.profilePicture}
@@ -117,20 +121,20 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
                 : undefined
             }
           />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-semibold text-foreground">{employee.name}</h3>
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex items-center gap-2 flex-wrap gap-y-1">
+              <h3 className="font-semibold text-foreground leading-tight">{employee.name}</h3>
               <HierarchyBadge hierarchy={employee.hierarchy} size="sm" />
             </div>
-            <p className="text-sm text-muted-foreground mt-0.5">{employee.role}</p>
+            <p className="text-sm text-muted-foreground leading-relaxed">{employee.role}</p>
             {team && (
-              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                <Buildings size={12} /> {team.name}
+              <p className="text-xs text-muted-foreground flex items-center gap-1 leading-relaxed">
+                <Buildings size={12} className="shrink-0" /> {team.name}
               </p>
             )}
-            {headline && <p className="text-sm mt-2 line-clamp-2 text-muted-foreground">{headline}</p>}
+            {headline && <p className="text-sm line-clamp-2 text-muted-foreground leading-relaxed">{headline}</p>}
           </div>
-          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-2 shrink-0 opacity-70 group-hover/card:opacity-100 transition-opacity duration-200" onClick={(e) => e.stopPropagation()}>
             {showAdminActions && isAdmin() && (
               <>
                 {onEditRecord && (

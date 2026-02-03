@@ -106,7 +106,7 @@ export function DirectoryGrid({
 
   if (viewMode === 'compact') {
     return (
-      <div className="directory-grid-cards grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 min-w-0 w-full">
+      <div className="directory-grid-cards grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 min-w-0 w-full">
         {filteredAndSorted.map((employee, i) => (
           <ProfileCard key={employee.id} variant="compact" index={i} {...commonCardProps(employee)} />
         ))}

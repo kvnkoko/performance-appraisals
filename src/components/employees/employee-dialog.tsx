@@ -102,14 +102,17 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
     try {
       const employee = await getEmployee(employeeId);
       if (employee) {
-        const validHierarchy = ['chairman', 'executive', 'leader', 'department-leader', 'member', 'hr'].includes(employee.hierarchy as string)
-          ? employee.hierarchy
+        const raw = employee.hierarchy as string;
+        const validHierarchy = ['chairman', 'executive', 'leader', 'department-leader', 'member', 'hr'].includes(raw)
+          ? raw
           : 'member';
+        // Map legacy 'leader' to 'department-leader' for form display (Select has department-leader, not leader)
+        const formHierarchy = validHierarchy === 'leader' ? 'department-leader' : validHierarchy;
         reset({
           name: employee.name,
           email: employee.email || '',
           role: employee.role,
-          hierarchy: validHierarchy,
+          hierarchy: formHierarchy,
           executiveType: employee.executiveType,
           teamId: employee.teamId || '',
           reportsTo: employee.reportsTo || '',
@@ -931,6 +934,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
               <option value="chairman">Chairman</option>
               <option value="executive">Executive</option>
               <option value="department-leader">Department Leader</option>
+              <option value="leader">Department Leader</option>
               <option value="member">Team Member</option>
               <option value="hr">HR Personnel</option>
             </Select>
