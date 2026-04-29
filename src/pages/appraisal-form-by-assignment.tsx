@@ -21,7 +21,7 @@ import {
 } from '@/lib/storage';
 import { generateId, calculateScore } from '@/lib/utils';
 import { useToast } from '@/contexts/toast-context';
-import { RatingSelector } from '@/components/ui/rating-selector';
+import { RatingLimitSummary, RatingSelector } from '@/components/ui/rating-selector';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useTheme } from '@/hooks/use-theme';
@@ -30,6 +30,15 @@ import { BrandLogo } from '@/components/shared/brand-logo';
 import type { AppraisalResponse, Category, CategoryItem } from '@/types';
 import { RATING_LABELS } from '@/types';
 import type { AppraisalAssignment } from '@/types';
+import {
+  RATING_VALUES,
+  canSelectRating,
+  createEmptyRatingCounts,
+  getRatingLimit,
+  getRatingLimitMessage,
+  type RatingCounts,
+  type RatingValue,
+} from '@/lib/rating-limits';
 
 const responseSchema = z.record(z.union([z.string(), z.number()]));
 type ResponseFormData = z.infer<typeof responseSchema>;
@@ -140,6 +149,22 @@ export function AppraisalFormByAssignmentPage() {
 
   const onSubmit = async (data: ResponseFormData) => {
     if (!assignment || !template) return;
+
+    const submittedRatingCounts = getRatingCounts(data);
+    const overLimitRating = RATING_VALUES.find((rating) => {
+      const limit = getRatingLimit(rating);
+      return limit !== null && submittedRatingCounts[rating] > limit;
+    });
+
+    if (overLimitRating) {
+      toast({
+        title: 'Rating limit reached',
+        description: getRatingLimitMessage(overLimitRating),
+        variant: 'error',
+      });
+      return;
+    }
+
     setSubmitting(true);
     try {
       const allItems: Array<{ id: string; type: string; weight: number }> = [];
@@ -232,6 +257,33 @@ export function AppraisalFormByAssignmentPage() {
 
   const scores = calculateQuestionScores();
   const { totalWeightScore, totalPercentage } = calculateTotalScore();
+  const ratingCounts = getRatingCounts(watchedValues);
+
+  function getRatingCounts(values: ResponseFormData): RatingCounts {
+    const counts = createEmptyRatingCounts();
+    categories.forEach((category) => {
+      category.items.forEach((item) => {
+        if (item.type !== 'rating-1-5') return;
+        const rating = Number(values[item.id]);
+        if (RATING_VALUES.includes(rating as RatingValue)) {
+          counts[rating as RatingValue] += 1;
+        }
+      });
+    });
+    return counts;
+  }
+
+  const handleRatingChange = (itemId: string, rating: RatingValue, currentValue?: number) => {
+    if (!canSelectRating(rating, ratingCounts, currentValue)) {
+      toast({
+        title: 'Rating limit reached',
+        description: getRatingLimitMessage(rating),
+        variant: 'error',
+      });
+      return;
+    }
+    setValue(itemId, rating, { shouldDirty: true, shouldValidate: true });
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -256,6 +308,8 @@ export function AppraisalFormByAssignmentPage() {
             <span className="font-semibold text-foreground">{employee.name}</span>
           </div>
         </div>
+
+        <RatingLimitSummary ratingCounts={ratingCounts} className="mb-5 lg:mb-6" />
 
         <form onSubmit={handleSubmit(onSubmit)}>
           <div className="hidden lg:block">
@@ -299,19 +353,63 @@ export function AppraisalFormByAssignmentPage() {
                                         {[1, 2, 3, 4, 5].map((r) => {
                                           const isSelected = Number(currentValue) === r;
                                           const label = RATING_LABELS[r];
+                                          const isBlocked = !canSelectRating(r as RatingValue, ratingCounts, Number(currentValue));
+                                          const limit = getRatingLimit(r as RatingValue);
+                                          const remaining = limit === null ? null : Math.max(limit - ratingCounts[r as RatingValue], 0);
+                                          const statusText = limit === null
+                                            ? 'Open'
+                                            : isSelected
+                                              ? 'Selected'
+                                              : remaining === 0
+                                                ? 'Full'
+                                                : `${remaining} left`;
                                           return (
                                             <label
                                               key={r}
+                                              onClick={(event) => {
+                                                if (isBlocked) {
+                                                  event.preventDefault();
+                                                  toast({
+                                                    title: 'Rating limit reached',
+                                                    description: getRatingLimitMessage(r as RatingValue),
+                                                    variant: 'error',
+                                                  });
+                                                }
+                                              }}
                                               className={`flex flex-col items-center justify-center cursor-pointer rounded-md border min-w-[3.5rem] max-w-[4.5rem] py-2.5 px-1.5 transition-all duration-200 ${
-                                                isSelected ? 'bg-primary text-primary-foreground border-primary ring-1 ring-primary/20' : 'bg-background border-border hover:bg-muted/50'
-                                              }`}
+                                                isSelected
+                                                  ? 'bg-primary text-primary-foreground border-primary ring-1 ring-primary/20'
+                                                  : isBlocked
+                                                    ? 'bg-muted/50 border-border/60 text-muted-foreground/50 cursor-not-allowed'
+                                                    : 'bg-background border-border hover:bg-muted/50'
+                                              } ${!isBlocked ? 'hover:scale-[1.02]' : ''}`}
                                             >
-                                              <input type="radio" {...register(item.id)} value={r} className="sr-only" required={item.required} />
+                                              <input
+                                                type="radio"
+                                                {...register(item.id)}
+                                                value={r}
+                                                checked={isSelected}
+                                                onChange={() => handleRatingChange(item.id, r as RatingValue, Number(currentValue))}
+                                                disabled={isBlocked}
+                                                className="sr-only"
+                                                required={item.required}
+                                              />
                                               <span className="text-base font-semibold mb-1">{r}</span>
                                               <span className={`text-[9px] leading-tight text-center break-words w-full ${isSelected ? 'text-primary-foreground/90' : 'text-muted-foreground'}`}>
                                                 {label.label.split(' ').map((word, i) => (
                                                   <span key={i}>{word}{i < label.label.split(' ').length - 1 && <br />}</span>
                                                 ))}
+                                              </span>
+                                              <span className={`mt-2 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
+                                                isSelected
+                                                  ? 'bg-primary-foreground/20 text-primary-foreground/90'
+                                                  : isBlocked
+                                                    ? 'bg-destructive/10 text-destructive'
+                                                    : remaining === 1
+                                                      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-300'
+                                                      : 'bg-muted text-muted-foreground'
+                                              }`}>
+                                                {statusText}
                                               </span>
                                             </label>
                                           );
@@ -394,7 +492,13 @@ export function AppraisalFormByAssignmentPage() {
                         {item.type === 'rating-1-5' ? (
                           <RatingSelector
                             value={currentValue ? Number(currentValue) : undefined}
-                            onChange={(v) => setValue(item.id, v)}
+                            onChange={(v) => handleRatingChange(item.id, v as RatingValue, Number(currentValue))}
+                            ratingCounts={ratingCounts}
+                            onLimitReached={(rating) => toast({
+                              title: 'Rating limit reached',
+                              description: getRatingLimitMessage(rating),
+                              variant: 'error',
+                            })}
                             required={item.required}
                             showRequiredError={submitCount > 0}
                           />
