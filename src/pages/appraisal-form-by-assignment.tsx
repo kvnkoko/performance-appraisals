@@ -36,6 +36,7 @@ import {
   createEmptyRatingCounts,
   getRatingLimit,
   getRatingLimitMessage,
+  getRatingLimitOptionsForAppraisal,
   type RatingCounts,
   type RatingValue,
 } from '@/lib/rating-limits';
@@ -151,15 +152,20 @@ export function AppraisalFormByAssignmentPage() {
     if (!assignment || !template) return;
 
     const submittedRatingCounts = getRatingCounts(data);
+    const ratingLimitOptions = getRatingLimitOptionsForAppraisal({
+      templateType: template?.type,
+      relationshipType: assignment?.relationshipType,
+      appraiserHierarchy: appraiser?.hierarchy,
+    });
     const overLimitRating = RATING_VALUES.find((rating) => {
-      const limit = getRatingLimit(rating);
+      const limit = getRatingLimit(rating, ratingLimitOptions);
       return limit !== null && submittedRatingCounts[rating] > limit;
     });
 
     if (overLimitRating) {
       toast({
         title: 'Rating limit reached',
-        description: getRatingLimitMessage(overLimitRating),
+        description: getRatingLimitMessage(overLimitRating, ratingLimitOptions),
         variant: 'error',
       });
       return;
@@ -258,6 +264,12 @@ export function AppraisalFormByAssignmentPage() {
   const scores = calculateQuestionScores();
   const { totalWeightScore, totalPercentage } = calculateTotalScore();
   const ratingCounts = getRatingCounts(watchedValues);
+  const ratingLimitOptions = getRatingLimitOptionsForAppraisal({
+    templateType: template?.type,
+    relationshipType: assignment?.relationshipType,
+    appraiserHierarchy: appraiser?.hierarchy,
+  });
+  const ratingLimitsEnabled = ratingLimitOptions.limitsEnabled !== false;
 
   function getRatingCounts(values: ResponseFormData): RatingCounts {
     const counts = createEmptyRatingCounts();
@@ -274,10 +286,10 @@ export function AppraisalFormByAssignmentPage() {
   }
 
   const handleRatingChange = (itemId: string, rating: RatingValue, currentValue?: number) => {
-    if (!canSelectRating(rating, ratingCounts, currentValue)) {
+    if (!canSelectRating(rating, ratingCounts, currentValue, ratingLimitOptions)) {
       toast({
         title: 'Rating limit reached',
-        description: getRatingLimitMessage(rating),
+        description: getRatingLimitMessage(rating, ratingLimitOptions),
         variant: 'error',
       });
       return;
@@ -309,7 +321,11 @@ export function AppraisalFormByAssignmentPage() {
           </div>
         </div>
 
-        <RatingLimitSummary ratingCounts={ratingCounts} className="mb-5 lg:mb-6" />
+        <RatingLimitSummary
+          ratingCounts={ratingCounts}
+          limitsEnabled={ratingLimitsEnabled}
+          className="mb-5 lg:mb-6"
+        />
 
         <form onSubmit={handleSubmit(onSubmit)}>
           <div className="hidden lg:block">
@@ -353,8 +369,9 @@ export function AppraisalFormByAssignmentPage() {
                                         {[1, 2, 3, 4, 5].map((r) => {
                                           const isSelected = Number(currentValue) === r;
                                           const label = RATING_LABELS[r];
-                                          const isBlocked = !canSelectRating(r as RatingValue, ratingCounts, Number(currentValue));
-                                          const limit = getRatingLimit(r as RatingValue);
+                                          const isBlocked = ratingLimitsEnabled
+                                            && !canSelectRating(r as RatingValue, ratingCounts, Number(currentValue), ratingLimitOptions);
+                                          const limit = getRatingLimit(r as RatingValue, ratingLimitOptions);
                                           const remaining = limit === null ? null : Math.max(limit - ratingCounts[r as RatingValue], 0);
                                           const statusText = limit === null
                                             ? 'Open'
@@ -371,7 +388,7 @@ export function AppraisalFormByAssignmentPage() {
                                                   event.preventDefault();
                                                   toast({
                                                     title: 'Rating limit reached',
-                                                    description: getRatingLimitMessage(r as RatingValue),
+                                                    description: getRatingLimitMessage(r as RatingValue, ratingLimitOptions),
                                                     variant: 'error',
                                                   });
                                                 }
@@ -400,6 +417,7 @@ export function AppraisalFormByAssignmentPage() {
                                                   <span key={i}>{word}{i < label.label.split(' ').length - 1 && <br />}</span>
                                                 ))}
                                               </span>
+                                              {ratingLimitsEnabled && (
                                               <span className={`mt-2 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
                                                 isSelected
                                                   ? 'bg-primary-foreground/20 text-primary-foreground/90'
@@ -411,6 +429,7 @@ export function AppraisalFormByAssignmentPage() {
                                               }`}>
                                                 {statusText}
                                               </span>
+                                              )}
                                             </label>
                                           );
                                         })}
@@ -493,10 +512,11 @@ export function AppraisalFormByAssignmentPage() {
                           <RatingSelector
                             value={currentValue ? Number(currentValue) : undefined}
                             onChange={(v) => handleRatingChange(item.id, v as RatingValue, Number(currentValue))}
-                            ratingCounts={ratingCounts}
+                            ratingCounts={ratingLimitsEnabled ? ratingCounts : undefined}
+                            limitsEnabled={ratingLimitsEnabled}
                             onLimitReached={(rating) => toast({
                               title: 'Rating limit reached',
-                              description: getRatingLimitMessage(rating),
+                              description: getRatingLimitMessage(rating, ratingLimitOptions),
                               variant: 'error',
                             })}
                             required={item.required}

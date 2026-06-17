@@ -6,6 +6,7 @@ import {
   getRatingLimit,
   getRatingUsageTone,
   type RatingCounts,
+  type RatingLimitOptions,
   type RatingValue,
 } from '@/lib/rating-limits';
 
@@ -18,11 +19,13 @@ interface RatingSelectorProps {
   showRequiredError?: boolean;
   ratingCounts?: RatingCounts;
   onLimitReached?: (rating: RatingValue) => void;
+  limitsEnabled?: boolean;
 }
 
 interface RatingLimitSummaryProps {
   ratingCounts: RatingCounts;
   className?: string;
+  limitsEnabled?: boolean;
 }
 
 const toneClasses = {
@@ -32,7 +35,13 @@ const toneClasses = {
   full: 'border-destructive/30 bg-destructive/10 text-destructive shadow-destructive/10',
 } as const;
 
-export function RatingLimitSummary({ ratingCounts, className }: RatingLimitSummaryProps) {
+export function RatingLimitSummary({ ratingCounts, className, limitsEnabled = true }: RatingLimitSummaryProps) {
+  const ratingLimitOptions: RatingLimitOptions = { limitsEnabled };
+
+  if (!limitsEnabled) {
+    return null;
+  }
+
   return (
     <div className={cn(
       'rounded-2xl border border-border/60 bg-card/70 p-3 shadow-sm backdrop-blur',
@@ -47,8 +56,8 @@ export function RatingLimitSummary({ ratingCounts, className }: RatingLimitSumma
       <div className="grid gap-2 sm:grid-cols-5">
         {RATING_VALUES.map((rating) => {
           const count = ratingCounts[rating];
-          const limit = getRatingLimit(rating);
-          const tone = getRatingUsageTone(rating, count);
+          const limit = getRatingLimit(rating, ratingLimitOptions);
+          const tone = getRatingUsageTone(rating, count, ratingLimitOptions);
           const label = RATING_LABELS[rating].label;
           const status = limit === null
             ? `${count} used`
@@ -91,7 +100,9 @@ export function RatingSelector({
   showRequiredError = false,
   ratingCounts,
   onLimitReached,
+  limitsEnabled = true,
 }: RatingSelectorProps) {
+  const ratingLimitOptions: RatingLimitOptions = { limitsEnabled };
   const getColorClasses = (rating: RatingValue, isSelected: boolean, isBlocked: boolean) => {
     if (isSelected) {
       return 'bg-primary text-primary-foreground border-primary shadow-md ring-1 ring-primary/20';
@@ -108,10 +119,12 @@ export function RatingSelector({
         {RATING_VALUES.map((rating) => {
           const isSelected = value === rating;
           const label = RATING_LABELS[rating];
-          const limit = getRatingLimit(rating);
+          const limit = getRatingLimit(rating, ratingLimitOptions);
           const count = ratingCounts?.[rating] ?? 0;
-          const isBlocked = ratingCounts ? !canSelectRating(rating, ratingCounts, value) : false;
-          const tone = getRatingUsageTone(rating, count);
+          const isBlocked = ratingCounts
+            ? !canSelectRating(rating, ratingCounts, value, ratingLimitOptions)
+            : false;
+          const tone = getRatingUsageTone(rating, count, ratingLimitOptions);
           const remaining = limit === null ? null : Math.max(limit - count, 0);
           const statusText = limit === null
             ? 'Open'
