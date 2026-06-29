@@ -211,7 +211,10 @@ export async function getEmployeesFromSupabase(): Promise<Employee[]> {
       executiveType: e.executive_type ?? undefined,
       teamId: e.team_id,
       reportsTo: e.reports_to,
-      employmentStatus: (e.employment_status ?? 'permanent') as Employee['employmentStatus'],
+      // Keep undefined when the column is genuinely absent from the schema so the
+      // storage layer can tell "column missing" apart from a real value. Do NOT
+      // default to 'permanent' here, or a stale local cache could appear authoritative.
+      employmentStatus: (e.employment_status ?? undefined) as Employee['employmentStatus'],
       createdAt: e.created_at,
       updatedAt: e.updated_at,
     }));
@@ -245,7 +248,10 @@ export async function getEmployeeFromSupabase(id: string): Promise<Employee | un
       executiveType: data.executive_type ?? undefined,
       teamId: data.team_id,
       reportsTo: data.reports_to,
-      employmentStatus: (data.employment_status ?? 'permanent') as Employee['employmentStatus'],
+      // Keep undefined when the column is genuinely absent from the schema so the
+      // storage layer can tell "column missing" apart from a real value. Do NOT
+      // default to 'permanent' here, or a stale local cache could appear authoritative.
+      employmentStatus: (data.employment_status ?? undefined) as Employee['employmentStatus'],
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };

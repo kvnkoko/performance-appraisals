@@ -272,6 +272,29 @@ export async function deleteTemplate(id: string): Promise<void> {
   await database.delete('templates', id);
 }
 
+/**
+ * Reconcile a Supabase employee record with its locally-cached copy.
+ *
+ * Supabase is the SINGLE SOURCE OF TRUTH for org-structure fields (reports-to,
+ * team, employment status). A stale local cache must NEVER win, otherwise a
+ * manager/team change made on one device gets silently reverted when another
+ * device with an old cache later re-saves the record — which then breaks the
+ * auto-generated appraisals that depend on those relationships.
+ *
+ * The local cache is only used to fill a field that Supabase did not return at
+ * all (`undefined` => the column is genuinely missing from the schema). A real
+ * value — including an intentional `null`/cleared manager or team — always wins.
+ */
+function reconcileEmployeeWithLocal(remote: Employee, local: Employee | undefined): Employee {
+  const reportsTo = remote.reportsTo !== undefined ? remote.reportsTo : local?.reportsTo;
+  const teamId = remote.teamId !== undefined ? remote.teamId : local?.teamId;
+  const employmentStatus =
+    remote.employmentStatus !== undefined
+      ? remote.employmentStatus
+      : (local?.employmentStatus ?? 'permanent');
+  return { ...remote, reportsTo, teamId, employmentStatus };
+}
+
 // Employees - Supabase as single source of truth when configured; fallback to IndexedDB for read-your-writes.
 // Never throws: returns [] on any failure so directory never disappears due to unhandled rejection.
 export async function getEmployees(): Promise<Employee[]> {
@@ -284,21 +307,14 @@ export async function getEmployees(): Promise<Employee[]> {
         const supabaseEmployees = await getEmployeesFromSupabase();
         if (import.meta.env.DEV) console.log('getEmployees: Found', supabaseEmployees.length, 'employees in Supabase');
         if (supabaseEmployees.length > 0) {
-          // Merge IndexedDB over Supabase for employment_status, team_id, reports_to so local saves persist when Supabase lacks columns
-          let merged = supabaseEmployees;
+          // Supabase is the source of truth. Only fall back to the local cache for a
+          // field Supabase did not return (missing column); never let a stale local
+          // value override a real cloud value, or relationship edits would revert.
+          let merged = supabaseEmployees.map((se) => reconcileEmployeeWithLocal(se, undefined));
           if (database.objectStoreNames.contains('employees')) {
             const idbEmployees = await database.getAll('employees');
             const idbById = new Map(idbEmployees.map((e) => [e.id, e]));
-            merged = supabaseEmployees.map((se) => {
-              const local = idbById.get(se.id);
-              if (!local) return se;
-              return {
-                ...se,
-                employmentStatus: local.employmentStatus ?? se.employmentStatus,
-                teamId: local.teamId ?? se.teamId,
-                reportsTo: local.reportsTo ?? se.reportsTo,
-              };
-            });
+            merged = supabaseEmployees.map((se) => reconcileEmployeeWithLocal(se, idbById.get(se.id)));
             const tx = database.transaction('employees', 'readwrite');
             const store = tx.objectStore('employees');
             await store.clear();
@@ -337,19 +353,14 @@ export async function getEmployee(id: string): Promise<Employee | undefined> {
       const { getEmployeeFromSupabase } = await import('./supabase-storage');
       const supabaseEmployee = await getEmployeeFromSupabase(id);
       if (supabaseEmployee) {
-        // Merge employment_status, team_id, reports_to from IndexedDB so local saves persist when Supabase lacks columns
+        // Supabase is the source of truth. The local cache only fills a field that
+        // Supabase did not return (missing column); a stale local value must never
+        // override a real cloud value, or a manager/team change would silently revert.
         if (database.objectStoreNames.contains('employees')) {
           const local = await database.get('employees', id);
-          if (local) {
-            return {
-              ...supabaseEmployee,
-              employmentStatus: local.employmentStatus ?? supabaseEmployee.employmentStatus,
-              teamId: local.teamId ?? supabaseEmployee.teamId,
-              reportsTo: local.reportsTo ?? supabaseEmployee.reportsTo,
-            };
-          }
+          return reconcileEmployeeWithLocal(supabaseEmployee, local);
         }
-        return supabaseEmployee;
+        return reconcileEmployeeWithLocal(supabaseEmployee, undefined);
       }
       // Supabase returned nothing – employee was deleted; clear local cache so other devices don't see stale employee
       try {
