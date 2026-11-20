@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { getEmployee, saveEmployee, saveUser, getUserByUsername, getUsers, getUserByEmployeeId } from '@/lib/storage';
-import { generateId, hashPassword } from '@/lib/utils';
+import { generateId } from '@/lib/utils';
 import { getDepartmentLeaderId } from '@/lib/org-chart-utils';
 import type { Employee, User, ExecutiveType, EmploymentStatus } from '@/types';
 import { isDepartmentLeader, LOCKING_STATUSES } from '@/types';
@@ -398,12 +398,11 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           }
           
           const password = generateRandomPassword();
-          const passwordHash = await hashPassword(password);
           
           const user: User = {
             id: generateId(),
             username: username.toLowerCase().trim(), // Ensure lowercase and trimmed
-            passwordHash,
+            passwordHash: '',
             name: data.name,
             email: data.email || undefined,
             role: 'staff', // All employees get staff role
@@ -421,7 +420,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           
           while (!saveSuccess && saveAttempts < maxSaveAttempts) {
             try {
-              await saveUser(user);
+              await saveUser(user, { password });
               saveSuccess = true;
               console.log('User saved successfully:', { userId: user.id, username: user.username });
             } catch (userError: any) {
@@ -429,7 +428,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
               console.error(`Error saving user (attempt ${saveAttempts}/${maxSaveAttempts}):`, userError);
               
               // If it's a constraint error, generate a new unique username
-              if (userError?.name === 'ConstraintError' || userError?.message?.includes('unique') || userError?.message?.includes('constraint') || userError?.message?.includes('by-username')) {
+              if (userError?.name === 'ConstraintError' || /unique|constraint|by-username|already taken/i.test(String(userError?.message ?? ''))) {
                 // Generate a completely new unique username
                 const newTimestamp = Date.now().toString();
                 const newRandom = Math.random().toString(36).substring(2, 10);
@@ -705,20 +704,19 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         username: editableUsername.toLowerCase().trim(),
       };
       
-      // Update password if changed
-      if (editablePassword.trim() && editablePassword !== createdCredentials.password) {
-        updatedUser.passwordHash = await hashPassword(editablePassword);
-        updatedUser.mustChangePassword = true; // Force password change if password was changed
+      const passwordChanged = !!editablePassword.trim() && editablePassword !== createdCredentials.password;
+      if (passwordChanged) {
+        updatedUser.mustChangePassword = true;
       }
       
       try {
-        await saveUser(updatedUser);
+        await saveUser(updatedUser, { password: passwordChanged ? editablePassword : undefined });
       } catch (saveError: any) {
         const message = String(saveError?.message ?? '');
         const isUniqueViolation =
           saveError?.code === '23505' ||
           saveError?.name === 'ConstraintError' ||
-          /unique|duplicate|by-username/i.test(message);
+          /unique|duplicate|by-username|already taken/i.test(message);
         if (isUniqueViolation) {
           toast({
             title: 'Username taken',

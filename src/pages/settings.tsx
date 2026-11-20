@@ -8,12 +8,13 @@ import { Download, Moon, Sun, Monitor, SignOut, Check, CloudArrowDown, Buildings
 import { BrandLogo } from '@/components/shared/brand-logo';
 import { Avatar } from '@/components/ui/avatar';
 import { ImageUploader } from '@/components/ui/image-uploader';
-import { saveSettings, exportData, importData, syncFromSupabase, clearAllAppraisalData, getUser, saveUser, getUserByUsername } from '@/lib/storage';
+import { saveSettings, exportData, importData, syncFromSupabase, clearAllAppraisalData, getUser, saveUser, getUserByUsername, describeError } from '@/lib/storage';
+import { changeMyPassword, isSupabaseConfigured, updateMyAccount } from '@/lib/supabase';
 import { useToast } from '@/contexts/toast-context';
 import { useUser } from '@/contexts/user-context';
 import { useTheme } from '@/hooks/use-theme';
 import { useEmployeeProfiles } from '@/hooks/use-employee-profiles';
-import { applyAccentColor, hashPassword, verifyPassword } from '@/lib/utils';
+import { applyAccentColor, verifyPassword } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { User } from '@/types';
 import { IntegrityCheckCard } from '@/components/settings/integrity-check-card';
@@ -94,7 +95,8 @@ export function SettingsPage() {
       await saveSettings({
         ...settings,
         name: data.name,
-        adminPin: data.adminPin,
+        // The PIN sign-in only exists without Supabase; never store one in the shared database.
+        adminPin: isSupabaseConfigured() ? '' : data.adminPin,
         accentColor: data.accentColor,
         theme: settings.theme,
         hrScoreWeight: data.hrScoreWeight,
@@ -168,8 +170,8 @@ export function SettingsPage() {
     }
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     window.location.href = '/auth';
   };
 
@@ -216,6 +218,32 @@ export function SettingsPage() {
       return;
     }
     setProfileSaving(true);
+    if (isSupabaseConfigured()) {
+      try {
+        if (profileForm.newPassword) {
+          const result = await changeMyPassword(profileForm.currentPassword, profileForm.newPassword);
+          if (result === 'wrong_current') {
+            toast({ title: 'Error', description: 'Current password is incorrect.', variant: 'error' });
+            return;
+          }
+        }
+        await updateMyAccount(profileForm.username.trim(), profileForm.email.trim());
+        await refreshUser();
+        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: user.id } }));
+        setProfileForm((prev) => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
+        toast({
+          title: 'Profile updated',
+          description: profileForm.newPassword ? 'Your profile and password have been saved.' : 'Your profile has been saved.',
+          variant: 'success',
+        });
+      } catch (error) {
+        console.error('Profile save error:', error);
+        toast({ title: 'Error', description: describeError(error, 'Failed to save profile.'), variant: 'error' });
+      } finally {
+        setProfileSaving(false);
+      }
+      return;
+    }
     try {
       const currentUser = await getUser(userId) as User | undefined;
       if (!currentUser) {
@@ -244,10 +272,7 @@ export function SettingsPage() {
         username: profileForm.username.trim(),
         email: profileForm.email.trim() || undefined,
       };
-      if (profileForm.newPassword) {
-        updated.passwordHash = await hashPassword(profileForm.newPassword);
-      }
-      await saveUser(updated);
+      await saveUser(updated, { password: profileForm.newPassword || undefined });
       await refreshUser();
       window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updated.id } }));
       setProfileForm((prev) => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
@@ -463,7 +488,7 @@ export function SettingsPage() {
           </Card>
         )}
 
-        {isAdmin() && (
+        {isAdmin() && !isSupabaseConfigured() && (
           <Card>
             <CardHeader>
               <CardTitle>Security</CardTitle>

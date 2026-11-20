@@ -16,7 +16,7 @@ import type {
   User,
   EmployeeProfile,
 } from '@/types';
-import { isSupabaseConfigured, getSupabaseClient } from './supabase';
+import { isSupabaseConfigured, getSupabaseClient, mapUser } from './supabase';
 
 const VALID_HIERARCHIES: Employee['hierarchy'][] = ['chairman', 'executive', 'leader', 'department-leader', 'member', 'hr'];
 function normalizeHierarchy(h: string | null | undefined): Employee['hierarchy'] {
@@ -60,6 +60,27 @@ async function requireClient() {
   return supabase;
 }
 
+/** Supabase returns at most 1000 rows per request; anything larger must be read page by page. */
+const PAGE_SIZE = 1000;
+
+async function fetchAllRows(
+  build: (supabase: any) => any,
+  orderColumn = 'created_at',
+  ascending = false
+): Promise<{ data: any[]; error: unknown }> {
+  const supabase = await requireClient();
+  const rows: any[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await build(supabase)
+      .order(orderColumn, { ascending })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) return { data: rows, error };
+    rows.push(...(data ?? []));
+    if (!data || data.length < PAGE_SIZE) return { data: rows, error: null };
+  }
+}
+
 function check(context: string, error: unknown): void {
   if (!error) return;
   console.error(`${context}:`, error);
@@ -96,8 +117,7 @@ function mapTemplate(t: any): Template {
 }
 
 export async function getTemplatesFromSupabase(): Promise<Template[]> {
-  const supabase = await requireClient();
-  const { data, error } = await supabase.from(TABLES.TEMPLATES).select('*').order('created_at', { ascending: false });
+  const { data, error } = await fetchAllRows((s) => s.from(TABLES.TEMPLATES).select('*'));
   check('getTemplatesFromSupabase', error);
   return (data || []).map(mapTemplate);
 }
@@ -156,8 +176,7 @@ function mapEmployee(e: any): Employee {
 }
 
 export async function getEmployeesFromSupabase(): Promise<Employee[]> {
-  const supabase = await requireClient();
-  const { data, error } = await supabase.from(TABLES.EMPLOYEES).select('*').order('created_at', { ascending: false });
+  const { data, error } = await fetchAllRows((s) => s.from(TABLES.EMPLOYEES).select('*'));
   check('getEmployeesFromSupabase', error);
   return (data || []).map(mapEmployee);
 }
@@ -247,11 +266,12 @@ function mapAppraisal(a: any): Appraisal {
     maxScore: a.max_score,
     completedAt: a.completed_at,
     createdAt: a.created_at,
+    templateSnapshot: a.template_snapshot ? mapTemplate(a.template_snapshot) : undefined,
   };
 }
 
 function appraisalRow(appraisal: Appraisal) {
-  return {
+  const row: Record<string, unknown> = {
     id: appraisal.id,
     template_id: appraisal.templateId,
     employee_id: appraisal.employeeId,
@@ -264,11 +284,81 @@ function appraisalRow(appraisal: Appraisal) {
     completed_at: appraisal.completedAt,
     created_at: appraisal.createdAt,
   };
+  if (appraisal.templateSnapshot) {
+    const t = appraisal.templateSnapshot;
+    row.template_snapshot = {
+      id: t.id,
+      name: t.name,
+      subtitle: t.subtitle ?? null,
+      type: t.type,
+      categories: t.categories ?? [],
+      questions: t.questions ?? null,
+      version: t.version ?? 1,
+    };
+  }
+  return row;
+}
+
+// ============================================
+// Server-side submission (database functions)
+// ============================================
+
+/** Errors raised on purpose by the database functions carry a message meant for the user. */
+export class ServerRuleError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ServerRuleError';
+  }
+}
+
+const RULE_ERROR_CODES = new Set(['28000', '42501', 'P0002', '22023']);
+
+function rpcCheck(context: string, error: { code?: string; message?: string } | null): void {
+  if (!error) return;
+  if (error.code && RULE_ERROR_CODES.has(error.code) && error.message) throw new ServerRuleError(error.message);
+  check(context, error);
+}
+
+export async function submitAssignmentAppraisalRpc(assignmentId: string, responses: unknown): Promise<'submitted' | 'already_submitted'> {
+  const supabase = await requireClient();
+  const { data, error } = await supabase.rpc('submit_assignment_appraisal', {
+    p_assignment_id: assignmentId,
+    p_responses: responses,
+  });
+  rpcCheck('submitAssignmentAppraisalRpc', error);
+  return data?.status === 'already_submitted' ? 'already_submitted' : 'submitted';
+}
+
+export async function submitLinkAppraisalRpc(token: string, responses: unknown): Promise<'submitted' | 'already_submitted'> {
+  const supabase = await requireClient();
+  const { data, error } = await supabase.rpc('submit_link_appraisal', { p_token: token, p_responses: responses });
+  rpcCheck('submitLinkAppraisalRpc', error);
+  return data?.status === 'already_submitted' ? 'already_submitted' : 'submitted';
+}
+
+export interface LinkForm {
+  link: AppraisalLink;
+  template: Template | null;
+  employee: Pick<Employee, 'id' | 'name' | 'role' | 'hierarchy'> | null;
+  appraiser: Pick<Employee, 'id' | 'name' | 'role' | 'hierarchy'> | null;
+}
+
+/** Everything the public link form needs, readable without signing in (the token is the credential). */
+export async function getLinkFormFromSupabase(token: string): Promise<LinkForm | null> {
+  const supabase = await requireClient();
+  const { data, error } = await supabase.rpc('get_link_form', { p_token: token });
+  rpcCheck('getLinkFormFromSupabase', error);
+  if (!data) return null;
+  return {
+    link: mapLink(data.link),
+    template: data.template ? mapTemplate(data.template) : null,
+    employee: data.employee ? { ...data.employee, hierarchy: normalizeHierarchy(data.employee.hierarchy) } : null,
+    appraiser: data.appraiser ? { ...data.appraiser, hierarchy: normalizeHierarchy(data.appraiser.hierarchy) } : null,
+  };
 }
 
 export async function getAppraisalsFromSupabase(): Promise<Appraisal[]> {
-  const supabase = await requireClient();
-  const { data, error } = await supabase.from(TABLES.APPRAISALS).select('*').order('created_at', { ascending: false });
+  const { data, error } = await fetchAllRows((s) => s.from(TABLES.APPRAISALS).select('*'));
   check('getAppraisalsFromSupabase', error);
   return (data || []).map(mapAppraisal);
 }
@@ -374,8 +464,7 @@ function mapLink(l: any): AppraisalLink {
 }
 
 export async function getLinksFromSupabase(): Promise<AppraisalLink[]> {
-  const supabase = await requireClient();
-  const { data, error } = await supabase.from(TABLES.APPRAISAL_LINKS).select('*').order('created_at', { ascending: false });
+  const { data, error } = await fetchAllRows((s) => s.from(TABLES.APPRAISAL_LINKS).select('*'));
   check('getLinksFromSupabase', error);
   return (data || []).map(mapLink);
 }
@@ -476,11 +565,7 @@ function assignmentRow(assignment: AppraisalAssignment) {
 }
 
 export async function getAppraisalAssignmentsFromSupabase(): Promise<AppraisalAssignment[]> {
-  const supabase = await requireClient();
-  const { data, error } = await supabase
-    .from(TABLES.APPRAISAL_ASSIGNMENTS)
-    .select('*')
-    .order('created_at', { ascending: false });
+  const { data, error } = await fetchAllRows((s) => s.from(TABLES.APPRAISAL_ASSIGNMENTS).select('*'));
   if (error && isMissingTableError(error)) {
     console.error('appraisal_assignments table is missing in Supabase; run supabase-appraisal-assignments.sql.');
   }
@@ -496,11 +581,9 @@ export async function getAppraisalAssignmentFromSupabase(id: string): Promise<Ap
 }
 
 export async function getAppraisalAssignmentsForPeriodFromSupabase(reviewPeriodId: string): Promise<AppraisalAssignment[]> {
-  const supabase = await requireClient();
-  const { data, error } = await supabase
-    .from(TABLES.APPRAISAL_ASSIGNMENTS)
-    .select('*')
-    .eq('review_period_id', reviewPeriodId);
+  const { data, error } = await fetchAllRows((s) =>
+    s.from(TABLES.APPRAISAL_ASSIGNMENTS).select('*').eq('review_period_id', reviewPeriodId)
+  );
   check('getAppraisalAssignmentsForPeriodFromSupabase', error);
   return (data || []).map(mapAssignment);
 }
@@ -646,8 +729,7 @@ function mapPeriod(p: any): ReviewPeriod {
 }
 
 export async function getReviewPeriodsFromSupabase(): Promise<ReviewPeriod[]> {
-  const supabase = await requireClient();
-  const { data, error } = await supabase.from(TABLES.REVIEW_PERIODS).select('*').order('created_at', { ascending: false });
+  const { data, error } = await fetchAllRows((s) => s.from(TABLES.REVIEW_PERIODS).select('*'));
   check('getReviewPeriodsFromSupabase', error);
   return (data || []).map(mapPeriod);
 }
@@ -761,8 +843,7 @@ function mapTeam(t: any): Team {
 }
 
 export async function getTeamsFromSupabase(): Promise<Team[]> {
-  const supabase = await requireClient();
-  const { data, error } = await supabase.from(TABLES.TEAMS).select('*').order('created_at', { ascending: false });
+  const { data, error } = await fetchAllRows((s) => s.from(TABLES.TEAMS).select('*'));
   check('getTeamsFromSupabase', error);
   return (data || []).map(mapTeam);
 }
@@ -799,23 +880,14 @@ export async function deleteTeamFromSupabase(id: string): Promise<void> {
 // ============================================
 export async function getUserByEmployeeIdFromSupabase(employeeId: string): Promise<User | undefined> {
   const supabase = await requireClient();
-  const { data, error } = await supabase.from(TABLES.USERS).select('*').eq('employee_id', employeeId).limit(1);
+  const { data, error } = await supabase
+    .from(TABLES.USERS)
+    .select('id, username, name, email, role, active, created_at, last_login_at, employee_id, must_change_password')
+    .eq('employee_id', employeeId)
+    .limit(1);
   check('getUserByEmployeeIdFromSupabase', error);
   const row = data?.[0];
-  if (!row) return undefined;
-  return {
-    id: row.id,
-    username: row.username,
-    passwordHash: row.password_hash,
-    name: row.name,
-    email: row.email,
-    role: row.role,
-    active: row.active,
-    employeeId: row.employee_id,
-    mustChangePassword: row.must_change_password,
-    createdAt: row.created_at,
-    lastLoginAt: row.last_login_at,
-  };
+  return row ? mapUser(row) : undefined;
 }
 
 // ============================================

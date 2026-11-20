@@ -6,11 +6,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
 import { Plus, Pencil, Trash, User, Shield, UserCircle, Users, LinkSimple, LinkSimpleBreak, UsersThree, ArrowClockwise } from 'phosphor-react';
-import { deleteUser, getUsers, saveUser, getUserByUsername, getEmployees, getEmployee } from '@/lib/storage';
+import { deleteUser, getUsers, saveUser, getUserByUsername, getEmployees, getEmployee, describeError } from '@/lib/storage';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useToast } from '@/contexts/toast-context';
 import { formatDate } from '@/lib/utils';
-import { generateId, hashPassword } from '@/lib/utils';
+import { generateId } from '@/lib/utils';
 import type { User as UserType, Employee } from '@/types';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -240,7 +240,7 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
       const userData: UserType = {
         id: user?.id || generateId(),
         username: data.username,
-        passwordHash: user?.passwordHash || '', // Will be set below if password provided
+        passwordHash: user?.passwordHash || '',
         name: data.name,
         email: data.email || undefined,
         role: data.role,
@@ -250,25 +250,19 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
         lastLoginAt: user?.lastLoginAt,
       };
 
-      // Only update password if provided
-      if (data.password && data.password.trim()) {
-        userData.passwordHash = await hashPassword(data.password);
-      } else if (!isEditing) {
-        // New user must have a password
+      const password = data.password?.trim() ? data.password : undefined;
+      if (!password && !isEditing) {
         toast({ title: 'Error', description: 'Password is required for new users', variant: 'error' });
         return;
-      } else {
-        // Keep existing password hash when editing
-        userData.passwordHash = user.passwordHash;
       }
 
-      await saveUser(userData);
+      await saveUser(userData, { password });
       toast({ title: 'Success', description: `User ${isEditing ? 'updated' : 'created'} successfully`, variant: 'success' });
       onSave();
       onClose();
     } catch (error) {
       console.error('Error saving user:', error);
-      toast({ title: 'Error', description: 'Failed to save user', variant: 'error' });
+      toast({ title: 'Error', description: describeError(error, 'Failed to save user'), variant: 'error' });
     }
   };
 
@@ -389,7 +383,7 @@ function UserDialog({ open, onClose, user, onSave }: UserDialogProps) {
                       Active Account
                     </Label>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {user?.active ? 'User can log in and access the portal' : 'User account is disabled'}
+                      {watch('active') ? 'User can log in and access the portal' : 'User account is disabled'}
                     </p>
                   </div>
                 </div>
@@ -646,7 +640,7 @@ export function UsersPage() {
       setDeleteConfirm({ open: false, id: null, name: '' });
     } catch (error) {
       console.error('Delete error:', error);
-      toast({ title: 'Error', description: 'Failed to delete user. Please try again.', variant: 'error' });
+      toast({ title: 'Error', description: describeError(error, 'Failed to delete user. Please try again.'), variant: 'error' });
     } finally {
       setDeleting(false);
     }

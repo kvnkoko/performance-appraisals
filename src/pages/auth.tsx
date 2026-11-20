@@ -7,11 +7,62 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getSettings, initDB, getUserByUsername, saveUser } from '@/lib/storage';
-import { verifyPassword, hashPassword } from '@/lib/utils';
+import { verifyPassword } from '@/lib/utils';
+import {
+  FunctionCallError,
+  callFunction,
+  getMyUserFromSupabase,
+  getSupabaseClient,
+  isSupabaseConfigured,
+  recordLogin,
+} from '@/lib/supabase';
+import { storeSession } from '@/contexts/user-context';
 import { useToast } from '@/contexts/toast-context';
 import type { User } from '@/types';
 
+type SignInResult =
+  | { status: 'ok'; user: User }
+  | { status: 'invalid' }
+  | { status: 'disabled'; message: string };
+
+/** Check the password on the server and open a Supabase session. */
+async function signInWithSupabase(username: string, password: string): Promise<SignInResult> {
+  let email: string;
+  try {
+    ({ email } = await callFunction<{ email: string }>('auth-resolve', { username, password }));
+  } catch (error) {
+    if (error instanceof FunctionCallError && (error.status === 401 || error.status === 400)) return { status: 'invalid' };
+    if (error instanceof FunctionCallError && error.status === 403) return { status: 'disabled', message: error.message };
+    throw error;
+  }
+  const supabase = await getSupabaseClient();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    if (error.status === 400) return { status: 'invalid' };
+    throw error;
+  }
+  // The database decides whether the account may be used (active, employee has not left).
+  const { data: appUserId, error: accessError } = await supabase.rpc('app_user_id');
+  if (accessError) throw accessError;
+  const user = appUserId ? await getMyUserFromSupabase() : undefined;
+  if (!user) {
+    await supabase.auth.signOut();
+    return { status: 'disabled', message: 'Your account has been disabled. Please contact an administrator.' };
+  }
+  return { status: 'ok', user };
+}
+
+/** Local mode only (no Supabase): compare against the stored hash. */
+async function signInLocally(username: string, password: string): Promise<SignInResult> {
+  const user = await getUserByUsername(username);
+  if (!user) return { status: 'invalid' };
+  if (!user.active) return { status: 'disabled', message: 'Your account has been disabled. Please contact an administrator.' };
+  if (!(await verifyPassword(password, user.passwordHash))) return { status: 'invalid' };
+  return { status: 'ok', user };
+}
+
 export function AuthPage() {
+  const cloudMode = isSupabaseConfigured();
   const [authMode, setAuthMode] = useState<'pin' | 'user'>('user'); // Default to user mode
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -61,25 +112,32 @@ export function AuthPage() {
     setChangingPassword(true);
     
     try {
-      const passwordHash = await hashPassword(newPassword);
-      
       const updatedUser: User = {
         ...currentUser,
-        passwordHash,
         mustChangePassword: false,
         lastLoginAt: new Date().toISOString(),
       };
-      
-      await saveUser(updatedUser);
-      
-      // Store user session
-      localStorage.setItem('authenticated', 'true');
-      localStorage.setItem('userId', updatedUser.id);
-      localStorage.setItem('username', updatedUser.username);
-      localStorage.setItem('userName', updatedUser.name);
-      localStorage.setItem('userEmail', updatedUser.email || updatedUser.username);
-      localStorage.setItem('userRole', updatedUser.role);
-      localStorage.setItem('employeeId', updatedUser.employeeId || '');
+
+      if (cloudMode) {
+        const supabase = await getSupabaseClient();
+        const { error: passwordError } = await supabase.auth.updateUser({ password: newPassword });
+        if (passwordError) {
+          const sameAsOld = /different from the old password/i.test(passwordError.message ?? '');
+          toast({
+            title: 'Error',
+            description: sameAsOld ? 'Please choose a password different from your current one.' : passwordError.message,
+            variant: 'error',
+          });
+          setChangingPassword(false);
+          return;
+        }
+        const { error: flagError } = await supabase.rpc('complete_password_change');
+        if (flagError) throw flagError;
+      } else {
+        await saveUser(updatedUser, { password: newPassword });
+      }
+
+      storeSession(updatedUser);
       
       toast({ title: 'Password Changed', description: 'Your password has been updated successfully.', variant: 'success' });
       
@@ -111,32 +169,19 @@ export function AuthPage() {
 
     try {
       await initDB();
-      const user = await getUserByUsername(username.trim());
-      
-      if (!user) {
-        toast({ 
-          title: 'Invalid credentials', 
-          description: 'Username or password is incorrect.', 
-          variant: 'error' 
-        });
+      const result = cloudMode
+        ? await signInWithSupabase(username.trim(), password)
+        : await signInLocally(username.trim(), password);
+
+      if (result.status === 'disabled') {
+        toast({ title: 'Account disabled', description: result.message, variant: 'error' });
         setPassword('');
         setLoading(false);
         return;
       }
 
-      if (!user.active) {
-        toast({ title: 'Account disabled', description: 'Your account has been disabled. Please contact an administrator.', variant: 'error' });
-        setPassword('');
-        setLoading(false);
-        return;
-      }
-
-      console.log('Verifying password...');
-      const isValid = await verifyPassword(password, user.passwordHash);
-      console.log('Password valid:', isValid);
-      
-      if (isValid) {
-        // Check if user must change password
+      if (result.status === 'ok') {
+        const user = result.user;
         if (user.mustChangePassword) {
           setCurrentUser(user);
           setShowPasswordChange(true);
@@ -149,39 +194,12 @@ export function AuthPage() {
           return;
         }
         
-        // Store user session FIRST (before any async operations)
-        localStorage.setItem('authenticated', 'true');
-        localStorage.setItem('userId', user.id);
-        localStorage.setItem('username', user.username);
-        localStorage.setItem('userName', user.name);
-        localStorage.setItem('userEmail', user.email || user.username);
-        localStorage.setItem('userRole', user.role);
-        localStorage.setItem('employeeId', user.employeeId || '');
-        
-        // Update last login - ensure user has all required fields (non-blocking)
-        try {
-          const { isSupabaseConfigured, updateUserLastLogin } = await import('@/lib/supabase');
-          if (isSupabaseConfigured()) {
-            await updateUserLastLogin(user.id);
-          } else {
-            // Fallback to IndexedDB
-            const updatedUser: User = {
-              id: user.id,
-              username: user.username,
-              passwordHash: user.passwordHash,
-              name: user.name,
-              email: user.email,
-              role: user.role,
-              active: user.active,
-              employeeId: user.employeeId,
-              mustChangePassword: user.mustChangePassword,
-              createdAt: user.createdAt,
-              lastLoginAt: new Date().toISOString(),
-            };
-            await saveUser(updatedUser);
-          }
-        } catch {
-          // If saving last login fails, don't block login
+        storeSession(user);
+
+        if (cloudMode) {
+          await recordLogin();
+        } else {
+          await saveUser({ ...user, lastLoginAt: new Date().toISOString() }).catch(() => {});
         }
 
         toast({ title: 'Welcome!', description: `Successfully logged in as ${user.name}`, variant: 'success' });
@@ -209,6 +227,7 @@ export function AuthPage() {
     
     if (initializing || loading) return;
     
+    if (cloudMode) return;
     if (!pin.trim()) {
       toast({ title: 'Error', description: 'Please enter a PIN.', variant: 'error' });
       return;
@@ -408,15 +427,17 @@ export function AuthPage() {
               >
                 {initializing ? 'Initializing...' : loading ? 'Signing in...' : 'Sign In'}
               </Button>
-              <div className="text-center">
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('pin')}
-                  className="text-xs text-muted-foreground hover:text-foreground underline"
-                >
-                  Use PIN instead
-                </button>
-              </div>
+              {!cloudMode && (
+                <div className="text-center">
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode('pin')}
+                    className="text-xs text-muted-foreground hover:text-foreground underline"
+                  >
+                    Use PIN instead
+                  </button>
+                </div>
+              )}
             </form>
           ) : (
             <form onSubmit={handlePinSubmit} className="space-y-4">

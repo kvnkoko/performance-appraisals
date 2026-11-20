@@ -109,7 +109,7 @@ export function MyPerformancePage() {
     const categoryMap = new Map<string, { score: number; maxScore: number }>();
     
     periodAppraisals.forEach(appraisal => {
-      const template = templates.find(t => t.id === appraisal.templateId);
+      const template = appraisal.templateSnapshot ?? templates.find(t => t.id === appraisal.templateId);
       if (!template || !template.categories) return;
       
       template.categories.forEach(category => {

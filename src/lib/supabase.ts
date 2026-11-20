@@ -20,7 +20,7 @@ export async function getSupabaseClient() {
         auth: {
           persistSession: true,
           autoRefreshToken: true,
-          detectSessionInUrl: true,
+          detectSessionInUrl: false,
         },
       });
       return supabaseClient;
@@ -42,19 +42,58 @@ export const TABLES = {
   SETTINGS: 'settings',
 } as const;
 
-// User management functions using Supabase
-export async function getUsersFromSupabase(): Promise<User[]> {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn('Supabase not configured, falling back to IndexedDB');
-    return [];
-  }
+/** Password hashes are never selected; the database does not let the browser read them. */
+const USER_COLUMNS =
+  'id, username, name, email, role, active, created_at, last_login_at, employee_id, must_change_password, auth_user_id';
 
+async function requireClient() {
+  if (!supabaseUrl || !supabaseAnonKey) throw new Error('Supabase not configured');
   const supabase = await getSupabaseClient();
   if (!supabase) throw new Error('Supabase client not available');
+  return supabase;
+}
 
+/** Error from an Edge Function, carrying the user-facing message the function returned. */
+export class FunctionCallError extends Error {
+  code: string;
+  status: number;
+  constructor(code: string, message: string, status: number) {
+    super(message);
+    this.name = 'FunctionCallError';
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export async function callFunction<T>(name: string, body: unknown): Promise<T> {
+  const supabase = await requireClient();
+  const { data, error } = await supabase.functions.invoke(name, { body });
+  if (error) {
+    let code = 'server_error';
+    let message = 'Something went wrong. Please try again.';
+    let status = 500;
+    const response: Response | undefined = error.context;
+    if (response && typeof response.json === 'function') {
+      status = response.status;
+      try {
+        const payload = await response.json();
+        code = payload?.error ?? code;
+        message = payload?.message ?? message;
+      } catch {
+        // non-JSON error body
+      }
+    }
+    throw new FunctionCallError(code, message, status);
+  }
+  return data as T;
+}
+
+// User management functions using Supabase
+export async function getUsersFromSupabase(): Promise<User[]> {
+  const supabase = await requireClient();
   const { data, error } = await supabase
     .from(TABLES.USERS)
-    .select('*')
+    .select(USER_COLUMNS)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -65,11 +104,11 @@ export async function getUsersFromSupabase(): Promise<User[]> {
   return (data || []).map(mapUser);
 }
 
-function mapUser(user: any): User {
+export function mapUser(user: any): User {
   return {
     id: user.id,
     username: user.username,
-    passwordHash: user.password_hash,
+    passwordHash: '',
     name: user.name,
     email: user.email,
     role: user.role,
@@ -82,19 +121,11 @@ function mapUser(user: any): User {
 }
 
 export async function getUserByUsernameFromSupabase(username: string): Promise<User | undefined> {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn('Supabase not configured, falling back to IndexedDB');
-    return undefined;
-  }
-
-  const supabase = await getSupabaseClient();
-  if (!supabase) throw new Error('Supabase client not available');
-
-  // Exact match on lowercase username (stored that way in saveUser).
+  const supabase = await requireClient();
   const normalized = username.trim().toLowerCase();
   const { data, error } = await supabase
     .from(TABLES.USERS)
-    .select('*')
+    .select(USER_COLUMNS)
     .eq('username', normalized)
     .maybeSingle();
 
@@ -106,17 +137,10 @@ export async function getUserByUsernameFromSupabase(username: string): Promise<U
 }
 
 export async function getUserFromSupabase(id: string): Promise<User | undefined> {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn('Supabase not configured, falling back to IndexedDB');
-    return undefined;
-  }
-
-  const supabase = await getSupabaseClient();
-  if (!supabase) throw new Error('Supabase client not available');
-
+  const supabase = await requireClient();
   const { data, error } = await supabase
     .from(TABLES.USERS)
-    .select('*')
+    .select(USER_COLUMNS)
     .eq('id', id)
     .maybeSingle();
 
@@ -127,94 +151,86 @@ export async function getUserFromSupabase(id: string): Promise<User | undefined>
   return data ? mapUser(data) : undefined;
 }
 
-export async function saveUserToSupabase(user: User): Promise<void> {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn('Supabase not configured, cannot save user');
-    throw new Error('Supabase not configured');
-  }
+/** The signed-in person's own account row. */
+export async function getMyUserFromSupabase(): Promise<User | undefined> {
+  const supabase = await requireClient();
+  const { data: sessionData } = await supabase.auth.getSession();
+  const authUserId = sessionData?.session?.user?.id;
+  if (!authUserId) return undefined;
+  const { data, error } = await supabase
+    .from(TABLES.USERS)
+    .select(USER_COLUMNS)
+    .eq('auth_user_id', authUserId)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? mapUser(data) : undefined;
+}
 
-  try {
-    const supabase = await getSupabaseClient();
-    if (!supabase) {
-      throw new Error('Supabase client not available');
-    }
-    
-    const userData = {
+export interface SaveUserOptions {
+  /** New plain-text password. Only sent to the admin-users function, which stores it in Supabase Auth. */
+  password?: string;
+  /** Legacy SHA-256 hash (backup import); the account moves to Supabase Auth on its next sign-in. */
+  legacyPasswordHash?: string;
+}
+
+export async function saveUserToSupabase(user: User, options: SaveUserOptions = {}): Promise<User> {
+  const result = await callFunction<{ user: any }>('admin-users', {
+    action: 'save',
+    user: {
       id: user.id,
       username: user.username.toLowerCase(),
-      password_hash: user.passwordHash,
       name: user.name,
       email: user.email || null,
       role: user.role,
       active: user.active !== undefined ? user.active : true,
-      employee_id: user.employeeId || null,
-      must_change_password: user.mustChangePassword || false,
-      created_at: user.createdAt || new Date().toISOString(),
-      last_login_at: user.lastLoginAt || null,
-    };
-
-    const { error } = await supabase
-      .from(TABLES.USERS)
-      .upsert(userData, { onConflict: 'id' });
-
-    if (error) {
-      console.error('Error saving user to Supabase:', error);
-      throw error;
-    }
-  } catch (error) {
-    console.error('Error in saveUserToSupabase:', error);
-    throw error;
-  }
+      employeeId: user.employeeId || null,
+      mustChangePassword: user.mustChangePassword || false,
+      createdAt: user.createdAt,
+    },
+    password: options.password,
+    legacyPasswordHash: options.legacyPasswordHash,
+  });
+  return mapUser(result.user);
 }
 
 export async function deleteUserFromSupabase(id: string): Promise<void> {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn('Supabase not configured, cannot delete user');
-    throw new Error('Supabase not configured');
-  }
-
-  try {
-    const supabase = await getSupabaseClient();
-    if (!supabase) {
-      throw new Error('Supabase client not available');
-    }
-    
-    const { error } = await supabase
-      .from(TABLES.USERS)
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      console.error('Error deleting user from Supabase:', error);
-      throw error;
-    }
-  } catch (error) {
-    console.error('Error in deleteUserFromSupabase:', error);
-    throw error;
-  }
+  await callFunction('admin-users', { action: 'delete', id });
 }
 
-export async function updateUserLastLogin(id: string): Promise<void> {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return; // Silently fail if Supabase not configured
+/** Change the signed-in person's username and email. Throws an Error with a user-facing message. */
+export async function updateMyAccount(username: string, email: string): Promise<void> {
+  const supabase = await requireClient();
+  const { error } = await supabase.rpc('update_my_account', { p_username: username, p_email: email });
+  if (error) throw new Error(error.message || 'Could not update your account.');
+}
+
+/** Change the signed-in person's password after re-checking the current one. */
+export async function changeMyPassword(currentPassword: string, newPassword: string): Promise<'ok' | 'wrong_current'> {
+  const supabase = await requireClient();
+  const { data } = await supabase.auth.getSession();
+  const email = data?.session?.user?.email;
+  if (!email) throw new Error('Please sign in again.');
+  const { error: verifyError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+  if (verifyError) {
+    if (verifyError.status === 400) return 'wrong_current';
+    throw verifyError;
   }
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) {
+    if (/different from the old password/i.test(error.message ?? '')) {
+      throw new Error('Please choose a password different from your current one.');
+    }
+    throw error;
+  }
+  return 'ok';
+}
 
+export async function recordLogin(): Promise<void> {
   try {
-    const supabase = await getSupabaseClient();
-    if (!supabase) {
-      return;
-    }
-    
-    const { error } = await supabase
-      .from(TABLES.USERS)
-      .update({ last_login_at: new Date().toISOString() })
-      .eq('id', id);
-
-    if (error) {
-      console.warn('Error updating last login:', error);
-    }
+    const supabase = await requireClient();
+    await supabase.rpc('record_login');
   } catch (error) {
-    console.warn('Error in updateUserLastLogin:', error);
+    console.warn('Could not record login time:', error);
   }
 }
 

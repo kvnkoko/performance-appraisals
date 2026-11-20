@@ -189,6 +189,8 @@ export interface Appraisal {
   maxScore: number;
   completedAt: string | null;
   createdAt: string;
+  /** The template exactly as it was when this appraisal was submitted (newer submissions only). */
+  templateSnapshot?: Template;
 }
 
 export interface AppraisalLink {

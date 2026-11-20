@@ -216,6 +216,42 @@ export function describeError(error: unknown, fallback: string): string {
 }
 
 export { AlreadySubmittedError } from './supabase-storage';
+export type { LinkForm } from './supabase-storage';
+
+/** Turn rule violations reported by the database (e.g. "not your form") into user-facing errors. */
+async function withRuleErrors<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    const { ServerRuleError } = await remote();
+    if (error instanceof ServerRuleError) throw new UserFacingError(error.message);
+    throw error;
+  }
+}
+
+/**
+ * Load the public link form. With Supabase this goes through a database function so anonymous
+ * visitors never read tables directly; locally it is assembled from the cache.
+ */
+export async function getLinkForm(token: string): Promise<import('./supabase-storage').LinkForm | null> {
+  if (await cloudEnabled()) {
+    return withRuleErrors(async () => (await remote()).getLinkFormFromSupabase(token));
+  }
+  const link = (await cacheGetAll<AppraisalLink>('links')).find((l) => l.token === token);
+  if (!link) return null;
+  const [template, employee, appraiser, submitted] = await Promise.all([
+    cacheGet<Template>('templates', link.templateId),
+    cacheGet<Employee>('employees', link.employeeId),
+    cacheGet<Employee>('employees', link.appraiserId),
+    cacheGet<Appraisal>('appraisals', appraisalIdForLink(link.id)),
+  ]);
+  return {
+    link: { ...link, used: link.used || !!submitted },
+    template: template ?? null,
+    employee: employee ?? null,
+    appraiser: appraiser ?? null,
+  };
+}
 
 // ============================================
 // Templates
@@ -404,6 +440,14 @@ export async function submitAppraisalForAssignment(
   appraisal: Omit<Appraisal, 'id'>
 ): Promise<void> {
   const { AlreadySubmittedError } = await remote();
+  if (await cloudEnabled()) {
+    // The database checks the reviewer, required answers and duplicates, and computes the score.
+    const status = await withRuleErrors(async () =>
+      (await remote()).submitAssignmentAppraisalRpc(assignmentId, appraisal.responses)
+    );
+    if (status === 'already_submitted') throw new AlreadySubmittedError();
+    return;
+  }
   const fresh = await getAppraisalAssignmentFresh(assignmentId);
   if (!fresh) throw new UserFacingError('This appraisal form no longer exists. Please refresh your list.');
   if (fresh.status === 'completed') throw new AlreadySubmittedError();
@@ -423,6 +467,13 @@ export async function submitAppraisalForAssignment(
 /** Submit a review through a one-off link. The link can only be used once. */
 export async function submitAppraisalForLink(token: string, appraisal: Omit<Appraisal, 'id'>): Promise<void> {
   const { AlreadySubmittedError } = await remote();
+  if (await cloudEnabled()) {
+    const status = await withRuleErrors(async () =>
+      (await remote()).submitLinkAppraisalRpc(token, appraisal.responses)
+    );
+    if (status === 'already_submitted') throw new AlreadySubmittedError();
+    return;
+  }
   const fresh = await getLinkByToken(token);
   if (!fresh) throw new UserFacingError('This appraisal link does not exist.');
   if (fresh.used) throw new AlreadySubmittedError();
@@ -807,11 +858,20 @@ export async function getUserByEmployeeId(employeeId: string): Promise<User | un
   return (await cacheGetAll<User>('users')).find((u) => u.employeeId === employeeId);
 }
 
-export async function saveUser(user: User): Promise<void> {
+export interface SaveUserOptions {
+  /** New plain-text password. With Supabase it goes straight to Supabase Auth and is never stored in tables. */
+  password?: string;
+}
+
+/**
+ * Create or update a login account. With Supabase this goes through the admin-users server
+ * function, which checks the caller is an admin and protects the last admin account.
+ */
+export async function saveUser(user: User, options: SaveUserOptions = {}): Promise<User> {
   if (!user.id) throw new Error('User must have an id field');
   const userToSave: User = {
     id: user.id,
-    username: user.username.toLowerCase(),
+    username: user.username.trim().toLowerCase(),
     passwordHash: user.passwordHash,
     name: user.name,
     email: user.email,
@@ -823,17 +883,49 @@ export async function saveUser(user: User): Promise<void> {
     lastLoginAt: user.lastLoginAt,
   };
   if (await cloudEnabled()) {
-    const { saveUserToSupabase } = await import('./supabase');
-    await saveUserToSupabase(userToSave);
+    const { saveUserToSupabase, FunctionCallError } = await import('./supabase');
+    try {
+      const saved = normalizeUser(await saveUserToSupabase(userToSave, { password: options.password }));
+      await cachePut('users', saved);
+      return saved;
+    } catch (error) {
+      if (error instanceof FunctionCallError && error.status < 500) throw new UserFacingError(error.message);
+      throw error;
+    }
+  }
+  if (options.password) {
+    const { hashPassword } = await import('./utils');
+    userToSave.passwordHash = await hashPassword(options.password);
   }
   await cachePut('users', userToSave);
+  return userToSave;
+}
+
+/**
+ * Restore an account from a backup file. New accounts keep their old password hash and move to
+ * Supabase Auth on their next sign-in; existing accounts keep their current password.
+ */
+async function importUser(user: User): Promise<void> {
+  if (!(await cloudEnabled())) {
+    await cachePut('users', normalizeUser(user));
+    return;
+  }
+  const { saveUserToSupabase } = await import('./supabase');
+  const legacyHash = /^[0-9a-f]{64}$/.test(user.passwordHash || '') ? user.passwordHash : undefined;
+  const saved = await saveUserToSupabase(normalizeUser(user), { legacyPasswordHash: legacyHash });
+  await cachePut('users', normalizeUser(saved));
 }
 
 /** Delete a login account. The linked employee and their appraisals are left untouched. */
 export async function deleteUser(id: string): Promise<void> {
   if (await cloudEnabled()) {
-    const { deleteUserFromSupabase } = await import('./supabase');
-    await deleteUserFromSupabase(id);
+    const { deleteUserFromSupabase, FunctionCallError } = await import('./supabase');
+    try {
+      await deleteUserFromSupabase(id);
+    } catch (error) {
+      if (error instanceof FunctionCallError && error.status < 500) throw new UserFacingError(error.message);
+      throw error;
+    }
   }
   await cacheDelete('users', id);
 }
@@ -946,7 +1038,7 @@ export async function importData(json: string): Promise<void> {
   for (const appraisal of data.appraisals ?? []) await saveAppraisal(appraisal);
   for (const link of data.links ?? []) await saveLink(link);
   if (Array.isArray(data.assignments)) await saveAppraisalAssignments(data.assignments);
-  for (const user of data.users ?? []) await saveUser(user);
+  for (const user of data.users ?? []) await importUser(user);
   for (const profile of data.employeeProfiles ?? []) {
     if (profile.employeeId) await saveEmployeeProfile(profile);
   }

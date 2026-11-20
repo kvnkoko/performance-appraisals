@@ -55,7 +55,7 @@ export function CompletedFormViewModal({ open, onClose, appraisalId }: Completed
     ? appraisals.find((a) => a.id === appraisalId)
     : undefined;
   const template: Template | undefined = appraisal
-    ? templates.find((t) => t.id === appraisal.templateId)
+    ? appraisal.templateSnapshot ?? templates.find((t) => t.id === appraisal.templateId)
     : undefined;
   const appraiserName = appraisal
     ? employees.find((e) => e.id === appraisal.appraiserId)?.name ?? appraisal.appraiserId

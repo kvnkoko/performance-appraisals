@@ -7,15 +7,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CheckCircle } from 'phosphor-react';
 import {
-  getLinkByToken,
-  getTemplate,
-  getEmployee,
-  getAppraisal,
+  getLinkForm,
   submitAppraisalForLink,
   AlreadySubmittedError,
   UserFacingError,
 } from '@/lib/storage';
-import { appraisalIdForLink } from '@/lib/appraisal-status';
 import { generateId, calculateScore, getUnansweredRequiredCount } from '@/lib/utils';
 import { useToast } from '@/contexts/toast-context';
 import { RatingLimitSummary, RatingSelector } from '@/components/ui/rating-selector';
@@ -77,13 +73,14 @@ export function AppraisalFormPage() {
     }
 
     try {
-      const linkData = await getLinkByToken(token);
-      if (!linkData) {
+      const form = await getLinkForm(token);
+      if (!form) {
         toast({ title: 'Link Not Found', description: 'This appraisal link does not exist.', variant: 'error' });
         return;
       }
+      const { link: linkData, template: templateData, employee: employeeData, appraiser: appraiserData } = form;
 
-      if (linkData.used || (await getAppraisal(appraisalIdForLink(linkData.id)))) {
+      if (linkData.used) {
         setCompleted('already-submitted');
         setLoading(false);
         return;
@@ -93,12 +90,6 @@ export function AppraisalFormPage() {
         toast({ title: 'Link Expired', description: 'This appraisal link has expired.', variant: 'error' });
         return;
       }
-
-      const [templateData, employeeData, appraiserData] = await Promise.all([
-        getTemplate(linkData.templateId),
-        getEmployee(linkData.employeeId),
-        getEmployee(linkData.appraiserId),
-      ]);
 
       if (!templateData || !employeeData || !appraiserData) {
         toast({ title: 'Error', description: 'Failed to load appraisal data.', variant: 'error' });

@@ -1,14 +1,15 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { User, Employee } from '@/types';
 import { LOCKING_STATUSES } from '@/types';
-import { getUser, getEmployee, getTeams } from '@/lib/storage';
+import { getUser, getEmployee } from '@/lib/storage';
+import { getSupabaseClient, getMyUserFromSupabase, isSupabaseConfigured } from '@/lib/supabase';
 
 interface UserContextType {
   user: User | null;
   employee: Employee | null;
   loading: boolean;
   refresh: () => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   // Helper functions
   isAdmin: () => boolean;
   isExecutive: () => boolean;
@@ -20,166 +21,144 @@ interface UserContextType {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
+const SESSION_KEYS = ['authenticated', 'userId', 'username', 'userName', 'userEmail', 'userRole', 'employeeId'];
+
+function clearStoredSession() {
+  for (const key of SESSION_KEYS) localStorage.removeItem(key);
+}
+
+export function storeSession(user: User) {
+  localStorage.setItem('authenticated', 'true');
+  localStorage.setItem('userId', user.id);
+  localStorage.setItem('username', user.username);
+  localStorage.setItem('userName', user.name);
+  localStorage.setItem('userEmail', user.email || user.username);
+  localStorage.setItem('userRole', user.role);
+  localStorage.setItem('employeeId', user.employeeId || '');
+}
+
+async function signOutOfSupabase() {
+  if (!isSupabaseConfigured()) return;
+  try {
+    const supabase = await getSupabaseClient();
+    await supabase?.auth.signOut();
+  } catch (error) {
+    console.warn('Supabase sign-out failed:', error);
+  }
+}
+
+/** Last known account details, used only while the server cannot be reached. */
+function userFromStoredSession(): User {
+  const username = localStorage.getItem('username') || 'user';
+  return {
+    id: localStorage.getItem('userId') || 'temp-user',
+    username,
+    passwordHash: '',
+    name: localStorage.getItem('userName') || username,
+    email: localStorage.getItem('userEmail') || undefined,
+    role: (localStorage.getItem('userRole') || 'staff') as 'admin' | 'staff',
+    active: true,
+    employeeId: localStorage.getItem('employeeId') || undefined,
+    createdAt: new Date().toISOString(),
+  };
+}
+
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [employee, setEmployee] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refresh = async () => {
+  const endSession = useCallback(async (signOut: boolean) => {
+    clearStoredSession();
+    setUser(null);
+    setEmployee(null);
+    if (signOut) await signOutOfSupabase();
+  }, []);
+
+  /** Load the account and linked employee; returns false when the session must end. */
+  const applyAccount = useCallback(
+    async (userData: User | undefined): Promise<boolean> => {
+      if (!userData || !userData.active) return false;
+      let employeeData: Employee | null = null;
+      if (userData.employeeId) {
+        employeeData = (await getEmployee(userData.employeeId)) ?? null;
+        if (!employeeData) return false;
+        if (LOCKING_STATUSES.includes(employeeData.employmentStatus ?? 'permanent')) return false;
+      }
+      storeSession(userData);
+      setUser(userData);
+      setEmployee(employeeData);
+      return true;
+    },
+    []
+  );
+
+  const refresh = useCallback(async () => {
     try {
-      const authenticated = localStorage.getItem('authenticated');
-      if (authenticated !== 'true') {
-        setUser(null);
-        setEmployee(null);
-        setLoading(false);
+      if (isSupabaseConfigured()) {
+        const supabase = await getSupabaseClient();
+        const { data } = supabase ? await supabase.auth.getSession() : { data: null };
+        if (!data?.session) {
+          // Sessions from before Supabase sign-in, or expired ones, must sign in again.
+          await endSession(false);
+          return;
+        }
+        let account: User | undefined;
+        try {
+          account = await getMyUserFromSupabase();
+        } catch (error) {
+          console.error('Could not load account; using last known details:', error);
+          if (localStorage.getItem('authenticated') === 'true') setUser(userFromStoredSession());
+          return;
+        }
+        if (account?.mustChangePassword) {
+          // Signed in but has not set a new password yet; the sign-in page handles this.
+          clearStoredSession();
+          setUser(null);
+          setEmployee(null);
+          return;
+        }
+        if (!(await applyAccount(account))) await endSession(true);
         return;
       }
 
+      if (localStorage.getItem('authenticated') !== 'true') {
+        await endSession(false);
+        return;
+      }
       const userId = localStorage.getItem('userId');
       if (userId && userId !== 'pin-admin') {
         try {
-          const userData = await getUser(userId);
-          if (userData) {
-            // Account was locked (e.g. employee deleted or terminated) – invalidate session
-            if (!userData.active) {
-              localStorage.removeItem('authenticated');
-              localStorage.removeItem('userId');
-              localStorage.removeItem('username');
-              localStorage.removeItem('userName');
-              localStorage.removeItem('userEmail');
-              localStorage.removeItem('userRole');
-              localStorage.removeItem('employeeId');
-              setUser(null);
-              setEmployee(null);
-              return;
-            }
-            setUser(userData);
-            // Update localStorage with latest user data
-            localStorage.setItem('username', userData.username);
-            localStorage.setItem('userName', userData.name);
-            localStorage.setItem('userEmail', userData.email || userData.username);
-            localStorage.setItem('userRole', userData.role);
-            localStorage.setItem('employeeId', userData.employeeId || '');
-            
-            // Load linked employee if exists
-            if (userData.employeeId) {
-              const employeeData = await getEmployee(userData.employeeId);
-              // If employee was deleted, invalidate session (staff member removed)
-              if (!employeeData) {
-                localStorage.removeItem('authenticated');
-                localStorage.removeItem('userId');
-                localStorage.removeItem('username');
-                localStorage.removeItem('userName');
-                localStorage.removeItem('userEmail');
-                localStorage.removeItem('userRole');
-                localStorage.removeItem('employeeId');
-                setUser(null);
-                setEmployee(null);
-                return;
-              }
-              // If employee is terminated or resigned, invalidate session (lock account)
-              if (LOCKING_STATUSES.includes(employeeData.employmentStatus ?? 'permanent')) {
-                localStorage.removeItem('authenticated');
-                localStorage.removeItem('userId');
-                localStorage.removeItem('username');
-                localStorage.removeItem('userName');
-                localStorage.removeItem('userEmail');
-                localStorage.removeItem('userRole');
-                localStorage.removeItem('employeeId');
-                setUser(null);
-                setEmployee(null);
-                return;
-              }
-              setEmployee(employeeData);
-            } else {
-              setEmployee(null);
-            }
-          } else {
-            // User not found in DB – account was deleted or no longer exists. Invalidate session
-            // so they cannot stay logged in and are logged out on this and any other device on next load.
-            localStorage.removeItem('authenticated');
-            localStorage.removeItem('userId');
-            localStorage.removeItem('username');
-            localStorage.removeItem('userName');
-            localStorage.removeItem('userEmail');
-            localStorage.removeItem('userRole');
-            localStorage.removeItem('employeeId');
-            setUser(null);
-            setEmployee(null);
-          }
+          if (!(await applyAccount(await getUser(userId)))) await endSession(false);
         } catch (error) {
           console.error('Error loading user from DB:', error);
-          // Don't logout on error, use localStorage data
-          const username = localStorage.getItem('username') || 'User';
-          const userRole = localStorage.getItem('userRole') || 'staff';
-          const employeeId = localStorage.getItem('employeeId');
-          setUser({
-            id: userId || 'temp-user',
-            username: localStorage.getItem('username') || 'user',
-            passwordHash: '',
-            name: localStorage.getItem('userName') || username,
-            email: localStorage.getItem('userEmail') || undefined,
-            role: userRole as 'admin' | 'staff',
-            active: true,
-            employeeId: employeeId || undefined,
-            createdAt: new Date().toISOString(),
-          });
+          setUser(userFromStoredSession());
         }
       } else {
-        // PIN-based auth or no userId
+        // Local-only PIN sign-in
         setUser({
+          ...userFromStoredSession(),
           id: userId || 'pin-user',
-          username: localStorage.getItem('username') || 'admin',
-          passwordHash: '',
           name: localStorage.getItem('userName') || 'Administrator',
-          email: localStorage.getItem('userEmail') || undefined,
-          role: (localStorage.getItem('userRole') || 'admin') as 'admin' | 'staff',
-          active: true,
-          createdAt: new Date().toISOString(),
+          role: 'admin',
+          employeeId: undefined,
         });
         setEmployee(null);
       }
     } catch (error) {
       console.error('Error in refresh:', error);
-      // On error, check if authenticated and create temp user
-      const authenticated = localStorage.getItem('authenticated');
-      if (authenticated === 'true') {
-        setUser({
-          id: localStorage.getItem('userId') || 'temp-user',
-          username: localStorage.getItem('username') || 'user',
-          passwordHash: '',
-          name: localStorage.getItem('userName') || 'User',
-          email: localStorage.getItem('userEmail') || undefined,
-          role: (localStorage.getItem('userRole') || 'staff') as 'admin' | 'staff',
-          active: true,
-          createdAt: new Date().toISOString(),
-        });
-      } else {
-        setUser(null);
-        setEmployee(null);
-      }
+      if (localStorage.getItem('authenticated') === 'true') setUser(userFromStoredSession());
+      else await endSession(false);
     } finally {
       setLoading(false);
     }
-  };
+  }, [applyAccount, endSession]);
 
-  const logout = () => {
-    localStorage.removeItem('authenticated');
-    localStorage.removeItem('userId');
-    localStorage.removeItem('username');
-    localStorage.removeItem('userName');
-    localStorage.removeItem('userEmail');
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('employeeId');
-    setUser(null);
-    setEmployee(null);
-  };
-  
+  const logout = useCallback(() => endSession(true), [endSession]);
+
   // Helper functions
-  const isAdmin = () => {
-    return user?.role === 'admin' || localStorage.getItem('userRole') === 'admin';
-  };
-  
+  const isAdmin = () => user?.role === 'admin';
+
   const isExecutive = () => {
     return employee?.hierarchy === 'executive';
   };
@@ -203,6 +182,24 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refresh();
+  }, [refresh]);
+
+  // Supabase signs the browser out when the session is revoked or the refresh token stops working.
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    let unsubscribe: (() => void) | undefined;
+    getSupabaseClient().then((supabase) => {
+      if (!supabase) return;
+      const { data } = supabase.auth.onAuthStateChange((event: string) => {
+        if (event === 'SIGNED_OUT') {
+          clearStoredSession();
+          setUser(null);
+          setEmployee(null);
+        }
+      });
+      unsubscribe = () => data.subscription.unsubscribe();
+    });
+    return () => unsubscribe?.();
   }, []);
 
   // Re-validate session when user returns to the tab (e.g. from another device we may have deleted the user/employee)
@@ -222,41 +219,15 @@ export function UserProvider({ children }: { children: ReactNode }) {
       channel = new BroadcastChannel('appraisals-auth');
       channel.onmessage = (e: MessageEvent) => {
         const d = e.data;
-        if (d?.type === 'userDeleted' && d.userId && d.userId === localStorage.getItem('userId')) {
-          localStorage.removeItem('authenticated');
-          localStorage.removeItem('userId');
-          localStorage.removeItem('username');
-          localStorage.removeItem('userName');
-          localStorage.removeItem('userEmail');
-          localStorage.removeItem('userRole');
-          localStorage.removeItem('employeeId');
-          setUser(null);
-          setEmployee(null);
-          window.location.href = '/auth';
-        }
-        if (d?.type === 'employeeTerminatedOrResigned' && d.employeeId && d.employeeId === localStorage.getItem('employeeId')) {
-          localStorage.removeItem('authenticated');
-          localStorage.removeItem('userId');
-          localStorage.removeItem('username');
-          localStorage.removeItem('userName');
-          localStorage.removeItem('userEmail');
-          localStorage.removeItem('userRole');
-          localStorage.removeItem('employeeId');
-          setUser(null);
-          setEmployee(null);
-          window.location.href = '/auth';
-        }
-        if (d?.type === 'employeeDeleted' && d.employeeId && d.employeeId === localStorage.getItem('employeeId')) {
-          localStorage.removeItem('authenticated');
-          localStorage.removeItem('userId');
-          localStorage.removeItem('username');
-          localStorage.removeItem('userName');
-          localStorage.removeItem('userEmail');
-          localStorage.removeItem('userRole');
-          localStorage.removeItem('employeeId');
-          setUser(null);
-          setEmployee(null);
-          window.location.href = '/auth';
+        const isMe =
+          (d?.type === 'userDeleted' && d.userId && d.userId === localStorage.getItem('userId')) ||
+          ((d?.type === 'employeeTerminatedOrResigned' || d?.type === 'employeeDeleted') &&
+            d.employeeId &&
+            d.employeeId === localStorage.getItem('employeeId'));
+        if (isMe) {
+          void endSession(true).then(() => {
+            window.location.href = '/auth';
+          });
         }
       };
     } catch {
@@ -265,7 +236,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     return () => {
       channel?.close();
     };
-  }, []);
+  }, [endSession]);
 
   // When the current user is updated (e.g. admin links user to employee), refresh so this tab gets new user/employeeId.
   useEffect(() => {

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
-import type { Toast } from '@/components/ui/toast';
+import { ToastContainer, type Toast } from '@/components/ui/toast';
 import { generateId } from '@/lib/utils';
 
 interface ToastContextType {
@@ -28,6 +28,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast, dismiss, toasts }}>
       {children}
+      <ToastContainer toasts={toasts} onClose={dismiss} />
     </ToastContext.Provider>
   );
 }

@@ -60,7 +60,7 @@ export async function generatePerformanceSummary(
   const questionScores: Record<string, { total: number; max: number; count: number; categoryName?: string }> = {};
 
   employeeAppraisals.forEach((appraisal) => {
-    const template = templates.find((t) => t.id === appraisal.templateId);
+    const template = appraisal.templateSnapshot ?? templates.find((t) => t.id === appraisal.templateId);
     if (!template) return;
 
     // Support both new category structure and legacy questions structure

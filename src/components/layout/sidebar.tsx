@@ -99,8 +99,8 @@ export function Sidebar({ mobileOpen: controlledOpen, setMobileOpen: setControll
     setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
   };
   
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/auth');
   };
   

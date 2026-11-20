@@ -39,9 +39,7 @@ function PrivateRoute({ children }: { children: React.ReactElement }) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
   }
 
-  const authenticated = localStorage.getItem('authenticated') === 'true';
-  
-  return authenticated ? children : <Navigate to="/auth" replace />;
+  return user ? children : <Navigate to="/auth" replace />;
 }
 
 // Admin-only route wrapper
@@ -52,9 +50,7 @@ function AdminRoute({ children }: { children: React.ReactElement }) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
   }
   
-  const userRole = user?.role || localStorage.getItem('userRole');
-  
-  if (userRole !== 'admin') {
+  if (user?.role !== 'admin') {
     return <Navigate to="/my-dashboard" replace />;
   }
   
@@ -63,9 +59,9 @@ function AdminRoute({ children }: { children: React.ReactElement }) {
 
 // Smart redirect based on user role
 function RoleBasedRedirect() {
-  const userRole = localStorage.getItem('userRole');
-  
-  if (userRole === 'admin') {
+  const { user } = useUser();
+
+  if (user?.role === 'admin') {
     return <Navigate to="/dashboard" replace />;
   }
   
@@ -75,9 +71,8 @@ function RoleBasedRedirect() {
 // If admin hits /my-dashboard (e.g. bookmark or back), send to admin dashboard so Vercel and localhost match
 function MyDashboardOrRedirect() {
   const { user, loading } = useUser();
-  const userRole = user?.role || localStorage.getItem('userRole');
   if (loading) return <div className="flex items-center justify-center h-screen">Loading...</div>;
-  if (userRole === 'admin') return <Navigate to="/dashboard" replace />;
+  if (user?.role === 'admin') return <Navigate to="/dashboard" replace />;
   return <EmployeeDashboardPage />;
 }
 

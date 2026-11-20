@@ -2,8 +2,6 @@ import { ReactNode, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { List, WarningCircle, X } from 'phosphor-react';
 import { Sidebar } from './sidebar';
-import { ToastContainer } from '@/components/ui/toast';
-import { useToast } from '@/contexts/toast-context';
 import { useUser } from '@/contexts/user-context';
 
 const PATH_TO_TITLE: Record<string, string> = {
@@ -34,7 +32,6 @@ function getPageTitle(pathname: string): string {
 }
 
 export function MainLayout({ children }: { children: ReactNode }) {
-  const { toasts, dismiss } = useToast();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { isAdmin: checkIsAdmin } = useUser();
@@ -94,7 +91,6 @@ export function MainLayout({ children }: { children: ReactNode }) {
           {children}
         </div>
       </main>
-      <ToastContainer toasts={toasts} onClose={dismiss} />
     </div>
   );
 }
