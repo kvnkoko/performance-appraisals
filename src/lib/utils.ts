@@ -97,12 +97,19 @@ export function applyAccentColor(hexColor: string): void {
   root.style.setProperty('--accent-color-dark', darkerHex);
 }
 
-export function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+function randomHex(bytes: number): string {
+  const buf = new Uint8Array(bytes);
+  crypto.getRandomValues(buf);
+  return Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+export function generateId(): string {
+  return `${Date.now()}-${randomHex(8)}`;
+}
+
+/** Unguessable token for appraisal links (128 bits of randomness). */
 export function generateToken(): string {
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  return randomHex(16);
 }
 
 export function formatDate(date: string | Date): string {
@@ -143,6 +150,25 @@ export async function hashPassword(password: string): Promise<string> {
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
   const passwordHash = await hashPassword(password);
   return passwordHash === hash;
+}
+
+/** An appraisal's score as a percentage; 0 when the form had nothing scorable. */
+export function scorePercent(a: { score: number; maxScore: number }): number {
+  return a.maxScore > 0 ? (a.score / a.maxScore) * 100 : 0;
+}
+
+/** Required questions in a template that have no answer in `values`. */
+export function getUnansweredRequiredCount(
+  template: {
+    categories?: { items: { id: string; required?: boolean }[] }[];
+    questions?: { id: string; required?: boolean }[];
+  },
+  values: Record<string, unknown>
+): number {
+  const items = template.categories?.length
+    ? template.categories.flatMap((c) => c.items)
+    : (template.questions ?? []);
+  return items.filter((item) => item.required && String(values[item.id] ?? '').trim() === '').length;
 }
 
 export function calculateScore(

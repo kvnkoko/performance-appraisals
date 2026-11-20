@@ -8,7 +8,7 @@ import { Plus, Pencil, Trash, Users, MagnifyingGlass, UsersThree, CheckCircle, A
 import { EmployeeDialog } from '@/components/employees/employee-dialog';
 import { HIERARCHY_LABELS, EMPLOYMENT_STATUS_LABELS, isDepartmentLeader } from '@/types';
 import type { EmploymentStatus } from '@/types';
-import { deleteEmployee, getUserByEmployeeId } from '@/lib/storage';
+import { deleteEmployee, getUserByEmployeeId, describeError } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { formatDate } from '@/lib/utils';
 
@@ -131,7 +131,7 @@ export function EmployeesPage() {
       setDeleteConfirm({ open: false, id: null, name: '' });
     } catch (error) {
       console.error('Delete error:', error);
-      toast({ title: 'Error', description: 'Failed to delete employee. Please try again.', variant: 'error' });
+      toast({ title: 'Error', description: describeError(error, 'Failed to delete employee. Please try again.'), variant: 'error' });
     } finally {
       setDeleting(false);
     }
@@ -418,7 +418,7 @@ export function EmployeesPage() {
         onClose={() => setDeleteConfirm({ open: false, id: null, name: '' })}
         onConfirm={handleDeleteConfirm}
         title="Delete Employee"
-        description={`Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone and will remove all associated data.`}
+        description={`Are you sure you want to delete "${deleteConfirm.name}"? Only possible if they have no submitted appraisals and nobody reports to them. Their pending forms and unused links are removed and any linked login is locked. For people who left, set their status to Resigned or Terminated instead.`}
         confirmText="Delete Employee"
         cancelText="Cancel"
         variant="danger"

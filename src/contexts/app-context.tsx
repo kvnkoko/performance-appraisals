@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, ReviewPeriod, Team, AppraisalAssignment, EmployeeProfile } from '@/types';
 import { getTemplates, getEmployees, getAppraisals, getLinks, getSettings, getReviewPeriods, getActiveReviewPeriods, getTeams, getAppraisalAssignments, getEmployeeProfiles } from '@/lib/storage';
 import { getDepartmentLeaderId } from '@/lib/org-chart-utils';
+import { effectiveAssignments, isLinkDone } from '@/lib/appraisal-status';
 import { applyAccentColor } from '@/lib/utils';
 
 interface AppContextType {
@@ -69,7 +70,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setEmployees((prev) => (normalized.length > 0 ? normalized : prev.length > 0 ? prev : normalized));
       }
       if (results[2].status === 'fulfilled') setAppraisals(results[2].value);
-      if (results[3].status === 'fulfilled') setLinks(results[3].value);
+      const loadedAppraisals = results[2].status === 'fulfilled' ? results[2].value : [];
+      if (results[3].status === 'fulfilled') {
+        const appraisalIds = new Set(loadedAppraisals.map((a) => a.id));
+        setLinks(results[3].value.map((l) => (isLinkDone(l, appraisalIds) ? { ...l, used: true } : l)));
+      }
       if (results[4].status === 'fulfilled') {
         const loadedSettings = results[4].value;
         setSettings(loadedSettings);
@@ -81,7 +86,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (results[5].status === 'fulfilled') setReviewPeriods(results[5].value);
       if (results[6].status === 'fulfilled') setActivePeriods(results[6].value);
       if (results[7].status === 'fulfilled') setTeams(results[7].value);
-      if (results[8].status === 'fulfilled') setAssignments(results[8].value);
+      if (results[8].status === 'fulfilled') setAssignments(effectiveAssignments(results[8].value, loadedAppraisals));
       if (results[9].status === 'fulfilled') {
         const next = results[9].value;
         // Never replace with empty when we already have profiles (keeps directory visible)

@@ -10,6 +10,7 @@ import { Dashboard } from '@/pages/dashboard';
 import { initDB } from '@/lib/storage';
 import { sampleEmployees, sampleTemplates } from '@/lib/sample-data';
 import { getEmployees, getTemplates, saveEmployee, saveTemplate } from '@/lib/storage';
+import { isSupabaseConfigured } from '@/lib/supabase';
 
 // Import pages directly for now (can be lazy loaded later if needed)
 import { TemplatesPage } from '@/pages/templates';
@@ -88,19 +89,21 @@ function App() {
       try {
         await initDB();
         
-        // Load sample data if database is empty
-        const existingEmployees = await getEmployees();
-        const existingTemplates = await getTemplates();
-        
-        if (existingEmployees.length === 0) {
-          for (const employee of sampleEmployees) {
-            await saveEmployee(employee);
+        // Demo data is only for local use; never write fake people into the real database.
+        if (!isSupabaseConfigured()) {
+          const existingEmployees = await getEmployees();
+          const existingTemplates = await getTemplates();
+
+          if (existingEmployees.length === 0) {
+            for (const employee of sampleEmployees) {
+              await saveEmployee(employee);
+            }
           }
-        }
-        
-        if (existingTemplates.length === 0) {
-          for (const template of sampleTemplates) {
-            await saveTemplate(template);
+
+          if (existingTemplates.length === 0) {
+            for (const template of sampleTemplates) {
+              await saveTemplate(template);
+            }
           }
         }
       } catch (error) {

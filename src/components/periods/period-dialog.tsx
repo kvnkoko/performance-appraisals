@@ -113,8 +113,10 @@ export function PeriodDialog({ open, onOpenChange, periodId, onSuccess }: Period
       // Custom - don't auto-fill
       return;
     }
-    setValue('startDate', dates.start.toISOString().split('T')[0]);
-    setValue('endDate', dates.end.toISOString().split('T')[0]);
+    const toDateInput = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    setValue('startDate', toDateInput(dates.start));
+    setValue('endDate', toDateInput(dates.end));
   };
 
   const loadPeriod = async () => {

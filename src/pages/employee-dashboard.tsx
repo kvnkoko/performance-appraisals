@@ -49,6 +49,25 @@ export function EmployeeDashboardPage() {
   const myHRTotal = myHRAssignments.length;
   const isHR = employee?.hierarchy === 'hr';
 
+  const pendingItems = [
+    ...myPendingAssignments.map((a) => ({
+      key: `asg-${a.id}`,
+      to: `/appraisal/assignment/${a.id}`,
+      employeeName: a.employeeName,
+      periodName: reviewPeriods.find((p) => p.id === a.reviewPeriodId)?.name,
+      due: a.dueDate ?? null,
+      createdAt: a.createdAt,
+    })),
+    ...myPendingLinks.map((l) => ({
+      key: `lnk-${l.id}`,
+      to: `/appraisal/${l.token}`,
+      employeeName: employees.find((e) => e.id === l.employeeId)?.name || 'Unknown',
+      periodName: l.reviewPeriodName,
+      due: l.expiresAt,
+      createdAt: l.createdAt,
+    })),
+  ].sort((x, y) => new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime());
+
   // Get active review periods
   const activePeriods = reviewPeriods.filter(p => p.status === 'active');
 
@@ -245,7 +264,7 @@ export function EmployeeDashboardPage() {
             <CardTitle className="text-lg">Pending Appraisals</CardTitle>
             <CardDescription>Reviews waiting for your completion</CardDescription>
           </div>
-          {myPendingLinks.length > 0 && (
+          {pendingItems.length > 0 && (
             <Link to="/my-appraisals">
               <Button variant="ghost" size="sm">
                 View All <ArrowRight size={16} className="ml-1" />
@@ -254,19 +273,18 @@ export function EmployeeDashboardPage() {
           )}
         </CardHeader>
         <CardContent>
-          {myPendingLinks.length === 0 ? (
+          {pendingItems.length === 0 ? (
             <div className="text-center py-8">
               <CheckCircle size={48} weight="duotone" className="mx-auto mb-3 text-green-500/50" />
               <p className="text-muted-foreground">You're all caught up! No pending appraisals.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {myPendingLinks.slice(0, 5).map(link => {
-                const targetEmployee = employees.find(e => e.id === link.employeeId);
+              {pendingItems.slice(0, 5).map(item => {
                 return (
                   <Link 
-                    key={link.id}
-                    to={`/appraisal/${link.token}`}
+                    key={item.key}
+                    to={item.to}
                     className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors group"
                   >
                     <div className="flex items-center gap-3">
@@ -275,11 +293,11 @@ export function EmployeeDashboardPage() {
                       </div>
                       <div>
                         <div className="font-medium group-hover:text-primary transition-colors">
-                          Review for {targetEmployee?.name || 'Unknown'}
+                          Review for {item.employeeName}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {link.reviewPeriodName || 'No period'} • 
-                          {link.expiresAt ? ` Due ${formatDate(link.expiresAt)}` : ' No deadline'}
+                          {item.periodName || 'No period'} • 
+                          {item.due ? ` Due ${formatDate(item.due)}` : ' No deadline'}
                         </div>
                       </div>
                     </div>

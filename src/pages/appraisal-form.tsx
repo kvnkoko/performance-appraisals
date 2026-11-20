@@ -6,8 +6,17 @@ import * as z from 'zod';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CheckCircle } from 'phosphor-react';
-import { getLinkByToken, saveLink, getTemplate, getEmployee, saveAppraisal } from '@/lib/storage';
-import { generateId, calculateScore } from '@/lib/utils';
+import {
+  getLinkByToken,
+  getTemplate,
+  getEmployee,
+  getAppraisal,
+  submitAppraisalForLink,
+  AlreadySubmittedError,
+  UserFacingError,
+} from '@/lib/storage';
+import { appraisalIdForLink } from '@/lib/appraisal-status';
+import { generateId, calculateScore, getUnansweredRequiredCount } from '@/lib/utils';
 import { useToast } from '@/contexts/toast-context';
 import { RatingLimitSummary, RatingSelector } from '@/components/ui/rating-selector';
 import { Select } from '@/components/ui/select';
@@ -41,7 +50,7 @@ export function AppraisalFormPage() {
   const [template, setTemplate] = useState<any>(null);
   const [employee, setEmployee] = useState<any>(null);
   const [appraiser, setAppraiser] = useState<any>(null);
-  const [completed, setCompleted] = useState(false);
+  const [completed, setCompleted] = useState<false | 'just-submitted' | 'already-submitted'>(false);
 
   const {
     register,
@@ -63,6 +72,7 @@ export function AppraisalFormPage() {
   const loadData = async () => {
     if (!token) {
       toast({ title: 'Invalid Link', description: 'This appraisal link is invalid.', variant: 'error' });
+      setLoading(false);
       return;
     }
 
@@ -73,8 +83,8 @@ export function AppraisalFormPage() {
         return;
       }
 
-      if (linkData.used) {
-        setCompleted(true);
+      if (linkData.used || (await getAppraisal(appraisalIdForLink(linkData.id)))) {
+        setCompleted('already-submitted');
         setLoading(false);
         return;
       }
@@ -176,6 +186,16 @@ export function AppraisalFormPage() {
   const onSubmit = async (data: ResponseFormData) => {
     if (!link || !template) return;
 
+    const unanswered = getUnansweredRequiredCount(template, data);
+    if (unanswered > 0) {
+      toast({
+        title: 'Form incomplete',
+        description: `Please answer all required questions (${unanswered} left) before submitting.`,
+        variant: 'error',
+      });
+      return;
+    }
+
     const submittedRatingCounts = getRatingCounts(data);
     const ratingLimitOptions = getRatingLimitOptionsForAppraisal({
       templateType: template?.type,
@@ -232,7 +252,6 @@ export function AppraisalFormPage() {
       const periodName = (link as any).reviewPeriodName || 'Initial Period';
 
       const appraisal = {
-        id: generateId(),
         templateId: template.id,
         employeeId: link.employeeId,
         appraiserId: link.appraiserId,
@@ -245,13 +264,19 @@ export function AppraisalFormPage() {
         createdAt: new Date().toISOString(),
       };
 
-      await saveAppraisal(appraisal);
-      await saveLink({ ...link, used: true });
+      await submitAppraisalForLink(link.token, appraisal);
 
-      setCompleted(true);
+      setCompleted('just-submitted');
       toast({ title: 'Success', description: 'Appraisal submitted successfully!', variant: 'success' });
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to submit appraisal.', variant: 'error' });
+      if (error instanceof AlreadySubmittedError) {
+        setCompleted('already-submitted');
+      } else {
+        const description = error instanceof UserFacingError
+          ? error.message
+          : 'Your appraisal was NOT saved. Check your connection and try again; your answers are still on this page.';
+        toast({ title: 'Submission failed', description, variant: 'error' });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -273,9 +298,11 @@ export function AppraisalFormPage() {
         <Card className="w-full max-w-md">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <CheckCircle size={64} weight="duotone" className="text-green-600/80 mb-4" />
-            <h2 className="text-2xl font-bold mb-2">Thank You!</h2>
+            <h2 className="text-2xl font-bold mb-2">{completed === 'just-submitted' ? 'Thank You!' : 'Already submitted'}</h2>
             <p className="text-muted-foreground text-center">
-              Your appraisal has been submitted successfully.
+              {completed === 'just-submitted'
+                ? 'Your appraisal has been submitted successfully.'
+                : 'This appraisal link has already been used. Each link can only be submitted once.'}
             </p>
           </CardContent>
         </Card>

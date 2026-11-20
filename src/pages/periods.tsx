@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { scorePercent } from '@/lib/utils';
 import { createPortal } from 'react-dom';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,7 +11,7 @@ import { Plus, Pencil, Trash, Calendar, Trophy, FileText, Eye, X, PencilSimple, 
 import { PeriodDialog } from '@/components/periods/period-dialog';
 import { PeriodBadge } from '@/components/periods/period-badge';
 import { CompletedFormViewModal } from '@/components/shared/completed-form-view-modal';
-import { getReviewPeriods, deleteReviewPeriod, saveReviewPeriod, saveEmployeeOfPeriodOverrides } from '@/lib/storage';
+import { getReviewPeriods, deleteReviewPeriod, saveReviewPeriod, saveEmployeeOfPeriodOverrides, describeError } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { formatDateRange, getDaysRemaining } from '@/lib/period-utils';
 import type { ReviewPeriod } from '@/types';
@@ -65,7 +66,7 @@ export function PeriodsPage() {
       setDeleteConfirm({ open: false, id: null, name: '' });
     } catch (error) {
       console.error('Delete error:', error);
-      toast({ title: 'Error', description: 'Failed to delete review period. Please try again.', variant: 'error' });
+      toast({ title: 'Error', description: describeError(error, 'Failed to delete review period. Please try again.'), variant: 'error' });
     } finally {
       setDeleting(false);
     }
@@ -107,7 +108,7 @@ export function PeriodsPage() {
     const completedCount = totalAssignments > 0 ? assignmentsWithCompletedAppraisal : periodAppraisals.length;
     const completionRate = totalToComplete > 0 ? (completedCount / totalToComplete) * 100 : 0;
     const avgScore = periodAppraisals.length > 0
-      ? periodAppraisals.reduce((sum, a) => sum + (a.score / a.maxScore) * 100, 0) / periodAppraisals.length
+      ? periodAppraisals.reduce((sum, a) => sum + scorePercent(a), 0) / periodAppraisals.length
       : 0;
 
     const employeeScores: Record<string, { total: number; max: number; count: number }> = {};
@@ -115,7 +116,7 @@ export function PeriodsPage() {
       if (!employeeScores[appraisal.employeeId]) {
         employeeScores[appraisal.employeeId] = { total: 0, max: 0, count: 0 };
       }
-      employeeScores[appraisal.employeeId].total += (appraisal.score / appraisal.maxScore) * 100;
+      employeeScores[appraisal.employeeId].total += scorePercent(appraisal);
       employeeScores[appraisal.employeeId].max += 100;
       employeeScores[appraisal.employeeId].count += 1;
     });
@@ -370,7 +371,7 @@ export function PeriodsPage() {
         onClose={() => setDeleteConfirm({ open: false, id: null, name: '' })}
         onConfirm={handleDeleteConfirm}
         title="Delete Review Period"
-        description={`Are you sure you want to delete "${deleteConfirm.name}"? This will also delete all appraisal forms (assignments) and links for this period. This action cannot be undone.`}
+        description={`Are you sure you want to delete "${deleteConfirm.name}"? Only possible if no appraisals have been submitted for it (archive it instead). Its unsubmitted forms and links are removed. This cannot be undone.`}
         confirmText="Delete Period"
         cancelText="Cancel"
         variant="danger"
@@ -384,7 +385,7 @@ export function PeriodsPage() {
         const employeeScores: Record<string, { total: number; count: number }> = {};
         periodAppraisals.forEach((a) => {
           if (!employeeScores[a.employeeId]) employeeScores[a.employeeId] = { total: 0, count: 0 };
-          employeeScores[a.employeeId].total += (a.score / a.maxScore) * 100;
+          employeeScores[a.employeeId].total += scorePercent(a);
           employeeScores[a.employeeId].count += 1;
         });
         const topScorer = Object.entries(employeeScores)

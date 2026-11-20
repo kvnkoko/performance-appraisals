@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { useUser } from '@/contexts/user-context';
 import { PeriodSelector } from '@/components/periods/period-selector';
-import { getReviewPeriod, saveAppraisalAssignments, deleteAssignmentsByPeriod, deleteAppraisal, deleteAppraisalAssignment } from '@/lib/storage';
+import { getReviewPeriod, createAssignmentsSkippingExisting, deleteAssignmentsByPeriod, deleteAppraisal, deleteAppraisalAssignment } from '@/lib/storage';
+import { assignmentKey, buildSubmittedPairSet, pairKey, isAssignmentDone } from '@/lib/appraisal-status';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -64,6 +65,7 @@ export function LinksPage() {
   const [autoDueDate, setAutoDueDate] = useState('');
   const [autoGenerating, setAutoGenerating] = useState(false);
   const [autoDoneCount, setAutoDoneCount] = useState<number | null>(null);
+  const [autoSkippedCount, setAutoSkippedCount] = useState(0);
 
   useEffect(() => {
     if (activePeriods.length > 0 && !selectedPeriod) {
@@ -102,6 +104,25 @@ export function LinksPage() {
       autoPreview.execToLeader.length +
       autoPreview.hrToAll.length
     : 0;
+
+  const autoNewVsExisting = useMemo(() => {
+    if (!autoPreview || !selectedPeriod) return null;
+    const candidates = buildAssignmentsFromPreview(
+      autoPreview,
+      { leaderToMember: '', memberToLeader: '', leaderToLeader: '', memberToMember: '', execToLeader: '', hrToAll: '' },
+      selectedPeriod,
+      ''
+    );
+    const existingKeys = new Set(assignments.filter((a) => a.reviewPeriodId === selectedPeriod).map(assignmentKey));
+    const submitted = buildSubmittedPairSet(appraisals.filter((a) => a.reviewPeriodId === selectedPeriod));
+    let skip = 0;
+    for (const c of candidates) {
+      const key = assignmentKey(c);
+      if (existingKeys.has(key) || submitted.has(pairKey(c.reviewPeriodId, c.appraiserId, c.employeeId))) skip++;
+      else existingKeys.add(key);
+    }
+    return { newCount: candidates.length - skip, existingCount: skip };
+  }, [autoPreview, selectedPeriod, assignments, appraisals]);
 
   const handleAutoGenerate = async () => {
     if (!selectedPeriod || !autoPreview) return;
@@ -143,13 +164,20 @@ export function LinksPage() {
         period.name,
         autoDueDate || undefined
       );
-      await saveAppraisalAssignments(built);
+      const result = await createAssignmentsSkippingExisting(selectedPeriod, built);
+      const skipped = result.skippedExisting + result.skippedAlreadySubmitted;
       await refresh();
-      setAutoDoneCount(built.length);
+      setAutoDoneCount(result.created.length);
+      setAutoSkippedCount(skipped);
       setAutoStep(3);
-      toast({ title: 'Success', description: `${built.length} appraisals created.`, variant: 'success' });
+      toast({
+        title: 'Success',
+        description: `${result.created.length} appraisal(s) created${skipped > 0 ? `, ${skipped} skipped because they already exist` : ''}.`,
+        variant: 'success',
+      });
     } catch (e) {
-      toast({ title: 'Error', description: 'Failed to create assignments.', variant: 'error' });
+      console.error('Auto-generate failed:', e);
+      toast({ title: 'Error', description: 'Failed to create assignments. It is safe to try again; existing forms will not be duplicated.', variant: 'error' });
     } finally {
       setAutoGenerating(false);
     }
@@ -159,6 +187,7 @@ export function LinksPage() {
     setAutoStep(1);
     setAutoPreview(null);
     setAutoDoneCount(null);
+    setAutoSkippedCount(0);
   };
 
   const handleGenerate = async () => {
@@ -234,9 +263,13 @@ export function LinksPage() {
     if (!bulkRemoveConfirm.periodId) return;
     setBulkRemoving(true);
     try {
-      const count = await deleteAssignmentsByPeriod(bulkRemoveConfirm.periodId);
+      const { removed, kept } = await deleteAssignmentsByPeriod(bulkRemoveConfirm.periodId);
       await refresh();
-      toast({ title: 'Success', description: `${count} appraisal form(s) removed. You can start over for this period.`, variant: 'success' });
+      toast({
+        title: 'Success',
+        description: `${removed} unsubmitted form(s) removed.${kept > 0 ? ` ${kept} already-submitted form(s) were kept for the audit record.` : ''}`,
+        variant: 'success',
+      });
       setBulkRemoveConfirm({ open: false, periodId: null, periodName: '' });
     } catch (error) {
       console.error('Bulk remove error:', error);
@@ -274,6 +307,10 @@ export function LinksPage() {
   const formsForPeriod = useMemo(
     () => (selectedPeriod ? assignments.filter((a) => a.reviewPeriodId === selectedPeriod) : []),
     [assignments, selectedPeriod]
+  );
+  const submittedPairsForPeriod = useMemo(
+    () => buildSubmittedPairSet(selectedPeriod ? appraisals.filter((x) => x.reviewPeriodId === selectedPeriod) : []),
+    [appraisals, selectedPeriod]
   );
   const periodName = selectedPeriod ? reviewPeriods.find((p) => p.id === selectedPeriod)?.name ?? selectedPeriod : '';
 
@@ -342,7 +379,7 @@ export function LinksPage() {
                     onClick={() => setBulkRemoveConfirm({ open: true, periodId: selectedPeriod, periodName })}
                   >
                     <TrashSimple size={16} weight="duotone" className="mr-1.5" />
-                    Bulk remove all
+                    Remove unsubmitted
                   </Button>
                 )}
               </div>
@@ -383,7 +420,7 @@ export function LinksPage() {
                                     : a.relationshipType === 'hr-to-all'
                                       ? 'HR→All'
                                       : a.relationshipType;
-                        const statusLabel = a.status === 'completed' ? 'Completed' : a.status === 'in-progress' ? 'In progress' : 'Pending';
+                        const statusLabel = isAssignmentDone(a, submittedPairsForPeriod) ? 'Completed' : a.status === 'in-progress' ? 'In progress' : 'Pending';
                         const formUrl = `/appraisal/assignment/${a.id}`;
                         return (
                           <tr key={a.id} className="border-t border-border/40 hover:bg-muted/30">
@@ -815,7 +852,7 @@ export function LinksPage() {
                     {existingForPeriod > 0 && (
                       <p className="text-sm text-amber-600 flex items-center gap-2">
                         <Warning size={16} />
-                        {existingForPeriod} assignment(s) already exist for this period. Auto-generate will add more.
+                        {existingForPeriod} form(s) already exist for this period. Auto-generate only adds forms for pairs that don't have one yet.
                       </p>
                     )}
                   </>
@@ -998,13 +1035,21 @@ export function LinksPage() {
                     />
                   </div>
                 </div>
+                {autoNewVsExisting && autoNewVsExisting.existingCount > 0 && (
+                  <p className="text-sm text-amber-600 flex items-center gap-2">
+                    <Warning size={16} />
+                    {autoNewVsExisting.newCount} new form(s) will be created. {autoNewVsExisting.existingCount} will be skipped because that reviewer already has a form or a submitted review for that person this period.
+                  </p>
+                )}
                 <div className="flex justify-between">
                   <Button variant="outline" onClick={() => setAutoStep(1)}>
                     <CaretLeft size={16} className="mr-1" />
                     Back
                   </Button>
                   <Button onClick={handleAutoGenerate} disabled={autoGenerating}>
-                    {autoGenerating ? 'Creating...' : `Generate ${totalAutoCount} appraisals`}
+                    {autoGenerating
+                      ? 'Creating...'
+                      : `Generate ${autoNewVsExisting?.newCount ?? totalAutoCount} appraisals`}
                   </Button>
                 </div>
               </>
@@ -1015,6 +1060,11 @@ export function LinksPage() {
                 <div className="flex flex-col items-center py-6">
                   <CheckCircle size={48} weight="duotone" className="text-green-600 mb-4" />
                   <h3 className="text-xl font-semibold">{autoDoneCount} appraisals created</h3>
+                  {autoSkippedCount > 0 && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {autoSkippedCount} skipped because that reviewer already has a form or a submitted review for that person this period.
+                    </p>
+                  )}
                   <p className="text-sm text-muted-foreground mt-1">
                     Employees will see them in My Appraisals. You can add manual links for special cases.
                   </p>
@@ -1047,9 +1097,9 @@ export function LinksPage() {
         open={bulkRemoveConfirm.open}
         onClose={() => setBulkRemoveConfirm({ open: false, periodId: null, periodName: '' })}
         onConfirm={handleBulkRemoveConfirm}
-        title="Bulk remove all forms"
-        description={`Remove all appraisal forms for "${bulkRemoveConfirm.periodName}"? You can start over and re-create links or auto-assign after this. This cannot be undone.`}
-        confirmText="Remove all forms"
+        title="Remove unsubmitted forms"
+        description={`Remove every form for "${bulkRemoveConfirm.periodName}" that has not been submitted yet? Submitted forms are kept so the audit record stays intact, and re-running auto-assign will not ask anyone to review the same person twice. This cannot be undone.`}
+        confirmText="Remove unsubmitted forms"
         cancelText="Cancel"
         variant="danger"
         loading={bulkRemoving}

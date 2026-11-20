@@ -4,7 +4,7 @@ import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FileText, Users, Link as LinkIcon, CheckCircle, Clock, TrendUp, ChartBar, Activity, Buildings } from 'phosphor-react';
-import { formatDate } from '@/lib/utils';
+import { formatDate, scorePercent } from '@/lib/utils';
 import { BrandLogo } from '@/components/shared/brand-logo';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
@@ -68,7 +68,7 @@ export function Dashboard() {
       return a.templateId === template.id && a.completedAt && employee;
     });
     const avgScore = templateAppraisals.length > 0
-      ? templateAppraisals.reduce((sum, a) => sum + (a.score / a.maxScore) * 100, 0) / templateAppraisals.length
+      ? templateAppraisals.reduce((sum, a) => sum + scorePercent(a), 0) / templateAppraisals.length
       : 0;
     return {
       name: template.name.length > 12 ? template.name.substring(0, 12) + '...' : template.name,
@@ -269,7 +269,7 @@ export function Dashboard() {
               <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1 scrollbar-thin">
                 {recentCompletions.map((appraisal) => {
                   const employee = employees.find((e) => e.id === appraisal.employeeId);
-                  const percentage = Math.round((appraisal.score / appraisal.maxScore) * 100);
+                  const percentage = Math.round(scorePercent(appraisal));
                   const scoreColor = percentage >= 90 ? 'text-chart-2' : percentage >= 75 ? 'text-chart-1' : percentage >= 60 ? 'text-chart-4' : 'text-chart-5';
                   return (
                     <div

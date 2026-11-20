@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { scorePercent } from '@/lib/utils';
 import { createPortal } from 'react-dom';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -68,7 +69,7 @@ export function HistoricalReviewsPage() {
     const completedCount = totalAssignments > 0 ? assignmentsWithCompletedAppraisal : periodAppraisals.length;
     const completionRate = totalToComplete > 0 ? (completedCount / totalToComplete) * 100 : 0;
     const avgScore = periodAppraisals.length > 0
-      ? periodAppraisals.reduce((sum, a) => sum + (a.score / a.maxScore) * 100, 0) / periodAppraisals.length
+      ? periodAppraisals.reduce((sum, a) => sum + scorePercent(a), 0) / periodAppraisals.length
       : 0;
 
     // Get top performers
@@ -77,7 +78,7 @@ export function HistoricalReviewsPage() {
       if (!employeeScores[appraisal.employeeId]) {
         employeeScores[appraisal.employeeId] = { total: 0, max: 0, count: 0 };
       }
-      employeeScores[appraisal.employeeId].total += (appraisal.score / appraisal.maxScore) * 100;
+      employeeScores[appraisal.employeeId].total += scorePercent(appraisal);
       employeeScores[appraisal.employeeId].max += 100;
       employeeScores[appraisal.employeeId].count += 1;
     });
@@ -283,7 +284,7 @@ export function HistoricalReviewsPage() {
         const employeeScores: Record<string, { total: number; count: number }> = {};
         periodAppraisals.forEach((a) => {
           if (!employeeScores[a.employeeId]) employeeScores[a.employeeId] = { total: 0, count: 0 };
-          employeeScores[a.employeeId].total += (a.score / a.maxScore) * 100;
+          employeeScores[a.employeeId].total += scorePercent(a);
           employeeScores[a.employeeId].count += 1;
         });
         const topScorer = Object.entries(employeeScores)

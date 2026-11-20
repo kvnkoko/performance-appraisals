@@ -9,6 +9,7 @@ import { ImageUploader, recompressDataUrl } from '@/components/ui/image-uploader
 import { useEmployeeProfiles } from '@/hooks/use-employee-profiles';
 import type { Employee, EmployeeProfile } from '@/types';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/contexts/toast-context';
 
 interface ProfileEditModalProps {
   employee: Employee;
@@ -20,6 +21,7 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
   const { getOrCreateProfile, saveProfile } = useEmployeeProfiles();
   const [form, setForm] = useState<Partial<EmployeeProfile> & { employeeId: string }>(() => getOrCreateProfile(employee.id));
   const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
   // Raw string values for Skills, Fun facts, Achievements so spaces are preserved while typing (no trim on every keystroke)
   const [skillsRaw, setSkillsRaw] = useState('');
   const [funFactsRaw, setFunFactsRaw] = useState('');
@@ -79,6 +81,7 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
       onClose();
     } catch (e) {
       console.error(e);
+      toast({ title: 'Profile not saved', description: 'Your changes could not be saved. Please try again.', variant: 'error' });
     } finally {
       setSaving(false);
     }

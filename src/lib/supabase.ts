@@ -49,40 +49,36 @@ export async function getUsersFromSupabase(): Promise<User[]> {
     return [];
   }
 
-  try {
-    const supabase = await getSupabaseClient();
-    if (!supabase) {
-      return [];
-    }
-    
-    const { data, error } = await supabase
-      .from(TABLES.USERS)
-      .select('*')
-      .order('created_at', { ascending: false });
+  const supabase = await getSupabaseClient();
+  if (!supabase) throw new Error('Supabase client not available');
 
-    if (error) {
-      console.error('Error fetching users from Supabase:', error);
-      return [];
-    }
+  const { data, error } = await supabase
+    .from(TABLES.USERS)
+    .select('*')
+    .order('created_at', { ascending: false });
 
-    // Transform Supabase data to User type
-    return (data || []).map((user: any) => ({
-      id: user.id,
-      username: user.username,
-      passwordHash: user.password_hash,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      active: user.active,
-      employeeId: user.employee_id,
-      mustChangePassword: user.must_change_password,
-      createdAt: user.created_at,
-      lastLoginAt: user.last_login_at,
-    }));
-  } catch (error) {
-    console.error('Error in getUsersFromSupabase:', error);
-    return [];
+  if (error) {
+    console.error('Error fetching users from Supabase:', error);
+    throw error;
   }
+
+  return (data || []).map(mapUser);
+}
+
+function mapUser(user: any): User {
+  return {
+    id: user.id,
+    username: user.username,
+    passwordHash: user.password_hash,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    active: user.active,
+    employeeId: user.employee_id,
+    mustChangePassword: user.must_change_password,
+    createdAt: user.created_at,
+    lastLoginAt: user.last_login_at,
+  };
 }
 
 export async function getUserByUsernameFromSupabase(username: string): Promise<User | undefined> {
@@ -91,45 +87,22 @@ export async function getUserByUsernameFromSupabase(username: string): Promise<U
     return undefined;
   }
 
-  try {
-    const supabase = await getSupabaseClient();
-    if (!supabase) {
-      return undefined;
-    }
-    
-    // Exact match on lowercase username (stored that way in saveUser).
-    // maybeSingle() avoids 406 when 0 rows; .single() would throw 406.
-    const normalized = username.trim().toLowerCase();
-    const { data, error } = await supabase
-      .from(TABLES.USERS)
-      .select('*')
-      .eq('username', normalized)
-      .maybeSingle();
+  const supabase = await getSupabaseClient();
+  if (!supabase) throw new Error('Supabase client not available');
 
-    if (error) {
-      console.error('Error fetching user from Supabase:', error);
-      return undefined;
-    }
+  // Exact match on lowercase username (stored that way in saveUser).
+  const normalized = username.trim().toLowerCase();
+  const { data, error } = await supabase
+    .from(TABLES.USERS)
+    .select('*')
+    .eq('username', normalized)
+    .maybeSingle();
 
-    if (!data) return undefined;
-
-    return {
-      id: data.id,
-      username: data.username,
-      passwordHash: data.password_hash,
-      name: data.name,
-      email: data.email,
-      role: data.role,
-      active: data.active,
-      employeeId: data.employee_id,
-      mustChangePassword: data.must_change_password,
-      createdAt: data.created_at,
-      lastLoginAt: data.last_login_at,
-    };
-  } catch (error) {
-    console.error('Error in getUserByUsernameFromSupabase:', error);
-    return undefined;
+  if (error) {
+    console.error('Error fetching user from Supabase:', error);
+    throw error;
   }
+  return data ? mapUser(data) : undefined;
 }
 
 export async function getUserFromSupabase(id: string): Promise<User | undefined> {
@@ -138,43 +111,20 @@ export async function getUserFromSupabase(id: string): Promise<User | undefined>
     return undefined;
   }
 
-  try {
-    const supabase = await getSupabaseClient();
-    if (!supabase) {
-      return undefined;
-    }
+  const supabase = await getSupabaseClient();
+  if (!supabase) throw new Error('Supabase client not available');
 
-    // maybeSingle() avoids 406 when 0 rows; .single() would throw 406.
-    const { data, error } = await supabase
-      .from(TABLES.USERS)
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
+  const { data, error } = await supabase
+    .from(TABLES.USERS)
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
 
-    if (error) {
-      console.error('Error fetching user from Supabase:', error);
-      return undefined;
-    }
-
-    if (!data) return undefined;
-
-    return {
-      id: data.id,
-      username: data.username,
-      passwordHash: data.password_hash,
-      name: data.name,
-      email: data.email,
-      role: data.role,
-      active: data.active,
-      employeeId: data.employee_id,
-      mustChangePassword: data.must_change_password,
-      createdAt: data.created_at,
-      lastLoginAt: data.last_login_at,
-    };
-  } catch (error) {
-    console.error('Error in getUserFromSupabase:', error);
-    return undefined;
+  if (error) {
+    console.error('Error fetching user from Supabase:', error);
+    throw error;
   }
+  return data ? mapUser(data) : undefined;
 }
 
 export async function saveUserToSupabase(user: User): Promise<void> {

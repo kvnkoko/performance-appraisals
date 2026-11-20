@@ -14,6 +14,18 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
+/** Light/dark is a per-device preference; the company setting is only the default. */
+const THEME_STORAGE_KEY = 'theme';
+
+function readStoredTheme(): Theme | null {
+  try {
+    const value = localStorage.getItem(THEME_STORAGE_KEY);
+    return value === 'light' || value === 'dark' || value === 'system' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 function applyThemeToDOM(newTheme: Theme): 'light' | 'dark' {
   const root = document.documentElement;
   const resolved =
@@ -32,20 +44,23 @@ function applyThemeToDOM(newTheme: Theme): 'light' | 'dark' {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>('system');
-  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
+  const [theme, setThemeState] = useState<Theme>(() => readStoredTheme() ?? 'system');
+  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(() => applyThemeToDOM(readStoredTheme() ?? 'system'));
   const [accentColor, setAccentColorState] = useState<string>('#3B82F6');
 
   useEffect(() => {
-    getSettings().then((settings) => {
-      setThemeState(settings.theme);
-      setAccentColorState(settings.accentColor ?? '#3B82F6');
-      const resolved = applyThemeToDOM(settings.theme);
-      setResolvedTheme(resolved);
-      if (settings.accentColor) {
-        applyAccentColor(settings.accentColor);
-      }
-    });
+    getSettings()
+      .then((settings) => {
+        if (!readStoredTheme() && settings.theme) {
+          setThemeState(settings.theme);
+          setResolvedTheme(applyThemeToDOM(settings.theme));
+        }
+        setAccentColorState(settings.accentColor ?? '#3B82F6');
+        if (settings.accentColor) {
+          applyAccentColor(settings.accentColor);
+        }
+      })
+      .catch((error) => console.error('Could not load theme settings:', error));
   }, []);
 
   useEffect(() => {
@@ -62,10 +77,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const setTheme = async (newTheme: Theme) => {
     setThemeState(newTheme);
-    const resolved = applyThemeToDOM(newTheme);
-    setResolvedTheme(resolved);
-    const settings = await getSettings();
-    await saveSettings({ ...settings, theme: newTheme });
+    setResolvedTheme(applyThemeToDOM(newTheme));
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+    } catch {
+      // storage unavailable (private mode); the choice still applies for this visit
+    }
   };
 
   const setAccentColor = async (color: string) => {

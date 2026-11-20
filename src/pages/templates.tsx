@@ -6,7 +6,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Plus, Pencil, Trash, Copy, FileText } from 'phosphor-react';
 import { TemplateDialog } from '@/components/templates/template-dialog';
 import { APPRAISAL_TYPE_LABELS } from '@/types';
-import { deleteTemplate, saveTemplate } from '@/lib/storage';
+import { deleteTemplate, saveTemplate, describeError } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { formatDate, generateId } from '@/lib/utils';
 import type { QuestionType } from '@/types';
@@ -38,7 +38,7 @@ export function TemplatesPage() {
       setDeleteConfirm({ open: false, id: null, name: '' });
     } catch (error) {
       console.error('Delete error:', error);
-      toast({ title: 'Error', description: 'Failed to delete template. Please try again.', variant: 'error' });
+      toast({ title: 'Error', description: describeError(error, 'Failed to delete template. Please try again.'), variant: 'error' });
     } finally {
       setDeleting(false);
     }
@@ -252,7 +252,7 @@ export function TemplatesPage() {
         onClose={() => setDeleteConfirm({ open: false, id: null, name: '' })}
         onConfirm={handleDeleteConfirm}
         title="Delete Template"
-        description={`Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone and will remove all associated data.`}
+        description={`Are you sure you want to delete "${deleteConfirm.name}"? Only possible if no forms, links or submitted appraisals use this template. This cannot be undone.`}
         confirmText="Delete Template"
         cancelText="Cancel"
         variant="danger"

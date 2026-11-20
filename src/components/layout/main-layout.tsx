@@ -1,6 +1,6 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { List, X } from 'phosphor-react';
+import { List, WarningCircle, X } from 'phosphor-react';
 import { Sidebar } from './sidebar';
 import { ToastContainer } from '@/components/ui/toast';
 import { useToast } from '@/contexts/toast-context';
@@ -42,6 +42,13 @@ export function MainLayout({ children }: { children: ReactNode }) {
     location.pathname === '/directory' && checkIsAdmin()
       ? 'Employees'
       : getPageTitle(location.pathname);
+  const [cloudSyncError, setCloudSyncError] = useState(false);
+
+  useEffect(() => {
+    const onError = () => setCloudSyncError(true);
+    window.addEventListener('cloudSyncError', onError);
+    return () => window.removeEventListener('cloudSyncError', onError);
+  }, []);
 
   return (
     <div className="flex-1 min-h-0 min-h-screen min-h-[100dvh] w-full max-w-full min-w-0 flex flex-col overflow-x-hidden">
@@ -66,6 +73,24 @@ export function MainLayout({ children }: { children: ReactNode }) {
       </header>
       <main className="flex-1 min-h-0 min-w-0 w-full lg:w-[calc(100%-15rem)] lg:ml-60 overflow-y-auto overflow-x-hidden bg-background text-foreground flex flex-col scrollbar-gutter-stable overflow-anchor-none">
         <div className="flex-1 flex flex-col min-h-0 min-w-0 w-full max-w-full pt-20 px-4 pb-10 sm:px-6 sm:pb-12 lg:pt-8 lg:px-8 lg:pb-16 overflow-x-hidden">
+          {cloudSyncError && (
+            <div role="alert" className="mb-4 flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+              <WarningCircle size={20} weight="duotone" className="mt-0.5 shrink-0 text-amber-600" />
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-foreground">Couldn't reach the server</p>
+                <p className="text-muted-foreground">
+                  You're seeing the last saved copy, which may be out of date. Changes can't be saved until the connection is back.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="shrink-0 rounded-md px-2.5 py-1 text-xs font-medium text-foreground hover:bg-amber-500/20"
+              >
+                Retry
+              </button>
+            </div>
+          )}
           {children}
         </div>
       </main>

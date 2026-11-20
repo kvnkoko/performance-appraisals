@@ -11,15 +11,18 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CheckCircle } from 'phosphor-react';
 import { useApp } from '@/contexts/app-context';
+import { useUser } from '@/contexts/user-context';
 import {
   getAppraisalAssignment,
   getTemplate,
   getEmployee,
   getReviewPeriod,
-  saveAppraisal,
-  saveAppraisalAssignment,
+  getSubmittedAppraisalsForPair,
+  submitAppraisalForAssignment,
+  AlreadySubmittedError,
+  UserFacingError,
 } from '@/lib/storage';
-import { generateId, calculateScore } from '@/lib/utils';
+import { generateId, calculateScore, getUnansweredRequiredCount } from '@/lib/utils';
 import { useToast } from '@/contexts/toast-context';
 import { RatingLimitSummary, RatingSelector } from '@/components/ui/rating-selector';
 import { Select } from '@/components/ui/select';
@@ -49,13 +52,16 @@ export function AppraisalFormByAssignmentPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { refresh } = useApp();
+  const { user, employee: me, loading: userLoading, isAdmin } = useUser();
+  const myEmployeeId = user?.employeeId ?? me?.id ?? null;
   const [loading, setLoading] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [assignment, setAssignment] = useState<AppraisalAssignment | null>(null);
   const [template, setTemplate] = useState<any>(null);
   const [employee, setEmployee] = useState<any>(null);
   const [appraiser, setAppraiser] = useState<any>(null);
-  const [completed, setCompleted] = useState(false);
+  const [completed, setCompleted] = useState<false | 'just-submitted' | 'already-submitted'>(false);
 
   const {
     register,
@@ -70,8 +76,11 @@ export function AppraisalFormByAssignmentPage() {
   const { resolvedTheme, setTheme } = useTheme();
 
   useEffect(() => {
+    if (userLoading) return;
     loadData();
-  }, [assignmentId]);
+  }, [assignmentId, userLoading]);
+
+  const isOwnForm = !!assignment && assignment.appraiserId === myEmployeeId;
 
   const loadData = async () => {
     if (!assignmentId) {
@@ -86,8 +95,20 @@ export function AppraisalFormByAssignmentPage() {
         setLoading(false);
         return;
       }
-      if (assignmentData.status === 'completed') {
-        setCompleted(true);
+      if (assignmentData.appraiserId !== myEmployeeId && !isAdmin()) {
+        setAccessDenied(true);
+        setLoading(false);
+        return;
+      }
+      const alreadySubmitted =
+        assignmentData.status === 'completed' ||
+        (await getSubmittedAppraisalsForPair(
+          assignmentData.reviewPeriodId,
+          assignmentData.appraiserId,
+          assignmentData.employeeId
+        )).length > 0;
+      if (alreadySubmitted) {
+        setCompleted('already-submitted');
         setLoading(false);
         return;
       }
@@ -150,6 +171,24 @@ export function AppraisalFormByAssignmentPage() {
 
   const onSubmit = async (data: ResponseFormData) => {
     if (!assignment || !template) return;
+    if (!isOwnForm) {
+      toast({
+        title: 'Not your form',
+        description: `Only ${assignment.appraiserName} can submit this appraisal.`,
+        variant: 'error',
+      });
+      return;
+    }
+
+    const unanswered = getUnansweredRequiredCount(template, data);
+    if (unanswered > 0) {
+      toast({
+        title: 'Form incomplete',
+        description: `Please answer all required questions (${unanswered} left) before submitting.`,
+        variant: 'error',
+      });
+      return;
+    }
 
     const submittedRatingCounts = getRatingCounts(data);
     const ratingLimitOptions = getRatingLimitOptionsForAppraisal({
@@ -184,8 +223,7 @@ export function AppraisalFormByAssignmentPage() {
       const period = await getReviewPeriod(assignment.reviewPeriodId);
       const reviewPeriodName = period?.name ?? 'Review Period';
 
-      await saveAppraisal({
-        id: generateId(),
+      await submitAppraisalForAssignment(assignment.id, {
         templateId: template.id,
         employeeId: assignment.employeeId,
         appraiserId: assignment.appraiserId,
@@ -197,13 +235,19 @@ export function AppraisalFormByAssignmentPage() {
         completedAt: new Date().toISOString(),
         createdAt: new Date().toISOString(),
       });
-      await saveAppraisalAssignment({ ...assignment, status: 'completed' });
-      await refresh();
-
-      setCompleted(true);
+      setCompleted('just-submitted');
       toast({ title: 'Success', description: 'Appraisal submitted successfully!', variant: 'success' });
+      refresh().catch(() => {});
     } catch (e) {
-      toast({ title: 'Error', description: 'Failed to submit appraisal.', variant: 'error' });
+      if (e instanceof AlreadySubmittedError) {
+        setCompleted('already-submitted');
+        refresh().catch(() => {});
+      } else {
+        const description = e instanceof UserFacingError
+          ? e.message
+          : 'Your appraisal was NOT saved. Check your connection and try again; your answers are still on this page.';
+        toast({ title: 'Submission failed', description, variant: 'error' });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -216,14 +260,31 @@ export function AppraisalFormByAssignmentPage() {
       </div>
     );
   }
+  if (accessDenied) {
+    return (
+      <div className="flex items-center justify-center min-h-screen p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+            <h2 className="text-2xl font-bold mb-2">Not your appraisal</h2>
+            <p className="text-muted-foreground mb-4">This appraisal form is assigned to someone else.</p>
+            <Button onClick={() => navigate('/my-appraisals')}>Go to My Appraisals</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   if (completed) {
     return (
       <div className="flex items-center justify-center min-h-screen p-4">
         <Card className="w-full max-w-md">
           <CardContent className="flex flex-col items-center justify-center py-12">
             <CheckCircle size={64} weight="duotone" className="text-green-600/80 mb-4" />
-            <h2 className="text-2xl font-bold mb-2">Thank You!</h2>
-            <p className="text-muted-foreground text-center mb-4">Your appraisal has been submitted successfully.</p>
+            <h2 className="text-2xl font-bold mb-2">{completed === 'just-submitted' ? 'Thank You!' : 'Already submitted'}</h2>
+            <p className="text-muted-foreground text-center mb-4">
+              {completed === 'just-submitted'
+                ? 'Your appraisal has been submitted successfully.'
+                : 'You have already submitted this appraisal for this review period. There is nothing more to do here.'}
+            </p>
             <Button onClick={() => navigate('/my-appraisals')}>Back to My Appraisals</Button>
           </CardContent>
         </Card>
@@ -319,6 +380,11 @@ export function AppraisalFormByAssignmentPage() {
             <span>Appraising:</span>
             <span className="font-semibold text-foreground">{employee.name}</span>
           </div>
+          {!isOwnForm && assignment && (
+            <p className="mx-auto max-w-xl rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+              Preview only. This form belongs to {assignment.appraiserName}; only they can submit it.
+            </p>
+          )}
         </div>
 
         <RatingLimitSummary
@@ -546,7 +612,7 @@ export function AppraisalFormByAssignmentPage() {
           </div>
 
           <div className="mt-6 lg:mt-8 flex justify-end">
-            <Button type="submit" size="lg" disabled={submitting}>
+            <Button type="submit" size="lg" disabled={submitting || !isOwnForm}>
               {submitting ? 'Submitting...' : 'Submit Appraisal'}
             </Button>
           </div>

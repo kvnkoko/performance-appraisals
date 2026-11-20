@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Plus, Pencil, Trash, UsersThree, MagnifyingGlass, User, ArrowClockwise, Crown, UserPlus } from 'phosphor-react';
 import { TeamDialog } from '@/components/teams/team-dialog';
-import { deleteTeam } from '@/lib/storage';
+import { deleteTeam, describeError } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { formatDate } from '@/lib/utils';
 
@@ -80,7 +80,7 @@ export function TeamsPage() {
       setDeleteConfirm({ open: false, id: null, name: '' });
     } catch (error) {
       console.error('Delete error:', error);
-      toast({ title: 'Error', description: 'Failed to delete team. Please try again.', variant: 'error' });
+      toast({ title: 'Error', description: describeError(error, 'Failed to delete team. Please try again.'), variant: 'error' });
     } finally {
       setDeleting(false);
     }
@@ -322,7 +322,7 @@ export function TeamsPage() {
         onClose={() => setDeleteConfirm({ open: false, id: null, name: '' })}
         onConfirm={handleDeleteConfirm}
         title="Delete Team"
-        description={`Are you sure you want to delete "${deleteConfirm.name}"? Employees in this team will not be deleted, but will need to be reassigned to another team.`}
+        description={`Are you sure you want to delete "${deleteConfirm.name}"? Only possible once no employees belong to this team. Move them to another team first.`}
         confirmText="Delete Team"
         cancelText="Cancel"
         variant="danger"

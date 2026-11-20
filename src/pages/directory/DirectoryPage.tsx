@@ -13,7 +13,7 @@ import { ProfileEditModal } from './ProfileEditModal';
 import type { Employee, DirectoryFilters as DirectoryFiltersType, EmploymentStatusFilter } from '@/types';
 import { isDepartmentLeader, LOCKING_STATUSES } from '@/types';
 import { cn } from '@/lib/utils';
-import { getEmployees, getUserByEmployeeId, deleteEmployee } from '@/lib/storage';
+import { getEmployees, getUserByEmployeeId, deleteEmployee, describeError } from '@/lib/storage';
 
 const defaultFilters: DirectoryFiltersType = {
   search: '',
@@ -131,7 +131,7 @@ export function DirectoryPage() {
   }, [admin, refresh, loadLinkedUsers]);
 
   const filteredForSections = useMemo(() => {
-    let list = filterByEmploymentStatus(employees, filters.employmentStatus ?? 'active');
+    let list = filterByEmploymentStatus(employees, admin ? (filters.employmentStatus ?? 'active') : 'active');
     const search = filters.search.toLowerCase().trim();
     if (search) {
       const teamNames = new Map(teams.map((t) => [t.id, t.name.toLowerCase()]));
@@ -163,7 +163,7 @@ export function DirectoryPage() {
       list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
     return list;
-  }, [employees, teams, filters, sort, employeeProfiles, filters.employmentStatus]);
+  }, [employees, teams, filters, sort, employeeProfiles, filters.employmentStatus, admin]);
 
   const groups = useMemo(() => {
     if (groupBy === 'none') return null;
@@ -219,7 +219,7 @@ export function DirectoryPage() {
       setDeleteConfirm({ open: false, id: null, name: '' });
     } catch (error) {
       console.error('Delete error:', error);
-      toast({ title: 'Error', description: 'Failed to delete employee. Please try again.', variant: 'error' });
+      toast({ title: 'Error', description: describeError(error, 'Failed to delete employee. Please try again.'), variant: 'error' });
     } finally {
       setDeleting(false);
     }
@@ -302,6 +302,7 @@ export function DirectoryPage() {
 
       <section className="min-w-0 w-full">
         <DirectoryFilters
+          showEmploymentFilter={admin}
           filters={filters}
           onFiltersChange={setFilters}
           viewMode={viewMode}
@@ -388,7 +389,7 @@ export function DirectoryPage() {
             onClose={() => setDeleteConfirm({ open: false, id: null, name: '' })}
             onConfirm={handleDeleteConfirm}
             title="Delete Employee"
-            description={`Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone and will remove all associated data.`}
+            description={`Are you sure you want to delete "${deleteConfirm.name}"? Only possible if they have no submitted appraisals and nobody reports to them. Their pending forms and unused links are removed and any linked login is locked. For people who left, set their status to Resigned or Terminated instead.`}
             confirmText="Delete Employee"
             cancelText="Cancel"
             variant="danger"

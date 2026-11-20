@@ -903,7 +903,7 @@ export function UsersPage() {
         onClose={() => setDeleteConfirm({ open: false, id: null, name: '' })}
         onConfirm={handleDeleteConfirm}
         title="Delete User"
-        description={`Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone and will remove all associated data.`}
+        description={`Are you sure you want to delete "${deleteConfirm.name}"? This removes the login account only. The linked employee and all their appraisals are kept. This cannot be undone.`}
         confirmText="Delete User"
         cancelText="Cancel"
         variant="danger"

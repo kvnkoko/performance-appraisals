@@ -16,6 +16,7 @@ import { useEmployeeProfiles } from '@/hooks/use-employee-profiles';
 import { applyAccentColor, hashPassword, verifyPassword } from '@/lib/utils';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import type { User } from '@/types';
+import { IntegrityCheckCard } from '@/components/settings/integrity-check-card';
 
 // Preset accent colors for easy selection
 const PRESET_COLORS = [
@@ -109,6 +110,7 @@ export function SettingsPage() {
   };
 
   const handleExport = async () => {
+    if (!isAdmin()) return;
     try {
       const data = await exportData();
       const blob = new Blob([data], { type: 'application/json' });
@@ -130,7 +132,9 @@ export function SettingsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!confirm('Importing data will replace all existing data. Are you sure?')) {
+    if (!isAdmin()) return;
+    if (!confirm('Import this backup into the live database? Records with the same ID will be overwritten.')) {
+      e.target.value = '';
       return;
     }
 
@@ -140,7 +144,10 @@ export function SettingsPage() {
       await refresh();
       toast({ title: 'Import successful', description: 'Data imported successfully.', variant: 'success' });
     } catch (error) {
-      toast({ title: 'Error', description: 'Failed to import data. Please check the file format.', variant: 'error' });
+      console.error('Import failed:', error);
+      toast({ title: 'Error', description: 'Import stopped partway. Check the file format and connection; records already imported were saved.', variant: 'error' });
+    } finally {
+      e.target.value = '';
     }
   };
 
@@ -449,7 +456,7 @@ export function SettingsPage() {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 />
               </div>
-              <Button type="button" onClick={handleSave} disabled={loading}>
+              <Button type="button" onClick={() => handleSave()} disabled={loading}>
                 {loading ? 'Saving...' : 'Save Changes'}
               </Button>
             </CardContent>
@@ -473,7 +480,7 @@ export function SettingsPage() {
                   placeholder="Enter new PIN"
                 />
               </div>
-              <Button onClick={handleSave} disabled={loading}>
+              <Button onClick={() => handleSave()} disabled={loading}>
                 {loading ? 'Saving...' : 'Update PIN'}
               </Button>
             </CardContent>
@@ -561,7 +568,7 @@ export function SettingsPage() {
               </div>
             </div>
             
-            <Button onClick={handleSave} disabled={loading}>
+            <Button onClick={() => handleSave()} disabled={loading}>
               {loading ? 'Saving...' : 'Save Appearance'}
             </Button>
           </CardContent>
@@ -620,27 +627,33 @@ export function SettingsPage() {
               {syncing ? 'Syncing...' : 'Sync from cloud'}
             </Button>
             <p className="text-xs text-muted-foreground">
-              Resets local data from Supabase so all devices see the same data. Only available when Supabase is configured.
+              Reloads this device's saved copy from the server so it matches what everyone else sees.
             </p>
-            <Button type="button" onClick={handleExport} variant="secondary" className="w-full">
-              <Download size={18} weight="duotone" className="mr-2" />
-              Export Data
-            </Button>
-            <div className="space-y-2">
-              <Label htmlFor="import">Import Data</Label>
-              <Input
-                id="import"
-                type="file"
-                accept=".json"
-                onChange={handleImport}
-                className="mt-2"
-              />
-              <p className="text-xs text-muted-foreground">
-                Importing will replace all existing data. Make sure to export first as a backup.
-              </p>
-            </div>
+            {isAdmin() && (
+              <>
+                <Button type="button" onClick={handleExport} variant="secondary" className="w-full">
+                  <Download size={18} weight="duotone" className="mr-2" />
+                  Export Data
+                </Button>
+                <div className="space-y-2">
+                  <Label htmlFor="import">Import Data</Label>
+                  <Input
+                    id="import"
+                    type="file"
+                    accept=".json"
+                    onChange={handleImport}
+                    className="mt-2"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Restores records from a backup file into the live database. Records with the same ID are overwritten; nothing else is removed. Export first as a backup.
+                  </p>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
+
+        {isAdmin() && <IntegrityCheckCard />}
 
         {isAdmin() && (
           <Card className="border-destructive/30">

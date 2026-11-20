@@ -343,6 +343,19 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           variant: 'success',
         });
         didLockAccounts = true;
+      } else if (existingEmployee?.employmentStatus && LOCKING_STATUSES.includes(existingEmployee.employmentStatus)) {
+        // Rehired / status corrected: re-enable the accounts that were locked by the old status.
+        const linkedUsers = (await getUsers()).filter((u) => u.employeeId === newEmployeeId && !u.active);
+        for (const u of linkedUsers) {
+          await saveUser({ ...u, active: true });
+        }
+        if (linkedUsers.length > 0) {
+          toast({
+            title: 'Account unlocked',
+            description: `${linkedUsers.length} linked login account(s) can sign in again.`,
+            variant: 'success',
+          });
+        }
       }
 
       // Dispatch event to notify other pages (like Teams) to refresh
@@ -698,50 +711,24 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         updatedUser.mustChangePassword = true; // Force password change if password was changed
       }
       
-      // Try saving with retry logic for constraint errors
-      let saveAttempts = 0;
-      const maxSaveAttempts = 3;
-      let saveSuccess = false;
-      
-      while (!saveSuccess && saveAttempts < maxSaveAttempts) {
-        try {
-          await saveUser(updatedUser);
-          saveSuccess = true;
-        } catch (saveError: any) {
-          saveAttempts++;
-          console.error(`Error saving credentials (attempt ${saveAttempts}/${maxSaveAttempts}):`, saveError);
-          
-          // If it's a constraint error, check if username was changed
-          if ((saveError?.name === 'ConstraintError' || saveError?.message?.includes('unique') || saveError?.message?.includes('constraint') || saveError?.message?.includes('by-username')) && 
-              editableUsername.toLowerCase().trim() !== currentUser.username.toLowerCase()) {
-            // Username conflict - check again
-            const { getUserByUsername } = await import('@/lib/storage');
-            const conflictCheck = await getUserByUsername(editableUsername.toLowerCase().trim());
-            if (conflictCheck && conflictCheck.id !== currentUser.id) {
-              toast({ 
-                title: 'Error', 
-                description: 'Username already exists. Please choose a different one.', 
-                variant: 'error' 
-              });
-              setSavingCredentials(false);
-              return;
-            }
-            
-            // If no conflict found but still error, try with a timestamp suffix
-            if (saveAttempts < maxSaveAttempts) {
-              const timestampSuffix = Date.now().toString().slice(-6);
-              updatedUser.username = `${editableUsername.toLowerCase().trim()}${timestampSuffix}`;
-              await new Promise(resolve => setTimeout(resolve, 100 * saveAttempts));
-              continue;
-            }
-          }
-          
-          // If max attempts reached or different error, throw
-          if (saveAttempts >= maxSaveAttempts) {
-            throw new Error(`Failed to save credentials after ${maxSaveAttempts} attempts. Please try again.`);
-          }
-          throw saveError;
+      try {
+        await saveUser(updatedUser);
+      } catch (saveError: any) {
+        const message = String(saveError?.message ?? '');
+        const isUniqueViolation =
+          saveError?.code === '23505' ||
+          saveError?.name === 'ConstraintError' ||
+          /unique|duplicate|by-username/i.test(message);
+        if (isUniqueViolation) {
+          toast({
+            title: 'Username taken',
+            description: `"${updatedUser.username}" is already used by another account. Please choose a different username.`,
+            variant: 'error',
+          });
+          setSavingCredentials(false);
+          return;
         }
+        throw saveError;
       }
       
       // Reload the user to get the latest data (reuse getUser from above)
@@ -934,7 +921,6 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
               <option value="chairman">Chairman</option>
               <option value="executive">Executive</option>
               <option value="department-leader">Department Leader</option>
-              <option value="leader">Department Leader</option>
               <option value="member">Team Member</option>
               <option value="hr">HR Personnel</option>
             </Select>
