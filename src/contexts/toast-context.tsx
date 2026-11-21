@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
 import { ToastContainer, type Toast } from '@/components/ui/toast';
 import { generateId } from '@/lib/utils';
+import { isReadOnlyMode, ReadOnlyModeError } from '@/lib/read-only-mode';
 
 interface ToastContextType {
   toast: (toast: Omit<Toast, 'id'>) => void;
@@ -13,7 +14,12 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const toast = useCallback((toastData: Omit<Toast, 'id'>) => {
+  const toast = useCallback((input: Omit<Toast, 'id'>) => {
+    // While "View as" is on, failures are almost always blocked writes; many handlers show a generic message.
+    const toastData: Omit<Toast, 'id'> =
+      input.variant === 'error' && isReadOnlyMode()
+        ? { ...input, title: 'Not saved: read-only view', description: new ReadOnlyModeError().message }
+        : input;
     const id = generateId();
     setToasts((prev) => [...prev, { ...toastData, id }]);
     setTimeout(() => {

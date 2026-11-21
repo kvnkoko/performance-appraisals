@@ -1,12 +1,33 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import type { User, Employee } from '@/types';
 import { LOCKING_STATUSES } from '@/types';
-import { getUser, getEmployee } from '@/lib/storage';
+import { getUser, getEmployee, getUserByEmployeeId } from '@/lib/storage';
 import { getSupabaseClient, getMyUserFromSupabase, isSupabaseConfigured } from '@/lib/supabase';
+import { setReadOnlyMode } from '@/lib/read-only-mode';
+
+export interface ViewAsTarget {
+  mode: 'role' | 'employee';
+  employeeId: string;
+  /** For role mode: the role being previewed (the employee is an example holder of it). */
+  role?: Employee['hierarchy'];
+}
+
+export interface ViewAsState extends ViewAsTarget {
+  user: User;
+  employee: Employee;
+  /** False when the employee has no (active) login account; the view shows what they would see. */
+  hasLogin: boolean;
+}
 
 interface UserContextType {
+  /** The account the app is acting as: the viewed person while "View as" is on. */
   user: User | null;
   employee: Employee | null;
+  /** The person actually signed in. */
+  realUser: User | null;
+  viewAs: ViewAsState | null;
+  startViewAs: (target: ViewAsTarget) => Promise<void>;
+  stopViewAs: () => Promise<void>;
   loading: boolean;
   refresh: () => Promise<void>;
   logout: () => Promise<void>;
@@ -63,17 +84,97 @@ function userFromStoredSession(): User {
   };
 }
 
+const VIEW_AS_KEY = 'viewAs';
+
+function readStoredViewAs(): ViewAsTarget | null {
+  try {
+    const raw = sessionStorage.getItem(VIEW_AS_KEY);
+    return raw ? (JSON.parse(raw) as ViewAsTarget) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function logViewAs(action: 'start' | 'stop', target: ViewAsTarget) {
+  if (!isSupabaseConfigured()) return;
+  try {
+    const supabase = await getSupabaseClient();
+    await supabase?.rpc('log_view_as', {
+      p_action: action,
+      p_employee_id: target.employeeId,
+      p_details: { mode: target.mode, role: target.role ?? null },
+    });
+  } catch (error) {
+    console.warn('Could not record View as in the audit log:', error);
+  }
+}
+
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [employee, setEmployee] = useState<Employee | null>(null);
+  const [realUser, setUser] = useState<User | null>(null);
+  const [realEmployee, setEmployee] = useState<Employee | null>(null);
+  const [viewAs, setViewAs] = useState<ViewAsState | null>(null);
   const [loading, setLoading] = useState(true);
+  const user = viewAs?.user ?? realUser;
+  const employee = viewAs?.employee ?? realEmployee;
+
+  const clearViewAs = useCallback(() => {
+    sessionStorage.removeItem(VIEW_AS_KEY);
+    setReadOnlyMode(false);
+    setViewAs(null);
+  }, []);
+
+  /** Switch the app to another person's view. Read-only mode is on before anything renders as them. */
+  const enterViewAs = useCallback(async (target: ViewAsTarget, record: boolean) => {
+    const targetEmployee = await getEmployee(target.employeeId);
+    if (!targetEmployee) throw new Error('That employee no longer exists.');
+    const account = await getUserByEmployeeId(target.employeeId);
+    const hasLogin = !!account && account.active !== false;
+    const viewedUser: User = account
+      ? { ...account, employeeId: targetEmployee.id }
+      : {
+          id: `view-as-${targetEmployee.id}`,
+          username: '(no login account)',
+          passwordHash: '',
+          name: targetEmployee.name,
+          email: targetEmployee.email,
+          role: 'staff',
+          active: true,
+          employeeId: targetEmployee.id,
+          createdAt: new Date().toISOString(),
+        };
+    setReadOnlyMode(true);
+    sessionStorage.setItem(VIEW_AS_KEY, JSON.stringify(target));
+    setViewAs({ ...target, user: viewedUser, employee: targetEmployee, hasLogin });
+    if (record) await logViewAs('start', target);
+  }, []);
+
+  const startViewAs = useCallback(
+    async (target: ViewAsTarget) => {
+      if (realUser?.role !== 'admin') throw new Error('Only administrators can use View as.');
+      if (viewAs) await logViewAs('stop', viewAs);
+      try {
+        await enterViewAs(target, true);
+      } catch (error) {
+        clearViewAs();
+        throw error;
+      }
+    },
+    [realUser, viewAs, enterViewAs, clearViewAs]
+  );
+
+  const stopViewAs = useCallback(async () => {
+    const current = viewAs;
+    clearViewAs();
+    if (current) await logViewAs('stop', current);
+  }, [viewAs, clearViewAs]);
 
   const endSession = useCallback(async (signOut: boolean) => {
+    clearViewAs();
     clearStoredSession();
     setUser(null);
     setEmployee(null);
     if (signOut) await signOutOfSupabase();
-  }, []);
+  }, [clearViewAs]);
 
   /** Load the account and linked employee; returns false when the session must end. */
   const applyAccount = useCallback(
@@ -88,9 +189,17 @@ export function UserProvider({ children }: { children: ReactNode }) {
       storeSession(userData);
       setUser(userData);
       setEmployee(employeeData);
+
+      // "View as" survives a page reload in the same tab, but only for administrators.
+      const storedViewAs = readStoredViewAs();
+      if (storedViewAs && userData.role === 'admin') {
+        await enterViewAs(storedViewAs, false).catch(() => clearViewAs());
+      } else if (storedViewAs) {
+        clearViewAs();
+      }
       return true;
     },
-    []
+    [enterViewAs, clearViewAs]
   );
 
   const refresh = useCallback(async () => {
@@ -154,7 +263,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }, [applyAccount, endSession]);
 
-  const logout = useCallback(() => endSession(true), [endSession]);
+  const logout = useCallback(async () => {
+    if (viewAs) await logViewAs('stop', viewAs);
+    await endSession(true);
+  }, [viewAs, endSession]);
 
   // Helper functions
   const isAdmin = () => user?.role === 'admin';
@@ -192,6 +304,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (!supabase) return;
       const { data } = supabase.auth.onAuthStateChange((event: string) => {
         if (event === 'SIGNED_OUT') {
+          clearViewAs();
           clearStoredSession();
           setUser(null);
           setEmployee(null);
@@ -200,7 +313,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       unsubscribe = () => data.subscription.unsubscribe();
     });
     return () => unsubscribe?.();
-  }, []);
+  }, [clearViewAs]);
 
   // Re-validate session when user returns to the tab (e.g. from another device we may have deleted the user/employee)
   useEffect(() => {
@@ -254,6 +367,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
     <UserContext.Provider value={{ 
       user, 
       employee,
+      realUser,
+      viewAs,
+      startViewAs,
+      stopViewAs,
       loading, 
       refresh, 
       logout,

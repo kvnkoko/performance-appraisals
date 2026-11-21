@@ -20,13 +20,13 @@ interface ProfileModalProps {
 
 export function ProfileModal({ employee, profile, onClose, onEdit }: ProfileModalProps) {
   const { employees, teams } = useApp();
-  const { user, isAdmin } = useUser();
+  const { user, isAdmin, viewAs } = useUser();
   const team = employee.teamId ? teams.find((t) => t.id === employee.teamId) : undefined;
   const reports = getDirectReports(employee.id, employees);
   const chain = getReportingChain(employee.id, employees);
   const manager = chain[0];
   const isOwnProfile = user?.employeeId === employee.id;
-  const canEdit = isOwnProfile || isAdmin();
+  const canEdit = !viewAs && (isOwnProfile || isAdmin());
 
   const hasCoverPhoto = Boolean(profile?.coverPhoto);
   const heroImageSrc = !hasCoverPhoto ? (profile?.profilePicture ?? profile?.coverPhoto ?? null) : null;

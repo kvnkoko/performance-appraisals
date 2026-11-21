@@ -21,8 +21,10 @@ import {
   SignOut,
   AddressBook,
   TreeStructure,
-  ChartPieSlice
+  ChartPieSlice,
+  Eye
 } from 'phosphor-react';
+import { useViewAsDialog } from '@/components/view-as/view-as';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
 import { useTheme } from '@/hooks/use-theme';
@@ -75,7 +77,8 @@ export function Sidebar({ mobileOpen: controlledOpen, setMobileOpen: setControll
   const setMobileOpen = isControlled ? setControlledOpen! : setInternalOpen;
   const { resolvedTheme, setTheme, accentColor } = useTheme();
   const { settings, employees } = useApp();
-  const { user, employee, logout, isAdmin: checkIsAdmin } = useUser();
+  const { user, employee, logout, isAdmin: checkIsAdmin, realUser, viewAs } = useUser();
+  const { openViewAs } = useViewAsDialog();
   
   // Get user info from context or localStorage
   const userName = user?.name || localStorage.getItem('userName') || 'Admin';
@@ -206,7 +209,19 @@ export function Sidebar({ mobileOpen: controlledOpen, setMobileOpen: setControll
           </nav>
 
           {/* Logout */}
-          <div className="px-3 py-4 border-t border-border/50">
+          <div className="px-3 py-4 border-t border-border/50 space-y-0.5">
+            {realUser?.role === 'admin' && (
+              <button
+                onClick={() => {
+                  setMobileOpen(false);
+                  openViewAs();
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-surface hover:text-foreground transition-colors duration-200"
+              >
+                <Eye size={20} weight="duotone" />
+                <span>{viewAs ? 'Switch view…' : 'View as…'}</span>
+              </button>
+            )}
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors duration-200"

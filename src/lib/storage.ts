@@ -7,6 +7,7 @@ import {
   buildSubmittedPairSet,
   pairKey,
 } from '@/lib/appraisal-status';
+import { assertWritable, ReadOnlyModeError } from '@/lib/read-only-mode';
 
 /*
  * Data access for the whole app.
@@ -212,7 +213,7 @@ export class UserFacingError extends Error {
 
 /** Message for a toast: the specific reason when we have one, otherwise the fallback. */
 export function describeError(error: unknown, fallback: string): string {
-  return error instanceof UserFacingError ? error.message : fallback;
+  return error instanceof UserFacingError || error instanceof ReadOnlyModeError ? error.message : fallback;
 }
 
 export { AlreadySubmittedError } from './supabase-storage';
@@ -265,11 +266,13 @@ export async function getTemplate(id: string): Promise<Template | undefined> {
 }
 
 export async function saveTemplate(template: Template): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) await (await remote()).saveTemplateToSupabase(template);
   await cachePut('templates', template);
 }
 
 export async function deleteTemplate(id: string): Promise<void> {
+  assertWritable();
   const [appraisals, assignments, links] = await Promise.all([getAppraisals(), getAppraisalAssignments(), getLinks()]);
   const used =
     appraisals.filter((a) => a.templateId === id).length +
@@ -324,12 +327,14 @@ export async function getEmployee(id: string): Promise<Employee | undefined> {
 }
 
 export async function saveEmployee(employee: Employee): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) await (await remote()).saveEmployeeToSupabase(employee);
   await cachePut('employees', employee);
 }
 
 /** Update only an employee's team (assign/remove as department leader). */
 export async function updateEmployeeTeam(employeeId: string, teamId: string | null): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) {
     await (await remote()).updateEmployeeTeamInSupabase(employeeId, teamId);
     await getEmployee(employeeId);
@@ -345,6 +350,7 @@ export async function updateEmployeeTeam(employeeId: string, teamId: string | nu
  * Pending forms, unused links, their profile and summary are removed; linked logins are locked.
  */
 export async function deleteEmployee(id: string): Promise<void> {
+  assertWritable();
   const appraisals = await getAppraisals();
   const submitted = appraisals.filter((a) => a.employeeId === id || a.appraiserId === id).length;
   if (submitted > 0) {
@@ -401,11 +407,13 @@ export async function getAppraisal(id: string): Promise<Appraisal | undefined> {
 }
 
 export async function saveAppraisal(appraisal: Appraisal): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) await (await remote()).saveAppraisalToSupabase(appraisal);
   await cachePut('appraisals', appraisal);
 }
 
 export async function deleteAppraisal(id: string): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) await (await remote()).deleteAppraisalFromSupabase(id);
   await cacheDelete('appraisals', id);
 }
@@ -439,6 +447,7 @@ export async function submitAppraisalForAssignment(
   assignmentId: string,
   appraisal: Omit<Appraisal, 'id'>
 ): Promise<void> {
+  assertWritable();
   const { AlreadySubmittedError } = await remote();
   if (await cloudEnabled()) {
     // The database checks the reviewer, required answers and duplicates, and computes the score.
@@ -466,6 +475,7 @@ export async function submitAppraisalForAssignment(
 
 /** Submit a review through a one-off link. The link can only be used once. */
 export async function submitAppraisalForLink(token: string, appraisal: Omit<Appraisal, 'id'>): Promise<void> {
+  assertWritable();
   const { AlreadySubmittedError } = await remote();
   if (await cloudEnabled()) {
     const status = await withRuleErrors(async () =>
@@ -505,11 +515,13 @@ export async function getLinkByToken(token: string): Promise<AppraisalLink | und
 }
 
 export async function saveLink(link: AppraisalLink): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) await (await remote()).saveLinkToSupabase(link);
   await cachePut('links', link);
 }
 
 export async function deleteLink(id: string): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) await (await remote()).deleteLinkFromSupabase(id);
   await cacheDelete('links', id);
 }
@@ -548,11 +560,13 @@ export async function getAppraisalAssignmentsByAppraiser(appraiserId: string): P
 }
 
 export async function saveAppraisalAssignment(assignment: AppraisalAssignment): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) await (await remote()).saveAppraisalAssignmentToSupabase(assignment);
   await cachePut('appraisalAssignments', assignment);
 }
 
 export async function saveAppraisalAssignments(assignments: AppraisalAssignment[]): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) await (await remote()).saveAppraisalAssignmentsToSupabase(assignments);
   for (const a of assignments) await cachePut('appraisalAssignments', a);
 }
@@ -577,6 +591,7 @@ export async function createAssignmentsSkippingExisting(
   reviewPeriodId: string,
   candidates: AppraisalAssignment[]
 ): Promise<AssignmentCreationResult> {
+  assertWritable();
   const [existing, appraisals] = await Promise.all([
     getAppraisalAssignmentsForPeriod(reviewPeriodId),
     getAppraisals(),
@@ -606,11 +621,13 @@ export async function createAssignmentsSkippingExisting(
 }
 
 export async function deleteAppraisalAssignment(id: string): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) await (await remote()).deleteAppraisalAssignmentFromSupabase(id);
   await cacheDelete('appraisalAssignments', id);
 }
 
 export async function deleteAppraisalAssignments(ids: string[]): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) await (await remote()).deleteAppraisalAssignmentsByIdsFromSupabase(ids);
   for (const id of ids) await cacheDelete('appraisalAssignments', id);
 }
@@ -621,6 +638,7 @@ export async function deleteAppraisalAssignments(ids: string[]): Promise<void> {
  * period cannot ask people to review again.
  */
 export async function deleteAssignmentsByPeriod(reviewPeriodId: string): Promise<{ removed: number; kept: number }> {
+  assertWritable();
   const [list, appraisals] = await Promise.all([getAppraisalAssignmentsForPeriod(reviewPeriodId), getAppraisals()]);
   const submitted = buildSubmittedPairSet(appraisals.filter((a) => a.reviewPeriodId === reviewPeriodId));
   const removable = list.filter(
@@ -640,6 +658,7 @@ export async function clearAllAppraisalData(): Promise<{
   links: number;
   summaries: number;
 }> {
+  assertWritable();
   const [allAssignments, allAppraisals, allLinks, allSummaries] = await Promise.all([
     getAppraisalAssignments(),
     getAppraisals(),
@@ -717,6 +736,7 @@ export async function getEmployeeOfPeriodOverrides(): Promise<Record<string, str
 }
 
 export async function saveEmployeeOfPeriodOverrides(overrides: Record<string, string>): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) {
     const savedToCloud = await (await remote()).saveEmployeeOfPeriodOverridesToSupabase(overrides);
     if (!savedToCloud) {
@@ -727,6 +747,7 @@ export async function saveEmployeeOfPeriodOverrides(overrides: Record<string, st
 }
 
 export async function saveSettings(settings: CompanySettings): Promise<void> {
+  assertWritable();
   const { employeeOfPeriodOverrides, ...rest } = settings;
   if (await cloudEnabled()) await (await remote()).saveSettingsToSupabase(rest as CompanySettings);
   await cachePut('settings', { ...rest, key: 'company' });
@@ -741,6 +762,7 @@ export async function getSummary(employeeId: string): Promise<PerformanceSummary
 }
 
 export async function saveSummary(summary: PerformanceSummary): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) await (await remote()).saveSummaryToSupabase(summary);
   await cachePut('summaries', summary);
 }
@@ -761,12 +783,14 @@ export async function getActiveReviewPeriods(): Promise<ReviewPeriod[]> {
 }
 
 export async function saveReviewPeriod(period: ReviewPeriod): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) await (await remote()).saveReviewPeriodToSupabase(period);
   await cachePut('reviewPeriods', period);
 }
 
 /** Delete a review period and its pending forms/links. Refused when appraisals were submitted for it. */
 export async function deleteReviewPeriod(id: string): Promise<void> {
+  assertWritable();
   const submitted = (await getAppraisals()).filter((a) => a.reviewPeriodId === id).length;
   if (submitted > 0) {
     throw new UserFacingError(
@@ -795,12 +819,14 @@ export async function getTeam(id: string): Promise<Team | undefined> {
 }
 
 export async function saveTeam(team: Team): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) await (await remote()).saveTeamToSupabase(team);
   await cachePut('teams', team);
 }
 
 /** Delete a team. Refused while employees still belong to it, so nobody is silently left without a department. */
 export async function deleteTeam(id: string): Promise<void> {
+  assertWritable();
   const members = (await getEmployees()).filter((e) => e.teamId === id);
   if (members.length > 0) {
     throw new UserFacingError(
@@ -868,6 +894,7 @@ export interface SaveUserOptions {
  * function, which checks the caller is an admin and protects the last admin account.
  */
 export async function saveUser(user: User, options: SaveUserOptions = {}): Promise<User> {
+  assertWritable();
   if (!user.id) throw new Error('User must have an id field');
   const userToSave: User = {
     id: user.id,
@@ -918,6 +945,7 @@ async function importUser(user: User): Promise<void> {
 
 /** Delete a login account. The linked employee and their appraisals are left untouched. */
 export async function deleteUser(id: string): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) {
     const { deleteUserFromSupabase, FunctionCallError } = await import('./supabase');
     try {
@@ -945,12 +973,14 @@ export async function getEmployeeProfile(employeeId: string): Promise<EmployeePr
 }
 
 export async function saveEmployeeProfile(profile: EmployeeProfile): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) await (await remote()).saveEmployeeProfileToSupabase(profile);
   await cachePut('employeeProfiles', profile);
   window.dispatchEvent(new CustomEvent('employeeProfileUpdated', { detail: { employeeId: profile.employeeId } }));
 }
 
 export async function deleteEmployeeProfile(employeeId: string): Promise<void> {
+  assertWritable();
   if (await cloudEnabled()) await (await remote()).deleteEmployeeProfileFromSupabase(employeeId);
   await cacheDelete('employeeProfiles', employeeId);
   window.dispatchEvent(new CustomEvent('employeeProfileUpdated', { detail: { employeeId } }));
@@ -1030,6 +1060,7 @@ export async function exportData(): Promise<string> {
 
 /** Import a backup. Records go through the normal save functions, so they reach the server. */
 export async function importData(json: string): Promise<void> {
+  assertWritable();
   const data = JSON.parse(json);
   for (const template of data.templates ?? []) await saveTemplate(template);
   for (const team of data.teams ?? []) await saveTeam(team);

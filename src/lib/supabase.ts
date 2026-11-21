@@ -1,4 +1,5 @@
 import type { User } from '@/types';
+import { assertWritable, isReadOnlyMode } from '@/lib/read-only-mode';
 
 // Lazy load Supabase to avoid build errors if package not installed
 let supabaseClient: any = null;
@@ -16,13 +17,15 @@ export async function getSupabaseClient() {
     const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
     
     if (supabaseUrl && supabaseAnonKey) {
-      supabaseClient = supabaseModule.createClient(supabaseUrl, supabaseAnonKey, {
-        auth: {
-          persistSession: true,
-          autoRefreshToken: true,
-          detectSessionInUrl: false,
-        },
-      });
+      supabaseClient = guardWrites(
+        supabaseModule.createClient(supabaseUrl, supabaseAnonKey, {
+          auth: {
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: false,
+          },
+        })
+      );
       return supabaseClient;
     }
   } catch (error) {
@@ -30,6 +33,31 @@ export async function getSupabaseClient() {
   }
   
   return null;
+}
+
+/** Database functions that only read (or record "View as" itself) and may run in read-only mode. */
+const READ_ONLY_RPCS = new Set(['get_link_form', 'app_user_id', 'app_employee_id', 'app_is_admin', 'log_view_as']);
+
+/** Refuse table writes and data-changing database functions while "View as" is on. */
+function guardWrites(client: any) {
+  const from = client.from.bind(client);
+  client.from = (table: string) => {
+    const builder = from(table);
+    for (const method of ['insert', 'update', 'upsert', 'delete']) {
+      const original = builder[method].bind(builder);
+      builder[method] = (...args: unknown[]) => {
+        assertWritable();
+        return original(...args);
+      };
+    }
+    return builder;
+  };
+  const rpc = client.rpc.bind(client);
+  client.rpc = (fn: string, ...args: unknown[]) => {
+    if (!READ_ONLY_RPCS.has(fn)) assertWritable();
+    return rpc(fn, ...args);
+  };
+  return client;
 }
 
 // Supabase configuration
@@ -66,6 +94,7 @@ export class FunctionCallError extends Error {
 }
 
 export async function callFunction<T>(name: string, body: unknown): Promise<T> {
+  if (name !== 'auth-resolve') assertWritable();
   const supabase = await requireClient();
   const { data, error } = await supabase.functions.invoke(name, { body });
   if (error) {
@@ -206,6 +235,7 @@ export async function updateMyAccount(username: string, email: string): Promise<
 
 /** Change the signed-in person's password after re-checking the current one. */
 export async function changeMyPassword(currentPassword: string, newPassword: string): Promise<'ok' | 'wrong_current'> {
+  assertWritable();
   const supabase = await requireClient();
   const { data } = await supabase.auth.getSession();
   const email = data?.session?.user?.email;
@@ -226,6 +256,7 @@ export async function changeMyPassword(currentPassword: string, newPassword: str
 }
 
 export async function recordLogin(): Promise<void> {
+  if (isReadOnlyMode()) return;
   try {
     const supabase = await requireClient();
     await supabase.rpc('record_login');

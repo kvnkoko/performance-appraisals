@@ -31,6 +31,7 @@ import { OrgChartPage } from '@/pages/org-chart/OrgChartPage';
 import { ProfilePage } from '@/pages/profile/ProfilePage';
 import { OrganizationAnalyticsPage } from '@/pages/organization-analytics/OrganizationAnalyticsPage';
 import { useUser } from '@/contexts/user-context';
+import { ViewAsProvider } from '@/components/view-as/view-as';
 
 function PrivateRoute({ children }: { children: React.ReactElement }) {
   const { user, loading } = useUser();
@@ -121,6 +122,7 @@ function App() {
         <ToastProvider>
           <UserProvider>
             <AppProvider>
+              <ViewAsProvider>
               <div className="flex-1 min-h-0 flex flex-col min-w-0 overflow-x-hidden w-full max-w-full">
                 <Routes>
               <Route path="/auth" element={<AuthPage />} />
@@ -170,6 +172,7 @@ function App() {
               />
                 </Routes>
               </div>
+              </ViewAsProvider>
             </AppProvider>
           </UserProvider>
         </ToastProvider>

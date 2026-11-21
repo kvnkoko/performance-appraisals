@@ -52,7 +52,7 @@ export function AppraisalFormByAssignmentPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { refresh } = useApp();
-  const { user, employee: me, loading: userLoading, isAdmin } = useUser();
+  const { user, employee: me, loading: userLoading, isAdmin, viewAs } = useUser();
   const myEmployeeId = user?.employeeId ?? me?.id ?? null;
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
@@ -81,6 +81,7 @@ export function AppraisalFormByAssignmentPage() {
   }, [assignmentId, userLoading]);
 
   const isOwnForm = !!assignment && assignment.appraiserId === myEmployeeId;
+  const canSubmit = isOwnForm && !viewAs;
 
   const loadData = async () => {
     if (!assignmentId) {
@@ -380,6 +381,11 @@ export function AppraisalFormByAssignmentPage() {
             <span>Appraising:</span>
             <span className="font-semibold text-foreground">{employee.name}</span>
           </div>
+          {viewAs && isOwnForm && (
+            <p className="mx-auto max-w-xl rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+              Preview only. You are viewing as {viewAs.user.name}, so this form cannot be submitted.
+            </p>
+          )}
           {!isOwnForm && assignment && (
             <p className="mx-auto max-w-xl rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
               Preview only. This form belongs to {assignment.appraiserName}; only they can submit it.
@@ -612,7 +618,7 @@ export function AppraisalFormByAssignmentPage() {
           </div>
 
           <div className="mt-6 lg:mt-8 flex justify-end">
-            <Button type="submit" size="lg" disabled={submitting || !isOwnForm}>
+            <Button type="submit" size="lg" disabled={submitting || !canSubmit}>
               {submitting ? 'Submitting...' : 'Submit Appraisal'}
             </Button>
           </div>

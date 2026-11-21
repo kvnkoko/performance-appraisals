@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import { useUser } from '@/contexts/user-context';
 import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, ReviewPeriod, Team, AppraisalAssignment, EmployeeProfile } from '@/types';
 import { getTemplates, getEmployees, getAppraisals, getLinks, getSettings, getReviewPeriods, getActiveReviewPeriods, getTeams, getAppraisalAssignments, getEmployeeProfiles } from '@/lib/storage';
 import { getDepartmentLeaderId } from '@/lib/org-chart-utils';
@@ -135,8 +136,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [refresh]);
 
+  // "View as" a staff member: show only the rows the database would return to them (mirrors the RLS policies).
+  const { viewAs } = useUser();
+  const scopeTo = viewAs && viewAs.user.role !== 'admin' ? viewAs.employee.id : null;
+  const scoped = useMemo(() => {
+    if (!scopeTo) return { appraisals, links, assignments };
+    return {
+      appraisals: appraisals.filter((a) => a.appraiserId === scopeTo || a.employeeId === scopeTo),
+      links: links.filter((l) => l.appraiserId === scopeTo),
+      assignments: assignments.filter((a) => a.appraiserId === scopeTo),
+    };
+  }, [scopeTo, appraisals, links, assignments]);
+
   return (
-    <AppContext.Provider value={{ templates, employees, appraisals, links, assignments, settings, reviewPeriods, activePeriods, teams, employeeProfiles, loading, refresh }}>
+    <AppContext.Provider value={{ templates, employees, ...scoped, settings, reviewPeriods, activePeriods, teams, employeeProfiles, loading, refresh }}>
       {children}
     </AppContext.Provider>
   );

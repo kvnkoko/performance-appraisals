@@ -22,7 +22,7 @@ import type { AppraisalLink, Employee } from '@/types';
 
 export function EmployeeDashboardPage() {
   const { links, employees, appraisals, reviewPeriods, assignments, employeeProfiles, loading } = useApp();
-  const { user, employee: contextEmployee, isAdmin } = useUser();
+  const { user, employee: contextEmployee, isAdmin, viewAs } = useUser();
   const employeeId = user?.employeeId ?? contextEmployee?.id ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('employeeId') : null) ?? null;
   const employee = employeeId ? (employees.find(e => e.id === employeeId) ?? contextEmployee ?? null) : null;
 
@@ -74,7 +74,7 @@ export function EmployeeDashboardPage() {
   // Get my performance appraisals (where I was appraised)
   const myAppraisals = appraisals.filter(a => a.employeeId === employeeId && a.completedAt);
 
-  const userName = localStorage.getItem('userName') || 'User';
+  const userName = user?.name || localStorage.getItem('userName') || 'User';
   const [showProfileEdit, setShowProfileEdit] = useState(false);
   const myProfile = employee ? employeeProfiles.find((p) => p.employeeId === employee.id) : undefined;
 
@@ -136,10 +136,12 @@ export function EmployeeDashboardPage() {
                 <h2 className="font-semibold text-foreground truncate">{employee.name}</h2>
                 <p className="text-sm text-muted-foreground truncate">{employee.role}</p>
               </div>
-              <Button variant="outline" size="sm" onClick={() => setShowProfileEdit(true)} className="shrink-0" aria-label="Edit my profile">
-                <PencilSimple size={18} weight="duotone" className="mr-2" />
-                Edit my profile
-              </Button>
+              {!viewAs && (
+                <Button variant="outline" size="sm" onClick={() => setShowProfileEdit(true)} className="shrink-0" aria-label="Edit my profile">
+                  <PencilSimple size={18} weight="duotone" className="mr-2" />
+                  Edit my profile
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

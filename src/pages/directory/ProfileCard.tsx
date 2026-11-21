@@ -26,10 +26,10 @@ interface ProfileCardProps {
 
 export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'grid', index = 0, showAdminActions, linkedUser, onEditRecord, onDelete }: ProfileCardProps) {
   const { teams } = useApp();
-  const { user, isAdmin } = useUser();
+  const { user, isAdmin, viewAs } = useUser();
   const team = employee.teamId ? teams.find((t) => t.id === employee.teamId) : undefined;
   const isOwnProfile = user?.employeeId === employee.id;
-  const canEdit = isOwnProfile || isAdmin();
+  const canEdit = !viewAs && (isOwnProfile || isAdmin());
   const headline = profile?.headline || profile?.bio?.slice(0, 80) || employee.role;
   const skills = profile?.skills?.slice(0, MAX_SKILLS) ?? [];
   const extraSkills = (profile?.skills?.length ?? 0) - MAX_SKILLS;

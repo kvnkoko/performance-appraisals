@@ -35,7 +35,7 @@ const PRESET_COLORS = [
 
 export function SettingsPage() {
   const { settings, refresh } = useApp();
-  const { user, employee, logout, isAdmin, refresh: refreshUser } = useUser();
+  const { user, employee, logout, isAdmin, refresh: refreshUser, viewAs } = useUser();
   const { theme, setTheme, setAccentColor } = useTheme();
   const { getProfile, getOrCreateProfile, saveProfile } = useEmployeeProfiles();
   const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null;
@@ -336,7 +336,13 @@ export function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {!hasUserAccount ? (
+            {viewAs ? (
+              <p className="text-sm text-muted-foreground rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+                You are viewing as {viewAs.user.name}
+                {viewAs.hasLogin ? ` (username ${viewAs.user.username})` : ', who has no login account'}. Account
+                details can't be changed while using View as.
+              </p>
+            ) : !hasUserAccount ? (
               <p className="text-sm text-muted-foreground rounded-lg border border-border/50 bg-muted/30 p-4">
                 You are signed in with the admin PIN. To change your profile picture, username, email, or password, sign in with a user account (username and password) from the sign-in page.
               </p>

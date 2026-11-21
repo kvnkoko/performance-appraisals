@@ -26,7 +26,7 @@ export function ProfilePage() {
   const { employeeId } = useParams<{ employeeId: string }>();
   const navigate = useNavigate();
   const { employees, employeeProfiles, teams } = useApp();
-  const { user, isAdmin } = useUser();
+  const { user, isAdmin, viewAs } = useUser();
 
   const employee = employees.find((e) => e.id === employeeId) ?? null;
   const profile: EmployeeProfile | null = employee
@@ -37,7 +37,7 @@ export function ProfilePage() {
   const chain = employee ? getReportingChain(employee.id, employees) : [];
   const manager = chain[0] ?? null;
   const isOwnProfile = user?.employeeId === employee?.id;
-  const canEdit = isOwnProfile || isAdmin();
+  const canEdit = !viewAs && (isOwnProfile || isAdmin());
   const [editOpen, setEditOpen] = useState(false);
 
   const coverZoom = profile?.coverPhotoZoom ?? 1;
