@@ -191,6 +191,8 @@ export interface Appraisal {
   createdAt: string;
   /** The template exactly as it was when this appraisal was submitted (newer submissions only). */
   templateSnapshot?: Template;
+  /** Days after the deadline it was submitted (0 = on time). Recorded by the server; unknown for older forms. */
+  lateDays?: number | null;
 }
 
 export interface AppraisalLink {
@@ -212,12 +214,70 @@ export interface CompanySettings {
   adminPin: string;
   accentColor: string;
   theme: 'light' | 'dark' | 'system';
-  /** Weight of HR scores in Employee of the Month / final ranking (0–100). Base score weight = 100 - hrScoreWeight. Default 30. */
+  /** Weight of the HR review in each person's overall score (0–100). The other review groups share the rest equally. Default 30. */
   hrScoreWeight?: number;
-  /** When true, include HR scores in final ranking; when false, HR is optional. Default false. */
+  /** When true, people without an HR review are not ranked. Default false. */
   requireHrForRanking?: boolean;
-  /** Override who was awarded Employee of the Period per review period (e.g. fairness, past wins). Key = reviewPeriodId, value = employeeId. */
+  /** Legacy single award per period (no longer used). Key = reviewPeriodId, value = employeeId. */
   employeeOfPeriodOverrides?: Record<string, string>;
+  /** Member and Leader of the Period awards. Set only through setPeriodAward (server checks the reason). */
+  periodAwards?: Record<string, Partial<Record<RankingBoard, PeriodAward>>>;
+}
+
+export type RankingBoard = 'members' | 'leaders';
+
+export const RANKING_BOARD_LABELS: Record<RankingBoard, { board: string; award: string }> = {
+  members: { board: 'Members', award: 'Member of the Period' },
+  leaders: { board: 'Leaders', award: 'Leader of the Period' },
+};
+
+export interface PeriodAward {
+  employeeId: string;
+  /** Required when the award does not go to the board's #1. */
+  reason?: string | null;
+  setBy?: string;
+  setAt?: string;
+}
+
+/** Who wrote a group of reviews, relative to the person reviewed. */
+export type ReviewGroup = 'manager' | 'peers' | 'team' | 'hr' | 'other';
+
+export const REVIEW_GROUP_LABELS: Record<ReviewGroup, string> = {
+  manager: 'From managers',
+  peers: 'From peers',
+  team: 'From their team',
+  hr: 'HR review',
+  other: 'Other reviews',
+};
+
+/** One person's group-weighted result for a period (computed by the server). */
+export interface PeriodRanking {
+  reviewPeriodId: string;
+  employeeId: string;
+  board: RankingBoard | null;
+  eligible: boolean;
+  notRankedReason: string | null;
+  reviewCount: number;
+  nonHrCount: number;
+  overallPct: number;
+  nonHrPct: number | null;
+  hrPct: number | null;
+  groups: Partial<Record<ReviewGroup, { count: number; pct: number }>>;
+  rank: number | null;
+}
+
+/** A person's own results for a period, as staff see them (no reviewers, no individual forms). */
+export interface MyPeriodResult {
+  reviewPeriodId: string;
+  reviewPeriodName: string;
+  periodEndDate: string | null;
+  reviewCount: number;
+  overallPct: number;
+  /** Only groups with 3+ reviewers, so nobody can be singled out. */
+  groups: Partial<Record<ReviewGroup, { count: number; pct: number }>>;
+  hr: { score: number; maxScore: number; pct: number } | null;
+  categories: { name: string; score: number; maxScore: number }[];
+  questions: { name: string; total: number; max: number }[];
 }
 
 export interface PerformanceSummary {

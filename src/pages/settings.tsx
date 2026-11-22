@@ -611,9 +611,9 @@ export function SettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Buildings size={20} weight="duotone" className="text-teal-500" />
-                Employee of the Month
+                Rankings and awards
               </CardTitle>
-              <CardDescription>HR score weight and final ranking</CardDescription>
+              <CardDescription>How the Member and Leader of the Period rankings are scored</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -628,7 +628,9 @@ export function SettingsPage() {
                   className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-teal-500"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Base: {100 - formData.hrScoreWeight}%, HR: {formData.hrScoreWeight}%. Final score = base × (100 − HR%) + HR score × HR%.
+                  Each person's reviews are averaged per reviewer group (managers, peers, their team), and each group counts
+                  equally, however many reviewers it has. That makes up {100 - formData.hrScoreWeight}% of the score; the HR
+                  review makes up the other {formData.hrScoreWeight}%. Someone with only an HR review is not ranked.
                 </p>
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
@@ -638,7 +640,7 @@ export function SettingsPage() {
                   onChange={(e) => setFormData({ ...formData, requireHrForRanking: e.target.checked })}
                   className="rounded w-4 h-4"
                 />
-                <span className="text-sm">Require HR scores for final ranking</span>
+                <span className="text-sm">Only rank people who also have an HR review</span>
               </label>
               <Button onClick={() => handleSave()} disabled={loading}>
                 {loading ? 'Saving...' : 'Save HR Settings'}

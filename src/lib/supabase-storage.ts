@@ -15,6 +15,9 @@ import type {
   Team,
   User,
   EmployeeProfile,
+  PeriodRanking,
+  MyPeriodResult,
+  RankingBoard,
 } from '@/types';
 import { isSupabaseConfigured, getSupabaseClient, mapUser } from './supabase';
 
@@ -267,6 +270,7 @@ function mapAppraisal(a: any): Appraisal {
     completedAt: a.completed_at,
     createdAt: a.created_at,
     templateSnapshot: a.template_snapshot ? mapTemplate(a.template_snapshot) : undefined,
+    lateDays: a.late_days ?? null,
   };
 }
 
@@ -336,11 +340,70 @@ export async function submitLinkAppraisalRpc(token: string, responses: unknown):
   return data?.status === 'already_submitted' ? 'already_submitted' : 'submitted';
 }
 
+const num = (v: unknown): number => (v === null || v === undefined ? 0 : Number(v));
+const numOrNull = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
+
+/** Group-weighted results and board ranks for one period, or all periods when no id is given (admins). */
+export async function getPeriodRankingsFromSupabase(periodId?: string): Promise<PeriodRanking[]> {
+  const supabase = await requireClient();
+  const { data, error } = await supabase.rpc('get_period_rankings', { p_period_id: periodId ?? null });
+  rpcCheck('getPeriodRankingsFromSupabase', error);
+  return ((data as any[]) || []).map((r) => ({
+    reviewPeriodId: r.review_period_id,
+    employeeId: r.employee_id,
+    board: r.board ?? null,
+    eligible: !!r.eligible,
+    notRankedReason: r.not_ranked_reason ?? null,
+    reviewCount: num(r.review_count),
+    nonHrCount: num(r.non_hr_count),
+    overallPct: num(r.overall_pct),
+    nonHrPct: numOrNull(r.non_hr_pct),
+    hrPct: numOrNull(r.hr_pct),
+    groups: r.groups ?? {},
+    rank: numOrNull(r.rank),
+  }));
+}
+
+/** A person's own results as summaries. Admins may pass an employee id (used by "View as"). */
+export async function getMyResultsFromSupabase(employeeId?: string): Promise<MyPeriodResult[]> {
+  const supabase = await requireClient();
+  const { data, error } = await supabase.rpc('get_my_results', { p_employee_id: employeeId ?? null });
+  rpcCheck('getMyResultsFromSupabase', error);
+  return ((data as any[]) || []).map((r) => ({
+    reviewPeriodId: r.reviewPeriodId,
+    reviewPeriodName: r.reviewPeriodName ?? 'Review period',
+    periodEndDate: r.periodEndDate ?? null,
+    reviewCount: num(r.reviewCount),
+    overallPct: num(r.overallPct),
+    groups: r.groups ?? {},
+    hr: r.hr ? { score: num(r.hr.score), maxScore: num(r.hr.maxScore), pct: num(r.hr.pct) } : null,
+    categories: (r.categories ?? []).map((c: any) => ({ name: c.name, score: num(c.score), maxScore: num(c.maxScore) })),
+    questions: (r.questions ?? []).map((q: any) => ({ name: q.name, total: num(q.total), max: num(q.max) })),
+  }));
+}
+
+export async function setPeriodAwardInSupabase(
+  periodId: string,
+  board: RankingBoard,
+  employeeId: string | null,
+  reason: string | null
+): Promise<void> {
+  const supabase = await requireClient();
+  const { error } = await supabase.rpc('set_period_award', {
+    p_period_id: periodId,
+    p_board: board,
+    p_employee_id: employeeId,
+    p_reason: reason,
+  });
+  rpcCheck('setPeriodAwardInSupabase', error);
+}
+
 export interface LinkForm {
   link: AppraisalLink;
   template: Template | null;
   employee: Pick<Employee, 'id' | 'name' | 'role' | 'hierarchy'> | null;
   appraiser: Pick<Employee, 'id' | 'name' | 'role' | 'hierarchy'> | null;
+  periodEndDate: string | null;
 }
 
 /** Everything the public link form needs, readable without signing in (the token is the credential). */
@@ -354,6 +417,7 @@ export async function getLinkFormFromSupabase(token: string): Promise<LinkForm |
     template: data.template ? mapTemplate(data.template) : null,
     employee: data.employee ? { ...data.employee, hierarchy: normalizeHierarchy(data.employee.hierarchy) } : null,
     appraiser: data.appraiser ? { ...data.appraiser, hierarchy: normalizeHierarchy(data.appraiser.hierarchy) } : null,
+    periodEndDate: data.link?.period_end_date ?? null,
   };
 }
 
@@ -665,6 +729,7 @@ export async function getSettingsFromSupabase(): Promise<CompanySettings | null>
       data.employee_of_period_overrides && typeof data.employee_of_period_overrides === 'object'
         ? data.employee_of_period_overrides
         : undefined,
+    periodAwards: data.period_awards && typeof data.period_awards === 'object' ? data.period_awards : {},
   };
 }
 

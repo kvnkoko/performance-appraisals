@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { useUser } from '@/contexts/user-context';
-import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, ReviewPeriod, Team, AppraisalAssignment, EmployeeProfile } from '@/types';
-import { getTemplates, getEmployees, getAppraisals, getLinks, getSettings, getReviewPeriods, getActiveReviewPeriods, getTeams, getAppraisalAssignments, getEmployeeProfiles } from '@/lib/storage';
+import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, ReviewPeriod, Team, AppraisalAssignment, EmployeeProfile, MyPeriodResult } from '@/types';
+import { getTemplates, getEmployees, getAppraisals, getLinks, getSettings, getReviewPeriods, getActiveReviewPeriods, getTeams, getAppraisalAssignments, getEmployeeProfiles, getMyResults } from '@/lib/storage';
 import { getDepartmentLeaderId } from '@/lib/org-chart-utils';
 import { effectiveAssignments, isLinkDone } from '@/lib/appraisal-status';
 import { applyAccentColor } from '@/lib/utils';
@@ -12,6 +12,8 @@ interface AppContextType {
   appraisals: Appraisal[];
   links: AppraisalLink[];
   assignments: AppraisalAssignment[];
+  /** The signed-in person's own results per period, as summaries (empty without a linked employee). */
+  myResults: MyPeriodResult[];
   settings: CompanySettings;
   reviewPeriods: ReviewPeriod[];
   activePeriods: ReviewPeriod[];
@@ -137,19 +139,36 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   // "View as" a staff member: show only the rows the database would return to them (mirrors the RLS policies).
-  const { viewAs } = useUser();
+  const { user, viewAs } = useUser();
   const scopeTo = viewAs && viewAs.user.role !== 'admin' ? viewAs.employee.id : null;
   const scoped = useMemo(() => {
     if (!scopeTo) return { appraisals, links, assignments };
     return {
-      appraisals: appraisals.filter((a) => a.appraiserId === scopeTo || a.employeeId === scopeTo),
+      appraisals: appraisals.filter((a) => a.appraiserId === scopeTo),
       links: links.filter((l) => l.appraiserId === scopeTo),
       assignments: assignments.filter((a) => a.appraiserId === scopeTo),
     };
   }, [scopeTo, appraisals, links, assignments]);
 
+  // Staff see their own results only as server-made summaries (no reviewers, no individual forms).
+  const [myResults, setMyResults] = useState<MyPeriodResult[]>([]);
+  const resultsFor = user?.employeeId ? (viewAs ? viewAs.employee.id : 'self') : null;
+  useEffect(() => {
+    if (!resultsFor) {
+      setMyResults([]);
+      return;
+    }
+    let cancelled = false;
+    getMyResults(resultsFor === 'self' ? undefined : resultsFor)
+      .then((results) => !cancelled && setMyResults(results))
+      .catch((error) => console.error('Could not load your results:', error));
+    return () => {
+      cancelled = true;
+    };
+  }, [resultsFor, appraisals]);
+
   return (
-    <AppContext.Provider value={{ templates, employees, ...scoped, settings, reviewPeriods, activePeriods, teams, employeeProfiles, loading, refresh }}>
+    <AppContext.Provider value={{ templates, employees, ...scoped, myResults, settings, reviewPeriods, activePeriods, teams, employeeProfiles, loading, refresh }}>
       {children}
     </AppContext.Provider>
   );

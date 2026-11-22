@@ -1,5 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, PerformanceSummary, ReviewPeriod, User, Team, AppraisalAssignment, EmployeeProfile } from '@/types';
+import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, PerformanceSummary, ReviewPeriod, User, Team, AppraisalAssignment, EmployeeProfile, PeriodRanking, MyPeriodResult, RankingBoard } from '@/types';
 import {
   appraisalIdForAssignment,
   appraisalIdForLink,
@@ -230,6 +230,38 @@ async function withRuleErrors<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
+/** Group-weighted results and board ranks (admins). Needs the database; empty when running locally. */
+export async function getPeriodRankings(periodId?: string): Promise<PeriodRanking[]> {
+  if (!(await cloudEnabled())) return [];
+  return withRuleErrors(async () => (await remote()).getPeriodRankingsFromSupabase(periodId));
+}
+
+/** The signed-in person's own results as summaries (or, for admins using "View as", another person's). */
+export async function getMyResults(employeeId?: string): Promise<MyPeriodResult[]> {
+  if (!(await cloudEnabled())) return [];
+  return withRuleErrors(async () => (await remote()).getMyResultsFromSupabase(employeeId));
+}
+
+/** Give a period award. Choosing anyone other than the board's #1 needs a reason (checked by the server). */
+export async function setPeriodAward(
+  periodId: string,
+  board: RankingBoard,
+  employeeId: string | null,
+  reason: string | null
+): Promise<void> {
+  assertWritable();
+  if (!(await cloudEnabled())) throw new UserFacingError('Awards can only be set when connected to the database.');
+  await withRuleErrors(async () => (await remote()).setPeriodAwardInSupabase(periodId, board, employeeId, reason));
+}
+
+/** Give the reviewer 7 more days to submit a form whose deadline has passed (admins). */
+export async function reopenAssignment(assignmentId: string): Promise<void> {
+  assertWritable();
+  const assignment = await getAppraisalAssignment(assignmentId);
+  if (!assignment) throw new UserFacingError('This form no longer exists.');
+  await saveAppraisalAssignment({ ...assignment, dueDate: new Date().toISOString() });
+}
+
 /**
  * Load the public link form. With Supabase this goes through a database function so anonymous
  * visitors never read tables directly; locally it is assembled from the cache.
@@ -240,17 +272,19 @@ export async function getLinkForm(token: string): Promise<import('./supabase-sto
   }
   const link = (await cacheGetAll<AppraisalLink>('links')).find((l) => l.token === token);
   if (!link) return null;
-  const [template, employee, appraiser, submitted] = await Promise.all([
+  const [template, employee, appraiser, submitted, period] = await Promise.all([
     cacheGet<Template>('templates', link.templateId),
     cacheGet<Employee>('employees', link.employeeId),
     cacheGet<Employee>('employees', link.appraiserId),
     cacheGet<Appraisal>('appraisals', appraisalIdForLink(link.id)),
+    link.reviewPeriodId ? cacheGet<ReviewPeriod>('reviewPeriods', link.reviewPeriodId) : Promise.resolve(undefined),
   ]);
   return {
     link: { ...link, used: link.used || !!submitted },
     template: template ?? null,
     employee: employee ?? null,
     appraiser: appraiser ?? null,
+    periodEndDate: period?.endDate ?? null,
   };
 }
 

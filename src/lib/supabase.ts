@@ -36,7 +36,15 @@ export async function getSupabaseClient() {
 }
 
 /** Database functions that only read (or record "View as" itself) and may run in read-only mode. */
-const READ_ONLY_RPCS = new Set(['get_link_form', 'app_user_id', 'app_employee_id', 'app_is_admin', 'log_view_as']);
+const READ_ONLY_RPCS = new Set([
+  'get_link_form',
+  'app_user_id',
+  'app_employee_id',
+  'app_is_admin',
+  'log_view_as',
+  'get_period_rankings',
+  'get_my_results',
+]);
 
 /** Refuse table writes and data-changing database functions while "View as" is on. */
 function guardWrites(client: any) {

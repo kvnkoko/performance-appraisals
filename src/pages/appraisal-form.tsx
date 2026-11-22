@@ -22,6 +22,8 @@ import { Sun, Moon } from 'phosphor-react';
 import { BrandLogo } from '@/components/shared/brand-logo';
 import type { AppraisalResponse, Category, CategoryItem } from '@/types';
 import { RATING_LABELS } from '@/types';
+import { submissionWindow, type SubmissionWindow } from '@/lib/deadline';
+import { DeadlineNote } from '@/components/shared/deadline-note';
 import {
   RATING_VALUES,
   canSelectRating,
@@ -47,6 +49,7 @@ export function AppraisalFormPage() {
   const [employee, setEmployee] = useState<any>(null);
   const [appraiser, setAppraiser] = useState<any>(null);
   const [completed, setCompleted] = useState<false | 'just-submitted' | 'already-submitted'>(false);
+  const [deadline, setDeadline] = useState<SubmissionWindow | null>(null);
 
   const {
     register,
@@ -97,6 +100,7 @@ export function AppraisalFormPage() {
       }
 
       setLink(linkData);
+      setDeadline(submissionWindow(form.periodEndDate, linkData.createdAt));
       setTemplate(templateData);
       setEmployee(employeeData);
       setAppraiser(appraiserData);
@@ -150,15 +154,6 @@ export function AppraisalFormPage() {
             scores[item.id] = {
               weightScore: rating * item.weight,
               percentageScore: (rating * item.weight) / 5,
-            };
-          }
-        } else if (item.type === 'text' || item.type === 'multiple-choice') {
-          // For text and multiple-choice, if answered, treat as max rating (5)
-          const responseStr = String(response).trim();
-          if (responseStr.length > 0) {
-            scores[item.id] = {
-              weightScore: 5 * item.weight,
-              percentageScore: item.weight,
             };
           }
         }
@@ -431,6 +426,7 @@ export function AppraisalFormPage() {
             <span>Appraising:</span>
             <span className="font-semibold text-foreground">{employee.name}</span>
           </div>
+          <DeadlineNote deadline={deadline} closedHint="ask an administrator for a new link" />
         </div>
 
         <RatingLimitSummary
@@ -789,7 +785,7 @@ export function AppraisalFormPage() {
             <Button 
               type="submit" 
               size="lg" 
-              disabled={submitting}
+              disabled={submitting || !!deadline?.isClosed}
               className="min-w-[160px] shadow-lg hover:shadow-xl transition-all duration-300"
             >
               {submitting ? 'Submitting...' : 'Submit Appraisal'}

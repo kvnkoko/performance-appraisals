@@ -5,7 +5,8 @@ import { Select } from '@/components/ui/select';
 import { ListChecks, CheckCircle, Clock, Hourglass, Eye, Trash } from 'phosphor-react';
 import type { AppraisalAssignment, Appraisal, Template, ReviewPeriod, Employee } from '@/types';
 import { formatDate } from '@/lib/utils';
-import { deleteAppraisal, deleteAppraisalAssignment } from '@/lib/storage';
+import { deleteAppraisal, deleteAppraisalAssignment, reopenAssignment, describeError } from '@/lib/storage';
+import { submissionWindow, describeLate, GRACE_DAYS, type SubmissionWindow } from '@/lib/deadline';
 import { useToast } from '@/contexts/toast-context';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { CompletedFormViewModal } from '@/components/shared/completed-form-view-modal';
@@ -27,6 +28,9 @@ type Row = {
   score: number | null;
   maxScore: number | null;
   submittedAt: string | null;
+  lateDays: number | null;
+  /** Deadline status for forms not yet submitted. */
+  deadline: SubmissionWindow | null;
 };
 
 function matchAppraisal(
@@ -86,6 +90,8 @@ function buildRows(
       score: appraisal?.score ?? null,
       maxScore: appraisal?.maxScore ?? null,
       submittedAt: appraisal?.completedAt ?? null,
+      lateDays: appraisal?.lateDays ?? null,
+      deadline: appraisal ? null : submissionWindow(period?.endDate, a.dueDate),
     };
   });
 }
@@ -133,6 +139,8 @@ function buildRowsFromAppraisals(
       score: a.score,
       maxScore: a.maxScore,
       submittedAt: a.completedAt,
+      lateDays: a.lateDays ?? null,
+      deadline: null,
     };
   });
 }
@@ -148,6 +156,24 @@ export function SubmissionTrackerPage() {
   const [viewAppraisalId, setViewAppraisalId] = useState<string | null>(null);
   const [deleteRow, setDeleteRow] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [reopeningId, setReopeningId] = useState<string | null>(null);
+
+  const handleReopen = async (row: Row) => {
+    setReopeningId(row.assignmentId);
+    try {
+      await reopenAssignment(row.assignmentId);
+      await refresh();
+      toast({
+        title: 'Form reopened',
+        description: `${row.appraiserName} can submit it for the next ${GRACE_DAYS} days. It will be marked late.`,
+        variant: 'success',
+      });
+    } catch (error) {
+      toast({ title: 'Could not reopen', description: describeError(error, 'Please try again.'), variant: 'error' });
+    } finally {
+      setReopeningId(null);
+    }
+  };
 
   const rows = useMemo(() => {
     const assignmentRows =
@@ -418,6 +444,11 @@ export function SubmissionTrackerPage() {
                             <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
                               <CheckCircle size={16} weight="duotone" />
                               Submitted
+                              {r.lateDays ? (
+                                <span className="rounded bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 text-xs text-amber-800 dark:text-amber-200">
+                                  {describeLate(r.lateDays)}
+                                </span>
+                              ) : null}
                             </span>
                           ) : r.status === 'in-progress' ? (
                             <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
@@ -430,6 +461,22 @@ export function SubmissionTrackerPage() {
                               Pending
                             </span>
                           )}
+                          {r.deadline?.isClosed ? (
+                            <div className="mt-1 flex items-center gap-2 text-xs">
+                              <span className="text-destructive">Closed</span>
+                              <button
+                                type="button"
+                                disabled={reopeningId === r.assignmentId}
+                                onClick={() => handleReopen(r)}
+                                className="rounded-md border border-border px-2 py-0.5 font-medium text-foreground hover:bg-muted disabled:opacity-50"
+                                title={`Let the appraiser submit for another ${GRACE_DAYS} days (marked late)`}
+                              >
+                                {reopeningId === r.assignmentId ? 'Reopening…' : `Reopen for ${GRACE_DAYS} days`}
+                              </button>
+                            </div>
+                          ) : r.deadline?.isLate ? (
+                            <div className="mt-1 text-xs text-amber-600 dark:text-amber-400">Overdue ({describeLate(r.deadline.lateDays)})</div>
+                          ) : null}
                         </td>
                         <td className="py-3 px-3 text-right font-medium">
                           {r.score != null && r.maxScore != null

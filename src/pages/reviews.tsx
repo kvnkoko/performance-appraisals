@@ -5,13 +5,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select } from '@/components/ui/select';
 import { PeriodSelector } from '@/components/periods/period-selector';
 import { Button } from '@/components/ui/button';
-import { TrendUp, Trophy, Target, Lightning, TrendDown, Users, ChartBar, Calendar, FileText, Eye, ListBullets, X } from 'phosphor-react';
+import { TrendUp, Trophy, Target, Lightning, TrendDown, Users, ChartBar, Calendar, FileText, Eye, X } from 'phosphor-react';
 import { generatePerformanceSummary } from '@/lib/ai-summary';
 import { getAppraisals } from '@/lib/storage';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import type { PerformanceInsight } from '@/lib/ai-summary';
 import { CompletedFormViewModal } from '@/components/shared/completed-form-view-modal';
-import { RATING_LABELS } from '@/types';
+import { RATING_LABELS, type RankingBoard } from '@/types';
+import { AwardsPanel, BoardsCard, FullRankingsModal, GroupChips, usePeriodRankings } from '@/components/reviews/rankings';
+import { describeLate } from '@/lib/deadline';
 
 /** Map overall score percentage to a 1–5 band for bar chart color. */
 function percentageToRatingBand(pct: number): 1 | 2 | 3 | 4 | 5 {
@@ -31,9 +33,9 @@ const RATING_BAND_COLORS: Record<1 | 2 | 3 | 4 | 5, string> = {
 };
 
 export function ReviewsPage() {
-  const { employees, appraisals, templates, reviewPeriods, settings } = useApp();
+  const { employees, appraisals, templates, reviewPeriods } = useApp();
   const [viewAppraisalId, setViewAppraisalId] = useState<string | null>(null);
-  const [showAllRankings, setShowAllRankings] = useState(false);
+  const [showAllBoard, setShowAllBoard] = useState<RankingBoard | null>(null);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [summary, setSummary] = useState<PerformanceInsight | null>(null);
@@ -47,6 +49,21 @@ export function ReviewsPage() {
     [selectedPeriodId, reviewPeriods]
   );
   const periodLabel = selectedPeriod ? selectedPeriod.name : 'Select period';
+
+  // Group-weighted results from the server; former employees are left out of all figures.
+  const { people } = usePeriodRankings(selectedPeriodId);
+  const periodPeople = useMemo(
+    () => people.filter((p) => p.ranking.reviewPeriodId === selectedPeriodId && p.ranking.notRankedReason !== 'Former employee'),
+    [people, selectedPeriodId]
+  );
+  const sortedScores = useMemo(
+    () =>
+      periodPeople
+        .map((p) => ({ employee: p.employee, percentage: p.ranking.overallPct }))
+        .sort((a, b) => b.percentage - a.percentage),
+    [periodPeople]
+  );
+  const selectedRanking = periodPeople.find((p) => p.employee.id === selectedEmployee)?.ranking;
 
   useEffect(() => {
     if (reviewPeriods.length > 0 && !selectedPeriodId) {
@@ -62,7 +79,7 @@ export function ReviewsPage() {
       setSummary(null);
       if (!selectedPeriodId) setError(null);
     }
-  }, [selectedEmployee, selectedPeriodId, appraisals]);
+  }, [selectedEmployee, selectedPeriodId, appraisals, selectedRanking?.overallPct]);
 
   const loadSummary = async () => {
     if (!selectedEmployee || !selectedPeriodId) return;
@@ -81,7 +98,7 @@ export function ReviewsPage() {
         setSummary(null);
         return;
       }
-      const insight = await generatePerformanceSummary(selectedEmployee, employeeAppraisals);
+      const insight = await generatePerformanceSummary(selectedEmployee, employeeAppraisals, selectedRanking?.overallPct);
       setSummary(insight);
     } catch (err) {
       console.error('Failed to generate summary:', err);
@@ -105,28 +122,6 @@ export function ReviewsPage() {
     [appraisals, employeeIds, selectedPeriodId]
   );
 
-  const employeeScores = employees.map((employee) => {
-    const employeeAppraisals = validAppraisals.filter((a) => a.employeeId === employee.id);
-    const totalScore = employeeAppraisals.reduce((sum, a) => sum + a.score, 0);
-    const totalMaxScore = employeeAppraisals.reduce((sum, a) => sum + a.maxScore, 0);
-    const percentage = totalMaxScore > 0 ? (totalScore / totalMaxScore) * 100 : 0;
-    return { employee, percentage, totalScore, totalMaxScore };
-  });
-
-  const sortedScores = [...employeeScores]
-    .filter((e) => e.totalMaxScore > 0)
-    .sort((a, b) => b.percentage - a.percentage);
-
-  const topPerformer = sortedScores[0];
-  const overrideEmployeeId = selectedPeriodId ? (settings.employeeOfPeriodOverrides ?? {})[selectedPeriodId] : undefined;
-  const effectiveEmployeeOfPeriod = useMemo(() => {
-    if (overrideEmployeeId) {
-      const emp = employees.find((e) => e.id === overrideEmployeeId);
-      const scoreEntry = sortedScores.find((s) => s.employee.id === overrideEmployeeId);
-      if (emp) return { employee: emp, percentage: scoreEntry?.percentage ?? 0, totalScore: scoreEntry?.totalScore ?? 0, totalMaxScore: scoreEntry?.totalMaxScore ?? 0, isOverride: true };
-    }
-    return topPerformer ? { ...topPerformer, isOverride: false } : null;
-  }, [overrideEmployeeId, employees, sortedScores, topPerformer]);
 
   // Chart data: full names for horizontal bar, color by 1–5 band
   const chartData = sortedScores.slice(0, 10).map((item) => {
@@ -216,7 +211,7 @@ export function ReviewsPage() {
           <CardContent className="py-10 px-4 text-center">
             <Calendar size={40} weight="duotone" className="mx-auto mb-3 text-muted-foreground/50" />
             <p className="font-medium text-foreground">Select a review period</p>
-            <p className="text-sm text-muted-foreground mt-1">Choose a period above to see Employee of the Period rankings, metrics, and distribution for that period.</p>
+            <p className="text-sm text-muted-foreground mt-1">Choose a period above to see the member and leader rankings, awards, metrics, and distribution for that period.</p>
           </CardContent>
         </Card>
       ) : (
@@ -390,6 +385,16 @@ export function ReviewsPage() {
                   <div className="text-xs text-muted-foreground font-medium">Overall score</div>
                 </div>
               </div>
+              {selectedRanking && (
+                <div className="mt-2 space-y-1">
+                  <GroupChips ranking={selectedRanking} />
+                  <p className="text-xs text-muted-foreground">
+                    {selectedRanking.eligible
+                      ? `Rank #${selectedRanking.rank} on the ${selectedRanking.board === 'leaders' ? 'leaders' : 'members'} board`
+                      : selectedRanking.notRankedReason}
+                  </p>
+                </div>
+              )}
             </CardHeader>
             <CardContent className="p-3 pt-0 space-y-4">
               <div className="grid gap-3 md:grid-cols-2">
@@ -477,6 +482,7 @@ export function ReviewsPage() {
                         <p className="font-medium text-sm text-foreground truncate">{formName}</p>
                         <p className="text-xs text-muted-foreground truncate">
                           By {appraiserName} · {a.score}/{a.maxScore}
+                          {a.lateDays ? <span className="ml-2 rounded bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 text-amber-800 dark:text-amber-200">Submitted {describeLate(a.lateDays)}</span> : null}
                         </p>
                       </div>
                       <button
@@ -520,166 +526,12 @@ export function ReviewsPage() {
         </Card>
       )}
 
-      {/* Recognition: Top performer (data) + Who was awarded for this period */}
-      {(topPerformer || effectiveEmployeeOfPeriod) && (
-        <Card className="border overflow-hidden bg-gradient-to-br from-muted/30 via-background to-muted/20 dark:from-muted/20 dark:to-muted/10">
-          <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Trophy size={16} weight="duotone" className="text-amber-500/80" />
-              Recognition · {periodLabel}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 pt-0">
-            <div className="grid gap-4 sm:grid-cols-2">
-              {/* Left: Top performer from data */}
-              {topPerformer && (
-                <div className="rounded-xl border bg-card p-4 shadow-sm border-blue-200/50 dark:border-blue-800/40 bg-gradient-to-br from-blue-50/40 to-transparent dark:from-blue-950/20 dark:to-transparent">
-                  <div className="flex items-center gap-2 mb-2">
-                    <ChartBar size={18} weight="duotone" className="text-blue-600/90 dark:text-blue-400/90" />
-                    <span className="text-xs font-semibold uppercase tracking-wide text-blue-700/90 dark:text-blue-300/90">
-                      Highest score (data)
-                    </span>
-                  </div>
-                  <p className="font-semibold text-foreground">{topPerformer.employee.name}</p>
-                  <p className="text-xs text-muted-foreground mb-2">{topPerformer.employee.role}</p>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                      {Math.round(topPerformer.percentage)}%
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {topPerformer.totalScore}/{topPerformer.totalMaxScore} pts
-                    </span>
-                  </div>
-                </div>
-              )}
-              {/* Right: Employee of the Period (awarded for this period) */}
-              {effectiveEmployeeOfPeriod && (
-                <div className="rounded-xl border bg-card p-4 shadow-sm border-amber-200/60 dark:border-amber-700/40 bg-gradient-to-br from-amber-50/50 to-transparent dark:from-amber-950/30 dark:to-transparent">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Trophy size={18} weight="duotone" className="text-amber-600/90 dark:text-amber-400/90" />
-                    <span className="text-xs font-semibold uppercase tracking-wide text-amber-700/90 dark:text-amber-300/90">
-                      Awarded for this period
-                    </span>
-                  </div>
-                  <p className="font-semibold text-foreground">{effectiveEmployeeOfPeriod.employee.name}</p>
-                  <p className="text-xs text-muted-foreground mb-2">{effectiveEmployeeOfPeriod.employee.role}</p>
-                  <div className="flex items-baseline gap-2 flex-wrap">
-                    <span className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-                      {Math.round(effectiveEmployeeOfPeriod.percentage)}%
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {effectiveEmployeeOfPeriod.totalScore}/{effectiveEmployeeOfPeriod.totalMaxScore} pts
-                    </span>
-                    {effectiveEmployeeOfPeriod.isOverride ? (
-                      <span className="inline-flex items-center rounded-md bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">
-                        Override
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-md bg-emerald-100 dark:bg-emerald-900/40 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:text-emerald-200">
-                        Same as top scorer
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <AwardsPanel periodId={selectedPeriodId} periodName={periodLabel} people={people} />
 
       {/* Analytics grid – compact */}
       {sortedScores.length > 0 && (
         <div className="grid gap-3 lg:grid-cols-2">
-          <Card className="border">
-            <CardHeader className="p-3 pb-2">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <div>
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <Trophy size={18} weight="duotone" className="text-amber-600/80" />
-                    Top Performers
-                  </CardTitle>
-                  <CardDescription className="text-xs">Ranking for {periodLabel}</CardDescription>
-                </div>
-                {sortedScores.length > 10 && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="flex items-center gap-1.5"
-                    onClick={() => setShowAllRankings(true)}
-                  >
-                    <ListBullets size={16} weight="duotone" />
-                    View all ({sortedScores.length})
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="p-3 pt-0">
-              <div className="space-y-1.5 max-h-[380px] overflow-y-auto pr-1 scrollbar-thin">
-                {sortedScores.slice(0, 10).map((item, idx) => {
-                  const isTopThree = idx < 3;
-                  return (
-                    <div
-                      key={item.employee.id}
-                      className={`flex items-center justify-between py-2.5 px-3 rounded-lg border transition-colors ${
-                        isTopThree
-                          ? 'bg-gradient-to-r from-amber-50/50 to-orange-50/50 dark:from-amber-950/20 dark:to-orange-950/20 border-amber-200/70 dark:border-amber-800/50'
-                          : 'bg-muted/30 hover:bg-muted/50 border-border'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 ${
-                            idx === 0
-                              ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow'
-                              : idx === 1
-                              ? 'bg-gradient-to-br from-gray-300 to-gray-400 dark:from-gray-600 dark:to-gray-700 text-white'
-                              : idx === 2
-                              ? 'bg-gradient-to-br from-amber-300 to-amber-400 text-white'
-                              : 'bg-muted text-foreground'
-                          }`}
-                        >
-                          {idx + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-sm truncate">{item.employee.name}</div>
-                          <div className="text-xs text-muted-foreground truncate">{item.employee.role}</div>
-                        </div>
-                      </div>
-                      <div className="text-right flex-shrink-0 ml-3">
-                        <div
-                          className={`text-base font-bold ${
-                            item.percentage >= 90
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : item.percentage >= 75
-                              ? 'text-blue-600 dark:text-blue-400'
-                              : item.percentage >= 60
-                              ? 'text-amber-600 dark:text-amber-400'
-                              : 'text-red-600 dark:text-red-400'
-                          }`}
-                        >
-                          {Math.round(item.percentage)}%
-                        </div>
-                        <div className="text-xs text-muted-foreground">{item.totalScore}/{item.totalMaxScore}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              {sortedScores.length > 0 && sortedScores.length <= 10 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="w-full mt-2 flex items-center justify-center gap-1.5 text-muted-foreground hover:text-foreground"
-                  onClick={() => setShowAllRankings(true)}
-                >
-                  <ListBullets size={16} weight="duotone" />
-                  View full rankings ({sortedScores.length})
-                </Button>
-              )}
-            </CardContent>
-          </Card>
+          <BoardsCard periodId={selectedPeriodId} periodName={periodLabel} people={people} onShowAll={setShowAllBoard} />
 
           <Card className="border">
             <CardHeader className="p-3 pb-2">
@@ -782,89 +634,15 @@ export function ReviewsPage() {
         </>
       )}
 
-      {/* Full rankings modal – portal so overlay covers viewport */}
-      {showAllRankings &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="all-rankings-title"
-            onClick={() => setShowAllRankings(false)}
-          >
-            <div
-              className="bg-card border rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between p-4 border-b shrink-0">
-                <h2 id="all-rankings-title" className="text-lg font-semibold flex items-center gap-2">
-                  <Trophy size={20} weight="duotone" className="text-amber-600/80" />
-                  Full rankings · {periodLabel}
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setShowAllRankings(false)}
-                  className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                  aria-label="Close"
-                >
-                  <X size={20} weight="bold" />
-                </button>
-              </div>
-              <div className="overflow-y-auto flex-1 p-4 space-y-1.5 min-h-0">
-                {sortedScores.map((item, idx) => {
-                  const isTopThree = idx < 3;
-                  return (
-                    <div
-                      key={item.employee.id}
-                      className={`flex items-center justify-between py-2.5 px-3 rounded-lg border transition-colors ${
-                        isTopThree
-                          ? 'bg-gradient-to-r from-amber-50/50 to-orange-50/50 dark:from-amber-950/20 dark:to-orange-950/20 border-amber-200/70 dark:border-amber-800/50'
-                          : 'bg-muted/30 border-border'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs flex-shrink-0 ${
-                            idx === 0
-                              ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow'
-                              : idx === 1
-                              ? 'bg-gradient-to-br from-gray-300 to-gray-400 dark:from-gray-600 dark:to-gray-700 text-white'
-                              : idx === 2
-                              ? 'bg-gradient-to-br from-amber-300 to-amber-400 text-white'
-                              : 'bg-muted text-foreground'
-                          }`}
-                        >
-                          {idx + 1}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-sm truncate">{item.employee.name}</div>
-                          <div className="text-xs text-muted-foreground truncate">{item.employee.role}</div>
-                        </div>
-                      </div>
-                      <div className="text-right flex-shrink-0 ml-3">
-                        <div
-                          className={`text-base font-bold ${
-                            item.percentage >= 90
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : item.percentage >= 75
-                              ? 'text-blue-600 dark:text-blue-400'
-                              : item.percentage >= 60
-                              ? 'text-amber-600 dark:text-amber-400'
-                              : 'text-red-600 dark:text-red-400'
-                          }`}
-                        >
-                          {Math.round(item.percentage)}%
-                        </div>
-                        <div className="text-xs text-muted-foreground">{item.totalScore}/{item.totalMaxScore}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+      {showAllBoard && selectedPeriodId && (
+        <FullRankingsModal
+          periodId={selectedPeriodId}
+          periodName={periodLabel}
+          board={showAllBoard}
+          people={people}
+          onClose={() => setShowAllBoard(null)}
+        />
+      )}
 
       <CompletedFormViewModal
         open={viewAppraisalId != null}

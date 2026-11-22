@@ -13,10 +13,9 @@ import {
   Lightning,
   Buildings
 } from 'phosphor-react';
-import { generatePerformanceSummary } from '@/lib/ai-summary';
-import type { PerformanceInsight } from '@/lib/ai-summary';
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import type { Appraisal, Template, Category } from '@/types';
+import { summarizePerformance } from '@/lib/ai-summary';
+import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
+import { REVIEW_GROUP_LABELS, type ReviewGroup } from '@/types';
 
 interface CategoryScore {
   name: string;
@@ -26,120 +25,54 @@ interface CategoryScore {
 }
 
 export function MyPerformancePage() {
-  const { appraisals, templates, reviewPeriods, employees, loading } = useApp();
+  const { myResults, settings, loading } = useApp();
   const { user, employee: contextEmployee } = useUser();
-  const employeeId = user?.employeeId ?? contextEmployee?.id ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('employeeId') : null) ?? null;
+  const employeeId = user?.employeeId ?? contextEmployee?.id ?? null;
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
-  const [narrativeSummary, setNarrativeSummary] = useState<PerformanceInsight | null>(null);
-  const [narrativeLoading, setNarrativeLoading] = useState(false);
 
-  // Get all completed appraisals for this employee (where they were appraised)
-  const myAppraisals = useMemo(() => {
-    if (!employeeId) return [];
-    return appraisals.filter(a => a.employeeId === employeeId && a.completedAt);
-  }, [appraisals, employeeId]);
-
-  // Get unique review periods that have appraisals for this employee
-  const availablePeriods = useMemo(() => {
-    const periodIds = [...new Set(myAppraisals.map(a => a.reviewPeriodId))];
-    return reviewPeriods.filter(p => periodIds.includes(p.id));
-  }, [myAppraisals, reviewPeriods]);
-
-  // Auto-select the most recent period
+  // Results arrive as summaries from the server, newest period first, with no reviewer details.
   useEffect(() => {
-    if (availablePeriods.length > 0 && !selectedPeriodId) {
-      // Sort by end date descending and pick the most recent
-      const sorted = [...availablePeriods].sort(
-        (a, b) => new Date(b.endDate).getTime() - new Date(a.endDate).getTime()
-      );
-      setSelectedPeriodId(sorted[0].id);
+    if (myResults.length > 0 && !myResults.some((r) => r.reviewPeriodId === selectedPeriodId)) {
+      setSelectedPeriodId(myResults[0].reviewPeriodId);
     }
-  }, [availablePeriods, selectedPeriodId]);
+  }, [myResults, selectedPeriodId]);
 
-  // Filter appraisals by selected period
-  const periodAppraisals = useMemo(() => {
-    if (!selectedPeriodId) return myAppraisals;
-    return myAppraisals.filter(a => a.reviewPeriodId === selectedPeriodId);
-  }, [myAppraisals, selectedPeriodId]);
+  const periodResult = myResults.find((r) => r.reviewPeriodId === selectedPeriodId) ?? null;
 
-  // Load AI narrative summary when period or appraisals change
-  useEffect(() => {
-    if (!employeeId || periodAppraisals.length === 0) {
-      setNarrativeSummary(null);
-      return;
-    }
-    let cancelled = false;
-    setNarrativeLoading(true);
-    generatePerformanceSummary(employeeId, periodAppraisals)
-      .then((insight) => {
-        if (!cancelled) setNarrativeSummary(insight);
-      })
-      .catch(() => {
-        if (!cancelled) setNarrativeSummary(null);
-      })
-      .finally(() => {
-        if (!cancelled) setNarrativeLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [employeeId, periodAppraisals]);
+  const narrativeSummary = useMemo(
+    () =>
+      periodResult
+        ? summarizePerformance(contextEmployee?.name ?? user?.name ?? 'You', periodResult.overallPct, periodResult.questions)
+        : null,
+    [periodResult, contextEmployee, user]
+  );
+  const narrativeLoading = false;
 
-  // HR appraisal for this period (template type hr-to-all)
-  const hrAppraisal = useMemo(() => {
-    return periodAppraisals.find(a => {
-      const t = templates.find(tpl => tpl.id === a.templateId);
-      return t?.type === 'hr-to-all';
-    });
-  }, [periodAppraisals, templates]);
+  const hrResult = periodResult?.hr ?? null;
 
-  // Calculate overall score
-  const overallStats = useMemo(() => {
-    if (periodAppraisals.length === 0) {
-      return { totalScore: 0, maxScore: 0, percentage: 0, count: 0 };
-    }
-    
-    const totalScore = periodAppraisals.reduce((sum, a) => sum + a.score, 0);
-    const maxScore = periodAppraisals.reduce((sum, a) => sum + a.maxScore, 0);
-    const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
-    
-    return { totalScore, maxScore, percentage, count: periodAppraisals.length };
-  }, [periodAppraisals]);
+  const overallStats = {
+    percentage: periodResult ? Math.round(periodResult.overallPct) : 0,
+    count: periodResult?.reviewCount ?? 0,
+  };
 
-  // Calculate category breakdown (aggregate across all appraisals, not showing individual reviewers)
+  const groupScores = periodResult
+    ? (Object.entries(periodResult.groups) as [ReviewGroup, { count: number; pct: number }][])
+        .map(([group, g]) => ({ group, label: REVIEW_GROUP_LABELS[group] ?? group, count: g.count, percentage: Math.round(g.pct) }))
+        .sort((a, b) => a.label.localeCompare(b.label))
+    : [];
+
+  // Category breakdown, combined across all reviews
   const categoryScores = useMemo((): CategoryScore[] => {
-    const categoryMap = new Map<string, { score: number; maxScore: number }>();
-    
-    periodAppraisals.forEach(appraisal => {
-      const template = appraisal.templateSnapshot ?? templates.find(t => t.id === appraisal.templateId);
-      if (!template || !template.categories) return;
-      
-      template.categories.forEach(category => {
-        const existing = categoryMap.get(category.categoryName) || { score: 0, maxScore: 0 };
-        
-        // Calculate score for this category from responses
-        category.items.forEach(item => {
-          const response = appraisal.responses.find(r => r.questionId === item.id);
-          if (response && item.type === 'rating-1-5') {
-            const rating = Number(response.value);
-            if (rating >= 1 && rating <= 5) {
-              existing.score += rating * item.weight;
-              existing.maxScore += 5 * item.weight;
-            }
-          }
-        });
-        
-        categoryMap.set(category.categoryName, existing);
-      });
-    });
-    
-    return Array.from(categoryMap.entries())
-      .map(([name, { score, maxScore }]) => ({
-        name,
-        score: Math.round(score * 10) / 10,
-        maxScore: Math.round(maxScore * 10) / 10,
-        percentage: maxScore > 0 ? Math.round((score / maxScore) * 100) : 0
+    if (!periodResult) return [];
+    return periodResult.categories
+      .map((c) => ({
+        name: c.name,
+        score: Math.round(c.score * 10) / 10,
+        maxScore: Math.round(c.maxScore * 10) / 10,
+        percentage: c.maxScore > 0 ? Math.round((c.score / c.maxScore) * 100) : 0,
       }))
       .sort((a, b) => b.percentage - a.percentage);
-  }, [periodAppraisals, templates]);
+  }, [periodResult]);
 
   // Identify strengths and areas for improvement
   const insights = useMemo(() => {
@@ -161,7 +94,6 @@ export function MyPerformancePage() {
   };
 
   const performanceLabel = getPerformanceLabel(overallStats.percentage);
-  const selectedPeriod = availablePeriods.find(p => p.id === selectedPeriodId);
 
   if (loading) {
     return (
@@ -185,7 +117,7 @@ export function MyPerformancePage() {
     );
   }
 
-  if (myAppraisals.length === 0) {
+  if (myResults.length === 0) {
     return (
       <div className="space-y-6 pb-8 sm:pb-10 lg:pb-12">
         <div>
@@ -218,7 +150,7 @@ export function MyPerformancePage() {
         </div>
         
         {/* Period Selector */}
-        {availablePeriods.length > 1 && (
+        {myResults.length > 1 && (
           <div className="flex items-center gap-2">
             <Calendar size={18} className="text-muted-foreground" />
             <select
@@ -226,9 +158,9 @@ export function MyPerformancePage() {
               onChange={(e) => setSelectedPeriodId(e.target.value)}
               className="border rounded-lg px-3 py-2 bg-background"
             >
-              {availablePeriods.map(period => (
-                <option key={period.id} value={period.id}>
-                  {period.name}
+              {myResults.map((r) => (
+                <option key={r.reviewPeriodId} value={r.reviewPeriodId}>
+                  {r.reviewPeriodName}
                 </option>
               ))}
             </select>
@@ -242,8 +174,9 @@ export function MyPerformancePage() {
         <div className="text-sm text-blue-800 dark:text-blue-200">
           <p className="font-medium">About your performance summary</p>
           <p className="mt-1">
-            This summary shows aggregated scores from {overallStats.count} review{overallStats.count !== 1 ? 's' : ''}.
-            Individual reviewer feedback is kept confidential to encourage honest feedback.
+            This summary combines {overallStats.count} review{overallStats.count !== 1 ? 's' : ''}. Who reviewed you and their
+            individual forms are kept confidential to encourage honest feedback. Each group of reviewers (managers, peers,
+            your team) counts equally, so having more reviewers in one group doesn't outweigh the others.
           </p>
         </div>
       </div>
@@ -265,9 +198,9 @@ export function MyPerformancePage() {
                   {performanceLabel.label}
                 </span>
               </div>
-              {selectedPeriod && (
+              {periodResult && (
                 <p className="text-sm text-muted-foreground mt-2">
-                  {selectedPeriod.name} • Based on {overallStats.count} review{overallStats.count !== 1 ? 's' : ''}
+                  {periodResult.reviewPeriodName} • Based on {overallStats.count} review{overallStats.count !== 1 ? 's' : ''}
                 </p>
               )}
             </div>
@@ -295,9 +228,27 @@ export function MyPerformancePage() {
         </CardContent>
       </Card>
 
+      {groupScores.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">By reviewer group</CardTitle>
+            <CardDescription>Shown only for groups with at least 3 reviewers, so no one can be singled out</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-3">
+            {groupScores.map((g) => (
+              <div key={g.group} className="rounded-lg border border-border/60 p-3">
+                <div className="text-sm text-muted-foreground">{g.label}</div>
+                <div className="text-2xl font-bold mt-1">{g.percentage}%</div>
+                <div className="text-xs text-muted-foreground">{g.count} reviews</div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       {/* HR Final Review (when employee has HR appraisal for this period) */}
-      {hrAppraisal && (() => {
-        const hrPct = hrAppraisal.maxScore > 0 ? Math.round((hrAppraisal.score / hrAppraisal.maxScore) * 100) : 0;
+      {hrResult && (() => {
+        const hrPct = Math.round(hrResult.pct);
         return (
           <Card className="border-l-4 border-teal-500 overflow-hidden">
             <CardHeader>
@@ -311,12 +262,12 @@ export function MyPerformancePage() {
                 </span>
               </div>
               <CardDescription>
-                Company-wide HR evaluation for this period. This score can contribute to final ranking and Employee of the Month.
+                Company-wide HR evaluation for this period. It makes up {settings.hrScoreWeight ?? 30}% of your overall score.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold text-teal-700 dark:text-teal-300">{hrAppraisal.score} / {hrAppraisal.maxScore}</span>
+                <span className="text-2xl font-bold text-teal-700 dark:text-teal-300">{hrResult.score} / {hrResult.maxScore}</span>
                 <span className="text-sm text-muted-foreground">points</span>
               </div>
             </CardContent>

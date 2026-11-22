@@ -1,4 +1,4 @@
-import type { Appraisal } from '@/types';
+import type { Appraisal, MyPeriodResult } from '@/types';
 import { getTemplates, getEmployees } from './storage';
 
 export interface PerformanceInsight {
@@ -7,6 +7,9 @@ export interface PerformanceInsight {
   narrative: string;
   percentage: number;
 }
+
+/** Totals per question across a person's reviews; the same shape get_my_results() returns. */
+export type QuestionTotals = MyPeriodResult['questions'];
 
 const STRENGTH_PHRASES = [
   'demonstrates exceptional',
@@ -32,12 +35,90 @@ const PERFORMANCE_LEVELS = {
   needsImprovement: { min: 0, text: 'performance that requires attention' },
 };
 
+/** Write the summary from per-question totals. Used for staff (server summaries) and admins alike. */
+export function summarizePerformance(employeeName: string, percentage: number, questions: QuestionTotals): PerformanceInsight {
+  const questionPercentages = questions
+    .filter((q) => q.max > 0)
+    .map((q) => ({ name: q.name, percentage: (q.total / q.max) * 100 }))
+    .sort((a, b) => b.percentage - a.percentage);
+
+  const strengths = questionPercentages
+    .filter((q) => q.percentage >= 75)
+    .slice(0, 3);
+
+  const improvements = questionPercentages
+    .filter((q) => q.percentage < 75)
+    .slice(-3)
+    .reverse();
+
+  const rounded = Math.round(percentage);
+  const level = Object.values(PERFORMANCE_LEVELS).find((data) => rounded >= data.min) ?? PERFORMANCE_LEVELS.needsImprovement;
+  const name = employeeName.trim() || 'This employee';
+  const list = (items: { name: string; percentage: number }[]) =>
+    items.slice(0, 2).map((q) => `${q.name} (${Math.round(q.percentage)}%)`).join(' and ');
+  const outlook =
+    rounded >= 90
+      ? 'exceeds expectations'
+      : rounded >= 75
+      ? 'meets expectations'
+      : rounded >= 60
+      ? 'is working towards expectations'
+      : 'would benefit from additional support to meet expectations';
+  const narrative = [
+    `${name} demonstrates ${level.text}, with an overall score of ${rounded}% across all reviews.`,
+    strengths.length > 0 ? `The strongest areas are ${list(strengths)}.` : '',
+    improvements.length > 0 ? `The main areas to develop are ${list(improvements)}.` : '',
+    `Overall, ${name} ${outlook}.`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return {
+    strengths: strengths.length > 0
+      ? strengths.map((q, i) => `${STRENGTH_PHRASES[i % STRENGTH_PHRASES.length]} ${q.name} (${Math.round(q.percentage)}%)`)
+      : ['No significant strengths identified'],
+    improvements: improvements.length > 0
+      ? improvements.map((q, i) => `${IMPROVEMENT_PHRASES[i % IMPROVEMENT_PHRASES.length]} ${q.name} (${Math.round(q.percentage)}%)`)
+      : ['No specific improvement areas identified'],
+    narrative,
+    percentage: rounded,
+  };
+}
+
+/** Per-question totals from full appraisal forms (admins). Mirrors the "questions" part of get_my_results(). */
+export async function questionTotalsFromAppraisals(appraisals: Appraisal[]): Promise<QuestionTotals> {
+  const templates = await getTemplates();
+  const totals = new Map<string, { name: string; total: number; max: number }>();
+
+  for (const appraisal of appraisals) {
+    const template = appraisal.templateSnapshot ?? templates.find((t) => t.id === appraisal.templateId);
+    if (!template) continue;
+    const entries = template.categories?.length
+      ? template.categories.flatMap((c) => c.items.map((item) => ({ item, category: c.categoryName })))
+      : (template.questions ?? []).map((item) => ({ item, category: item.categoryName ?? '' }));
+
+    for (const { item, category } of entries) {
+      if (item.type !== 'rating-1-5') continue;
+      const value = Number(appraisal.responses.find((r) => r.questionId === item.id)?.value);
+      if (!Number.isInteger(value) || value < 1 || value > 5) continue;
+      const label = category ? (item.categoryName ? `${category}: ${item.categoryName}` : category) : item.text;
+      const key = `${item.text.toLowerCase().slice(0, 100)}|${label}`;
+      const entry = totals.get(key) ?? { name: label, total: 0, max: 0 };
+      entry.total += (value / 5) * item.weight;
+      entry.max += item.weight;
+      totals.set(key, entry);
+    }
+  }
+  return [...totals.values()];
+}
+
+/** Summary for one person from their full forms (admins). Pass the group-weighted score when known. */
 export async function generatePerformanceSummary(
   employeeId: string,
-  appraisals: Appraisal[]
+  appraisals: Appraisal[],
+  overallPct?: number
 ): Promise<PerformanceInsight> {
   const employeeAppraisals = appraisals.filter((a) => a.employeeId === employeeId && a.completedAt);
-  
   if (employeeAppraisals.length === 0) {
     return {
       strengths: [],
@@ -47,130 +128,9 @@ export async function generatePerformanceSummary(
     };
   }
 
-  const templates = await getTemplates();
-  const employees = await getEmployees();
-  const employee = employees.find((e) => e.id === employeeId);
-
-  // Calculate overall percentage
+  const employee = (await getEmployees()).find((e) => e.id === employeeId);
   const totalScore = employeeAppraisals.reduce((sum, a) => sum + a.score, 0);
   const totalMaxScore = employeeAppraisals.reduce((sum, a) => sum + a.maxScore, 0);
-  const percentage = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0;
-
-  // Analyze by question/category
-  const questionScores: Record<string, { total: number; max: number; count: number; categoryName?: string }> = {};
-
-  employeeAppraisals.forEach((appraisal) => {
-    const template = appraisal.templateSnapshot ?? templates.find((t) => t.id === appraisal.templateId);
-    if (!template) return;
-
-    // Support both new category structure and legacy questions structure
-    if (template.categories && template.categories.length > 0) {
-      // New structure: categories with items
-      template.categories.forEach((category) => {
-        category.items.forEach((item) => {
-          const response = appraisal.responses.find((r) => r.questionId === item.id);
-          if (!response) return;
-
-          // Use category name + item text as key for grouping; full names for display (no truncation)
-          const key = item.text.toLowerCase().substring(0, 100);
-          const displayName = item.categoryName
-            ? `${category.categoryName}: ${item.categoryName || item.text}`
-            : category.categoryName
-            ? `${category.categoryName}: ${item.text}`
-            : item.text;
-
-          if (!questionScores[key]) {
-            questionScores[key] = { total: 0, max: 0, count: 0, categoryName: displayName };
-          }
-
-          let score = 0;
-          if (item.type === 'rating-1-5') {
-            score = (Number(response.value) / 5) * item.weight;
-          } else if ((item.type as string) === 'rating-1-10') {
-            score = (Number(response.value) / 10) * item.weight;
-          } else if (response.value && String(response.value).trim()) {
-            score = item.weight;
-          }
-
-          questionScores[key].total += score;
-          questionScores[key].max += item.weight;
-          questionScores[key].count += 1;
-        });
-      });
-    } else if (template.questions && template.questions.length > 0) {
-      // Legacy structure: questions array
-      appraisal.responses.forEach((response) => {
-        const question = template.questions!.find((q) => q.id === response.questionId);
-        if (!question) return;
-
-        const key = question.text.toLowerCase();
-        if (!questionScores[key]) {
-          questionScores[key] = { total: 0, max: 0, count: 0, categoryName: question.categoryName || question.text };
-        }
-
-        let score = 0;
-        if (question.type === 'rating-1-5') {
-          score = (Number(response.value) / 5) * question.weight;
-        } else if ((question.type as string) === 'rating-1-10') {
-          score = (Number(response.value) / 10) * question.weight;
-        } else if (response.value && String(response.value).trim()) {
-          score = question.weight;
-        }
-
-        questionScores[key].total += score;
-        questionScores[key].max += question.weight;
-        questionScores[key].count += 1;
-      });
-    }
-  });
-
-  // Calculate percentages per question/category
-  const questionPercentages: Array<{ name: string; percentage: number }> = Object.entries(questionScores)
-    .map(([key, data]) => ({
-      name: data.categoryName || key,
-      percentage: data.max > 0 ? (data.total / data.max) * 100 : 0,
-    }))
-    .sort((a, b) => b.percentage - a.percentage);
-
-  // Identify strengths (top 2-3) – use full category/item names (no truncation)
-  const strengths = questionPercentages
-    .filter((q) => q.percentage >= 75)
-    .slice(0, 3)
-    .map((q) => {
-      const phrase = STRENGTH_PHRASES[Math.floor(Math.random() * STRENGTH_PHRASES.length)];
-      return `${phrase} ${q.name} (${Math.round(q.percentage)}%)`;
-    });
-
-  // Identify improvements (bottom 2-3) – use full category/item names (no truncation)
-  const improvements = questionPercentages
-    .filter((q) => q.percentage < 75)
-    .slice(-3)
-    .reverse()
-    .map((q) => {
-      const phrase = IMPROVEMENT_PHRASES[Math.floor(Math.random() * IMPROVEMENT_PHRASES.length)];
-      return `${phrase} ${q.name} (${Math.round(q.percentage)}%)`;
-    });
-
-  // Generate narrative
-  const level = Object.entries(PERFORMANCE_LEVELS)
-    .reverse()
-    .find(([_, data]) => percentage >= data.min)?.[1] || PERFORMANCE_LEVELS.needsImprovement;
-
-  const employeeName = employee?.name || 'This employee';
-  const narrative = `${employeeName} demonstrates ${level.text}, achieving ${percentage}% of the total possible score across all appraisals. ${
-    strengths.length > 0
-      ? `Key strengths include ${strengths.slice(0, 2).join(' and ')}. `
-      : ''
-  }${
-    improvements.length > 0
-      ? `Areas for development include ${improvements.slice(0, 2).join(' and ')}. `
-      : ''
-  }Overall, ${employeeName.toLowerCase()} ${percentage >= 75 ? 'meets' : 'is working towards'} performance expectations and ${percentage >= 90 ? 'exceeds' : percentage >= 60 ? 'meets' : 'would benefit from additional support to meet'} organizational standards.`;
-
-  return {
-    strengths: strengths.length > 0 ? strengths : ['No significant strengths identified'],
-    improvements: improvements.length > 0 ? improvements : ['No specific improvement areas identified'],
-    narrative,
-    percentage,
-  };
+  const percentage = overallPct ?? (totalMaxScore > 0 ? (totalScore / totalMaxScore) * 100 : 0);
+  return summarizePerformance(employee?.name ?? 'This employee', percentage, await questionTotalsFromAppraisals(employeeAppraisals));
 }

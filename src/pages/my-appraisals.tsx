@@ -17,7 +17,7 @@ import {
   Link as LinkIcon,
   Star,
 } from 'phosphor-react';
-import { formatDate } from '@/lib/utils';
+import { submissionWindow, deadlineText } from '@/lib/deadline';
 import type { AppraisalLink } from '@/types';
 import type { AppraisalAssignment } from '@/types';
 
@@ -256,11 +256,12 @@ export function MyAppraisalsPage() {
             const isPending = !isDone;
             const expired = item.type === 'link' ? isLinkExpired(item.link.expiresAt) : false;
             const expiringSoon = item.type === 'link' ? isLinkExpiringSoon(item.link.expiresAt) : false;
-            const dueLabel = item.type === 'link' && item.link.expiresAt
-              ? formatDate(item.link.expiresAt)
-              : item.type === 'assignment' && item.assignment.dueDate
-                ? formatDate(item.assignment.dueDate)
-                : null;
+            const periodId = item.type === 'link' ? item.link.reviewPeriodId : item.assignment.reviewPeriodId;
+            const periodEnd = reviewPeriods.find((p) => p.id === periodId)?.endDate;
+            const deadline = submissionWindow(
+              periodEnd,
+              item.type === 'link' ? item.link.createdAt : item.assignment.dueDate
+            );
 
             return (
               <Card
@@ -315,9 +316,13 @@ export function MyAppraisalsPage() {
                             )}
                           </span>
                         </div>
-                        {dueLabel && isPending && !expired && (
-                          <div className={`text-xs mt-1 ${expiringSoon ? 'text-amber-500' : 'text-muted-foreground'}`}>
-                            Due: {dueLabel}
+                        {deadline.dueDay && isPending && !expired && (
+                          <div
+                            className={`text-xs mt-1 ${
+                              deadline.isClosed ? 'text-red-500' : deadline.isLate || expiringSoon ? 'text-amber-500' : 'text-muted-foreground'
+                            }`}
+                          >
+                            {deadlineText(deadline, item.type === 'link' ? 'ask an administrator for a new link' : undefined)}
                           </div>
                         )}
                         {isDone && (

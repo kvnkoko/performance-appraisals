@@ -18,10 +18,11 @@ import {
   PencilSimple
 } from 'phosphor-react';
 import { formatDate } from '@/lib/utils';
+import { submissionWindow, deadlineText } from '@/lib/deadline';
 import type { AppraisalLink, Employee } from '@/types';
 
 export function EmployeeDashboardPage() {
-  const { links, employees, appraisals, reviewPeriods, assignments, employeeProfiles, loading } = useApp();
+  const { links, employees, reviewPeriods, assignments, employeeProfiles, myResults, loading } = useApp();
   const { user, employee: contextEmployee, isAdmin, viewAs } = useUser();
   const employeeId = user?.employeeId ?? contextEmployee?.id ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('employeeId') : null) ?? null;
   const employee = employeeId ? (employees.find(e => e.id === employeeId) ?? contextEmployee ?? null) : null;
@@ -55,7 +56,7 @@ export function EmployeeDashboardPage() {
       to: `/appraisal/assignment/${a.id}`,
       employeeName: a.employeeName,
       periodName: reviewPeriods.find((p) => p.id === a.reviewPeriodId)?.name,
-      due: a.dueDate ?? null,
+      window: submissionWindow(reviewPeriods.find((p) => p.id === a.reviewPeriodId)?.endDate, a.dueDate),
       createdAt: a.createdAt,
     })),
     ...myPendingLinks.map((l) => ({
@@ -63,7 +64,7 @@ export function EmployeeDashboardPage() {
       to: `/appraisal/${l.token}`,
       employeeName: employees.find((e) => e.id === l.employeeId)?.name || 'Unknown',
       periodName: l.reviewPeriodName,
-      due: l.expiresAt,
+      window: submissionWindow(reviewPeriods.find((p) => p.id === l.reviewPeriodId)?.endDate, l.createdAt),
       createdAt: l.createdAt,
     })),
   ].sort((x, y) => new Date(y.createdAt).getTime() - new Date(x.createdAt).getTime());
@@ -72,7 +73,7 @@ export function EmployeeDashboardPage() {
   const activePeriods = reviewPeriods.filter(p => p.status === 'active');
 
   // Get my performance appraisals (where I was appraised)
-  const myAppraisals = appraisals.filter(a => a.employeeId === employeeId && a.completedAt);
+  const reviewsReceived = myResults.reduce((sum, r) => sum + r.reviewCount, 0);
 
   const userName = user?.name || localStorage.getItem('userName') || 'User';
   const [showProfileEdit, setShowProfileEdit] = useState(false);
@@ -197,7 +198,7 @@ export function EmployeeDashboardPage() {
             </div>
           </CardHeader>
           <CardContent className="px-5 pb-5 pt-0">
-            <div className="text-3xl font-bold tracking-tight text-foreground">{myAppraisals.length}</div>
+            <div className="text-3xl font-bold tracking-tight text-foreground">{reviewsReceived}</div>
             <p className="text-xs text-muted-foreground mt-1">performance reviews received</p>
           </CardContent>
         </Card>
@@ -298,8 +299,7 @@ export function EmployeeDashboardPage() {
                           Review for {item.employeeName}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {item.periodName || 'No period'} • 
-                          {item.due ? ` Due ${formatDate(item.due)}` : ' No deadline'}
+                          {item.periodName || 'No period'} • {deadlineText(item.window)}
                         </div>
                       </div>
                     </div>

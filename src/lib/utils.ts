@@ -179,10 +179,13 @@ export function calculateScore(
   let maxScore = 0;
   const details: Array<{ questionId: string; weightScore: number; percentageScore: number }> = [];
 
+  // Only rating questions are scored; text and multiple-choice answers are kept but don't count.
+  // Mirrors compute_appraisal_score() in the database.
   questions.forEach((question) => {
     const response = responses.find((r) => r.questionId === question.id);
-    const maxWeightScore = question.weight * 5; // Maximum possible (5 rating × weight)
-    maxScore += maxWeightScore;
+    if (question.type === 'rating-1-5' || question.type === 'rating-1-10') {
+      maxScore += question.weight * 5;
+    }
 
     if (response && question.type === 'rating-1-5') {
       const rating = Number(response.value);
@@ -205,18 +208,6 @@ export function calculateScore(
       if (rating >= 0.5 && rating <= 5) {
         const weightScore = rating * question.weight;
         const percentageScore = (rating * question.weight) / 5;
-        score += weightScore;
-        details.push({
-          questionId: question.id,
-          weightScore,
-          percentageScore,
-        });
-      }
-    } else if (response && (question.type === 'text' || question.type === 'multiple-choice')) {
-      // Text and multiple choice contribute full weight if answered
-      if (response.value && String(response.value).trim()) {
-        const weightScore = question.weight * 5; // Treat as max rating
-        const percentageScore = question.weight;
         score += weightScore;
         details.push({
           questionId: question.id,

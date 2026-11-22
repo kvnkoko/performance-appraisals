@@ -33,6 +33,8 @@ import { BrandLogo } from '@/components/shared/brand-logo';
 import type { AppraisalResponse, Category, CategoryItem } from '@/types';
 import { RATING_LABELS } from '@/types';
 import type { AppraisalAssignment } from '@/types';
+import { submissionWindow, type SubmissionWindow } from '@/lib/deadline';
+import { DeadlineNote } from '@/components/shared/deadline-note';
 import {
   RATING_VALUES,
   canSelectRating,
@@ -62,6 +64,7 @@ export function AppraisalFormByAssignmentPage() {
   const [employee, setEmployee] = useState<any>(null);
   const [appraiser, setAppraiser] = useState<any>(null);
   const [completed, setCompleted] = useState<false | 'just-submitted' | 'already-submitted'>(false);
+  const [deadline, setDeadline] = useState<SubmissionWindow | null>(null);
 
   const {
     register,
@@ -81,7 +84,7 @@ export function AppraisalFormByAssignmentPage() {
   }, [assignmentId, userLoading]);
 
   const isOwnForm = !!assignment && assignment.appraiserId === myEmployeeId;
-  const canSubmit = isOwnForm && !viewAs;
+  const canSubmit = isOwnForm && !viewAs && !deadline?.isClosed;
 
   const loadData = async () => {
     if (!assignmentId) {
@@ -113,10 +116,11 @@ export function AppraisalFormByAssignmentPage() {
         setLoading(false);
         return;
       }
-      const [templateData, employeeData, appraiserData] = await Promise.all([
+      const [templateData, employeeData, appraiserData, period] = await Promise.all([
         getTemplate(assignmentData.templateId),
         getEmployee(assignmentData.employeeId),
         getEmployee(assignmentData.appraiserId),
+        getReviewPeriod(assignmentData.reviewPeriodId),
       ]);
       if (!templateData || !employeeData || !appraiserData) {
         toast({ title: 'Error', description: 'Failed to load appraisal data.', variant: 'error' });
@@ -124,6 +128,7 @@ export function AppraisalFormByAssignmentPage() {
         return;
       }
       setAssignment(assignmentData);
+      setDeadline(submissionWindow(period?.endDate, assignmentData.dueDate));
       setTemplate(templateData);
       setEmployee(employeeData);
       setAppraiser(appraiserData);
@@ -152,10 +157,6 @@ export function AppraisalFormByAssignmentPage() {
         const rating = Number(response);
         if (rating >= 1 && rating <= 5) {
           scores[item.id] = { weightScore: rating * item.weight, percentageScore: (rating * item.weight) / 5 };
-        }
-      } else if (item.type === 'text' || item.type === 'multiple-choice') {
-        if (String(response).trim().length > 0) {
-          scores[item.id] = { weightScore: 5 * item.weight, percentageScore: item.weight };
         }
       }
     });
@@ -386,6 +387,7 @@ export function AppraisalFormByAssignmentPage() {
               Preview only. You are viewing as {viewAs.user.name}, so this form cannot be submitted.
             </p>
           )}
+          <DeadlineNote deadline={deadline} />
           {!isOwnForm && assignment && (
             <p className="mx-auto max-w-xl rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
               Preview only. This form belongs to {assignment.appraiserName}; only they can submit it.
