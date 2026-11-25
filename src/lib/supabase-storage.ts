@@ -200,15 +200,13 @@ export async function updateEmployeeTeamInSupabase(employeeId: string, teamId: s
 
 const EMPLOYEE_OPTIONAL_COLUMNS = /reports_to|team_id|employment_status|executive_type|updated_at|schema cache|column.*employees/i;
 
-export async function saveEmployeeToSupabase(employee: Employee): Promise<void> {
-  const supabase = await requireClient();
-  const hierarchyForDb = hierarchyForSupabase(normalizeHierarchy(employee.hierarchy as string | null | undefined));
-  const fullPayload = {
+export function employeeRowForSupabase(employee: Employee) {
+  return {
     id: employee.id,
     name: String(employee.name ?? ''),
     email: employee.email ?? null,
     role: String(employee.role ?? ''),
-    hierarchy: hierarchyForDb,
+    hierarchy: hierarchyForSupabase(normalizeHierarchy(employee.hierarchy as string | null | undefined)),
     executive_type: employee.executiveType ?? null,
     team_id: employee.teamId ?? null,
     reports_to: employee.reportsTo ?? null,
@@ -216,6 +214,12 @@ export async function saveEmployeeToSupabase(employee: Employee): Promise<void> 
     created_at: employee.createdAt || new Date().toISOString(),
     updated_at: employee.updatedAt || new Date().toISOString(),
   };
+}
+
+export async function saveEmployeeToSupabase(employee: Employee): Promise<void> {
+  const supabase = await requireClient();
+  const fullPayload = employeeRowForSupabase(employee);
+  const hierarchyForDb = fullPayload.hierarchy;
 
   const result = await supabase.from(TABLES.EMPLOYEES).upsert(fullPayload, { onConflict: 'id' });
   if (!result.error) return;
@@ -245,12 +249,6 @@ export async function saveEmployeeToSupabase(employee: Employee): Promise<void> 
     const r = await supabase.from(TABLES.EMPLOYEES).update({ [column]: value }).eq('id', employee.id);
     if (r.error) console.warn(`Employee saved but ${column} could not be set (column missing?):`, r.error.message);
   }
-}
-
-export async function deleteEmployeeFromSupabase(id: string): Promise<void> {
-  const supabase = await requireClient();
-  const { error } = await supabase.from(TABLES.EMPLOYEES).delete().eq('id', id);
-  check('deleteEmployeeFromSupabase', error);
 }
 
 // ============================================

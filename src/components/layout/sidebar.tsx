@@ -3,7 +3,6 @@ import {
   SquaresFour,
   FileText,
   Users,
-  UserCircle,
   Link as LinkIcon,
   ChartBar,
   Gear,
@@ -38,14 +37,13 @@ const sharedNavItems = [
   { path: '/org-chart', label: 'Org Chart', icon: TreeStructure },
 ];
 
-// Admin navigation items (Overview = system-wide dashboard; Employees = Directory + management at /directory)
+// Admin navigation items (Overview = system-wide dashboard; People = directory + people and sign-in management)
 const adminNavItems = [
   { path: '/dashboard', label: 'Overview', icon: SquaresFour },
-  { path: '/directory', label: 'Employees', icon: Users },
+  { path: '/directory', label: 'People', icon: Users },
   { path: '/org-chart', label: 'Org Chart', icon: TreeStructure },
   { path: '/templates', label: 'Templates', icon: FileText },
   { path: '/teams', label: 'Teams', icon: UsersThree },
-  { path: '/users', label: 'Users', icon: UserCircle },
   { path: '/links', label: 'Appraisal Links', icon: LinkIcon },
   { path: '/periods', label: 'Review Periods', icon: Calendar },
   { path: '/reviews', label: 'Reviews', icon: ChartBar },
@@ -61,6 +59,13 @@ const employeeNavItems = [
   { path: '/my-appraisals', label: 'My Appraisals', icon: ClipboardText },
   { path: '/my-performance', label: 'My Performance', icon: ChartLineUp },
   { path: '/settings', label: 'Settings', icon: Gear },
+];
+
+// An admin's own forms and results, shown when their sign-in belongs to a person.
+const myWorkNavItems = [
+  { path: '/my-dashboard', label: 'My Dashboard', icon: House },
+  { path: '/my-appraisals', label: 'My Appraisals', icon: ClipboardText },
+  { path: '/my-performance', label: 'My Performance', icon: ChartLineUp },
 ];
 
 interface SidebarProps {
@@ -91,7 +96,11 @@ export function Sidebar({ mobileOpen: controlledOpen, setMobileOpen: setControll
   const linkedEmployee = employee || (user?.employeeId ? employees.find(e => e.id === user.employeeId) : null);
   
   // Use appropriate navigation based on role
-  const navItems = isAdmin ? adminNavItems : employeeNavItems;
+  const navSections: Array<{ label?: string; items: typeof adminNavItems }> = isAdmin
+    ? user?.employeeId
+      ? [{ items: adminNavItems }, { label: 'My work', items: myWorkNavItems }]
+      : [{ items: adminNavItems }]
+    : [{ items: employeeNavItems }];
   
   // Ensure sidebar updates when user context changes
   useEffect(() => {
@@ -172,7 +181,13 @@ export function Sidebar({ mobileOpen: controlledOpen, setMobileOpen: setControll
 
           {/* Navigation – active: left bar + tint like Holo/Finvero */}
           <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-thin">
-            {navItems.map((item) => {
+            {navSections.map((section) => [
+              section.label ? (
+                <div key={`label-${section.label}`} className="px-3 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+                  {section.label}
+                </div>
+              ) : null,
+              ...section.items.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
               return (
@@ -205,7 +220,8 @@ export function Sidebar({ mobileOpen: controlledOpen, setMobileOpen: setControll
                   <span className="relative z-10">{item.label}</span>
                 </Link>
               );
-            })}
+              }),
+            ])}
           </nav>
 
           {/* Logout */}

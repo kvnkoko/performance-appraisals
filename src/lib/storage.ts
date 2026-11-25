@@ -8,6 +8,8 @@ import {
   pairKey,
 } from '@/lib/appraisal-status';
 import { assertWritable, ReadOnlyModeError } from '@/lib/read-only-mode';
+import { LOCKING_STATUSES } from '@/types';
+import { generateId } from '@/lib/utils';
 
 /*
  * Data access for the whole app.
@@ -360,10 +362,29 @@ export async function getEmployee(id: string): Promise<Employee | undefined> {
   });
 }
 
+/**
+ * Save a person. With Supabase the database copies their name/email to their sign-in and locks or
+ * unlocks it when they leave or come back; without Supabase the same is done here.
+ */
 export async function saveEmployee(employee: Employee): Promise<void> {
   assertWritable();
-  if (await cloudEnabled()) await (await remote()).saveEmployeeToSupabase(employee);
+  if (await cloudEnabled()) {
+    try {
+      await (await remote()).saveEmployeeToSupabase(employee);
+    } catch (error) {
+      const e = error as { code?: string; message?: string };
+      if (e?.code === 'P0001' && e.message) throw new UserFacingError(e.message);
+      throw error;
+    }
+    await cachePut('employees', employee);
+    return;
+  }
   await cachePut('employees', employee);
+  const locked = LOCKING_STATUSES.includes(employee.employmentStatus ?? 'permanent');
+  for (const u of await cacheGetAll<User>('users')) {
+    if (u.employeeId !== employee.id) continue;
+    await cachePut('users', { ...u, name: employee.name, email: employee.email, active: !locked });
+  }
 }
 
 /** Update only an employee's team (assign/remove as department leader). */
@@ -378,48 +399,92 @@ export async function updateEmployeeTeam(employeeId: string, teamId: string | nu
   if (emp) await cachePut('employees', { ...emp, teamId: teamId ?? undefined });
 }
 
+export interface NewSignIn {
+  username: string;
+  role: 'admin' | 'staff';
+  password: string;
+}
+
 /**
- * Delete an employee. Refuses when they have submitted appraisals (as subject or reviewer):
- * those are audit records, so the employee should be marked Resigned/Terminated instead.
- * Pending forms, unused links, their profile and summary are removed; linked logins are locked.
+ * Add a person together with their sign-in. With Supabase both are created in one server-side
+ * transaction, so a person is never left without a login (or a login without a person).
  */
-export async function deleteEmployee(id: string): Promise<void> {
+export async function createPerson(employee: Employee, signIn: NewSignIn): Promise<User> {
+  assertWritable();
+  const login: User = {
+    id: generateId(),
+    username: signIn.username.trim().toLowerCase(),
+    passwordHash: '',
+    name: employee.name,
+    email: employee.email,
+    role: signIn.role,
+    active: !LOCKING_STATUSES.includes(employee.employmentStatus ?? 'permanent'),
+    employeeId: employee.id,
+    mustChangePassword: true,
+    createdAt: new Date().toISOString(),
+  };
+  if (await cloudEnabled()) {
+    const { createPersonInSupabase, FunctionCallError } = await import('./supabase');
+    try {
+      const saved = normalizeUser(
+        await createPersonInSupabase((await remote()).employeeRowForSupabase(employee), login, signIn.password)
+      );
+      await cachePut('employees', employee);
+      await cachePut('users', saved);
+      return saved;
+    } catch (error) {
+      if (error instanceof FunctionCallError && error.status < 500) throw new UserFacingError(error.message);
+      throw error;
+    }
+  }
+  if (await getUserByUsername(login.username)) throw new UserFacingError('That username is already taken.');
+  await cachePut('employees', employee);
+  return saveUser(login, { password: signIn.password });
+}
+
+/**
+ * Delete a person and their sign-in. Refuses when they have submitted appraisals (as subject or
+ * reviewer): those are audit records, so the person should be marked Resigned/Terminated instead.
+ * Pending forms, unused links, their profile and summary are removed.
+ */
+export async function deletePerson(id: string): Promise<void> {
   assertWritable();
   const appraisals = await getAppraisals();
   const submitted = appraisals.filter((a) => a.employeeId === id || a.appraiserId === id).length;
   if (submitted > 0) {
     throw new UserFacingError(
-      `This employee has ${submitted} submitted appraisal(s) on record. To keep the audit history, set their employment status to Resigned or Terminated instead of deleting them.`
+      `This person has ${submitted} submitted appraisal(s) on record. To keep the history, set their employment status to Resigned or Terminated instead of deleting them.`
     );
   }
   const directReports = (await getEmployees()).filter((e) => e.reportsTo === id && e.id !== id);
   if (directReports.length > 0) {
     throw new UserFacingError(
-      `${directReports.length} employee(s) report to this person. Change their "Reports to" first, then delete.`
+      `${directReports.length} person(s) report to this person. Change their "Reports to" first, then delete.`
     );
   }
 
   if (await cloudEnabled()) {
-    const r = await remote();
-    await r.deletePendingAssignmentsForEmployeeFromSupabase(id);
-    await r.deleteUnusedLinksForEmployeeFromSupabase(id);
-    await r.deleteEmployeeProfileFromSupabase(id);
-    await r.deleteSummaryFromSupabase(id);
-    await r.deleteEmployeeFromSupabase(id);
+    const { deletePersonFromSupabase, FunctionCallError } = await import('./supabase');
+    try {
+      await deletePersonFromSupabase(id);
+    } catch (error) {
+      if (error instanceof FunctionCallError && error.status < 500) throw new UserFacingError(error.message);
+      throw error;
+    }
   }
 
   for (const a of await cacheGetAll<AppraisalAssignment>('appraisalAssignments')) {
-    if (a.employeeId === id || a.appraiserId === id) await cacheDelete('appraisalAssignments', a.id);
+    if ((a.employeeId === id || a.appraiserId === id) && a.status !== 'completed') await cacheDelete('appraisalAssignments', a.id);
   }
   for (const l of await cacheGetAll<AppraisalLink>('links')) {
-    if (l.employeeId === id || l.appraiserId === id) await cacheDelete('links', l.id);
+    if ((l.employeeId === id || l.appraiserId === id) && !l.used) await cacheDelete('links', l.id);
   }
   await cacheDelete('employeeProfiles', id);
   await cacheDelete('summaries', id);
   await cacheDelete('employees', id);
-
-  const linkedUsers = (await getUsers()).filter((u) => u.employeeId === id);
-  for (const u of linkedUsers) await saveUser({ ...u, active: false });
+  for (const u of await cacheGetAll<User>('users')) {
+    if (u.employeeId === id) await cacheDelete('users', u.id);
+  }
   try {
     const channel = new BroadcastChannel('appraisals-auth');
     channel.postMessage({ type: 'employeeDeleted', employeeId: id });
@@ -965,31 +1030,25 @@ export async function saveUser(user: User, options: SaveUserOptions = {}): Promi
 /**
  * Restore an account from a backup file. New accounts keep their old password hash and move to
  * Supabase Auth on their next sign-in; existing accounts keep their current password.
+ * A sign-in must belong to exactly one person: one whose person is missing, or whose person
+ * already has a different sign-in, is restored locked and unattached (kept for history).
  */
-async function importUser(user: User): Promise<void> {
+async function importUser(user: User, personIds: Set<string>, ownerByPerson: Map<string, string>): Promise<void> {
+  let restored = normalizeUser(user);
+  const owner = restored.employeeId ? ownerByPerson.get(restored.employeeId) : undefined;
+  if (!restored.employeeId || !personIds.has(restored.employeeId) || (owner && owner !== restored.id)) {
+    restored = { ...restored, employeeId: undefined, active: false };
+  } else {
+    ownerByPerson.set(restored.employeeId, restored.id);
+  }
   if (!(await cloudEnabled())) {
-    await cachePut('users', normalizeUser(user));
+    await cachePut('users', restored);
     return;
   }
   const { saveUserToSupabase } = await import('./supabase');
   const legacyHash = /^[0-9a-f]{64}$/.test(user.passwordHash || '') ? user.passwordHash : undefined;
-  const saved = await saveUserToSupabase(normalizeUser(user), { legacyPasswordHash: legacyHash });
+  const saved = await saveUserToSupabase(restored, { legacyPasswordHash: legacyHash });
   await cachePut('users', normalizeUser(saved));
-}
-
-/** Delete a login account. The linked employee and their appraisals are left untouched. */
-export async function deleteUser(id: string): Promise<void> {
-  assertWritable();
-  if (await cloudEnabled()) {
-    const { deleteUserFromSupabase, FunctionCallError } = await import('./supabase');
-    try {
-      await deleteUserFromSupabase(id);
-    } catch (error) {
-      if (error instanceof FunctionCallError && error.status < 500) throw new UserFacingError(error.message);
-      throw error;
-    }
-  }
-  await cacheDelete('users', id);
 }
 
 // ============================================
@@ -1103,7 +1162,12 @@ export async function importData(json: string): Promise<void> {
   for (const appraisal of data.appraisals ?? []) await saveAppraisal(appraisal);
   for (const link of data.links ?? []) await saveLink(link);
   if (Array.isArray(data.assignments)) await saveAppraisalAssignments(data.assignments);
-  for (const user of data.users ?? []) await importUser(user);
+  if (Array.isArray(data.users) && data.users.length > 0) {
+    const personIds = new Set((await getEmployees()).map((e) => e.id));
+    const ownerByPerson = new Map<string, string>();
+    for (const u of await getUsers()) if (u.employeeId) ownerByPerson.set(u.employeeId, u.id);
+    for (const user of data.users) await importUser(user, personIds, ownerByPerson);
+  }
   for (const profile of data.employeeProfiles ?? []) {
     if (profile.employeeId) await saveEmployeeProfile(profile);
   }

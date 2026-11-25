@@ -150,8 +150,12 @@ function ViewAsDialog({ onClose }: { onClose: () => void }) {
   const roleExamples = useMemo(() => {
     if (!role) return [];
     const people = candidates.filter((e) => e.hierarchy === role);
-    // People who can actually sign in show the most realistic view, so offer them first.
-    return [...people].sort((a, b) => Number(accountByEmployee.has(b.id)) - Number(accountByEmployee.has(a.id)));
+    // People with a staff sign-in show the most realistic view; admins see everything, so they go last.
+    const rank = (e: Employee) => {
+      const account = accountByEmployee.get(e.id);
+      return !account ? 0 : account.role === 'admin' ? 1 : 2;
+    };
+    return [...people].sort((a, b) => rank(b) - rank(a));
   }, [role, candidates, accountByEmployee]);
 
   useEffect(() => {

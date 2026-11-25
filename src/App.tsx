@@ -14,7 +14,6 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 
 // Import pages directly for now (can be lazy loaded later if needed)
 import { TemplatesPage } from '@/pages/templates';
-import { UsersPage } from '@/pages/users';
 import { LinksPage } from '@/pages/links';
 import { PeriodsPage } from '@/pages/periods';
 import { ReviewsPage } from '@/pages/reviews';
@@ -69,11 +68,11 @@ function RoleBasedRedirect() {
   return <Navigate to="/my-dashboard" replace />;
 }
 
-// If admin hits /my-dashboard (e.g. bookmark or back), send to admin dashboard so Vercel and localhost match
+// Admins who are also people in the company have their own dashboard; admin-only accounts go to the overview.
 function MyDashboardOrRedirect() {
   const { user, loading } = useUser();
   if (loading) return <div className="flex items-center justify-center h-screen">Loading...</div>;
-  if (user?.role === 'admin') return <Navigate to="/dashboard" replace />;
+  if (user?.role === 'admin' && !user.employeeId) return <Navigate to="/dashboard" replace />;
   return <EmployeeDashboardPage />;
 }
 
@@ -139,14 +138,14 @@ function App() {
                         <Route path="/templates" element={<AdminRoute><TemplatesPage /></AdminRoute>} />
                         <Route path="/employees" element={<Navigate to="/directory" replace />} />
                         <Route path="/teams" element={<AdminRoute><TeamsPage /></AdminRoute>} />
-                        <Route path="/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
+                        <Route path="/users" element={<Navigate to="/directory" replace />} />
                         <Route path="/links" element={<AdminRoute><LinksPage /></AdminRoute>} />
                         <Route path="/periods" element={<AdminRoute><PeriodsPage /></AdminRoute>} />
                         <Route path="/reviews" element={<AdminRoute><ReviewsPage /></AdminRoute>} />
                         <Route path="/historical" element={<Navigate to="/periods" replace />} />
                         <Route path="/submission-tracker" element={<AdminRoute><SubmissionTrackerPage /></AdminRoute>} />
                         
-                        {/* Employee routes — admins always see admin dashboard instead */}
+                        {/* Personal routes (staff, and admins who are people in the company) */}
                         <Route path="/my-dashboard" element={<MyDashboardOrRedirect />} />
                         <Route path="/my-appraisals" element={<MyAppraisalsPage />} />
                         <Route path="/my-performance" element={<MyPerformancePage />} />

@@ -7,9 +7,7 @@ import { useUser } from '@/contexts/user-context';
 const PATH_TO_TITLE: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/templates': 'Templates',
-  '/employees': 'Employees',
   '/teams': 'Teams',
-  '/users': 'Users',
   '/links': 'Send Appraisals',
   '/periods': 'Review Periods',
   '/reviews': 'Reviews',
@@ -37,7 +35,7 @@ export function MainLayout({ children }: { children: ReactNode }) {
   const { isAdmin: checkIsAdmin } = useUser();
   const pageTitle =
     location.pathname === '/directory' && checkIsAdmin()
-      ? 'Employees'
+      ? 'People'
       : getPageTitle(location.pathname);
   const [cloudSyncError, setCloudSyncError] = useState(false);
 

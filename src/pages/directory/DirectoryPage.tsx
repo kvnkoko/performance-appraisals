@@ -13,7 +13,8 @@ import { ProfileEditModal } from './ProfileEditModal';
 import type { Employee, DirectoryFilters as DirectoryFiltersType, EmploymentStatusFilter } from '@/types';
 import { isDepartmentLeader, LOCKING_STATUSES } from '@/types';
 import { cn } from '@/lib/utils';
-import { getEmployees, getUserByEmployeeId, deleteEmployee, describeError } from '@/lib/storage';
+import { getEmployees, getUsers, deletePerson, describeError } from '@/lib/storage';
+import type { SignInSummary } from './ProfileCard';
 
 const defaultFilters: DirectoryFiltersType = {
   search: '',
@@ -52,7 +53,7 @@ export function DirectoryPage() {
   const recoveryAttempted = useRef(false);
 
   const admin = isAdmin();
-  const [linkedUsers, setLinkedUsers] = useState<Record<string, { name: string; username: string }>>({});
+  const [linkedUsers, setLinkedUsers] = useState<Record<string, SignInSummary>>({});
   const wasHiddenRef = useRef(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
@@ -66,18 +67,17 @@ export function DirectoryPage() {
 
   const loadLinkedUsers = useMemo(
     () => async () => {
-      const usersMap: Record<string, { name: string; username: string }> = {};
-      for (const employee of employees) {
-        try {
-          const userRecord = await getUserByEmployeeId(employee.id);
-          if (userRecord) usersMap[employee.id] = { name: userRecord.name, username: userRecord.username };
-        } catch {
-          /* ignore */
+      try {
+        const usersMap: Record<string, SignInSummary> = {};
+        for (const u of await getUsers()) {
+          if (u.employeeId) usersMap[u.employeeId] = { username: u.username, admin: u.role === 'admin', active: u.active !== false };
         }
+        setLinkedUsers(usersMap);
+      } catch {
+        /* keep what is shown */
       }
-      setLinkedUsers(usersMap);
     },
-    [employees]
+    []
   );
 
   useEffect(() => {
@@ -212,14 +212,14 @@ export function DirectoryPage() {
     if (!deleteConfirm.id) return;
     setDeleting(true);
     try {
-      await deleteEmployee(deleteConfirm.id);
+      await deletePerson(deleteConfirm.id);
       await refresh();
       if (admin) loadLinkedUsers();
-      toast({ title: 'Success', description: 'Employee deleted successfully', variant: 'success' });
+      toast({ title: 'Deleted', description: `${deleteConfirm.name} and their sign-in were deleted.`, variant: 'success' });
       setDeleteConfirm({ open: false, id: null, name: '' });
     } catch (error) {
       console.error('Delete error:', error);
-      toast({ title: 'Error', description: describeError(error, 'Failed to delete employee. Please try again.'), variant: 'error' });
+      toast({ title: 'Could not delete', description: describeError(error, 'Something went wrong. Please try again.'), variant: 'error' });
     } finally {
       setDeleting(false);
     }
@@ -266,10 +266,10 @@ export function DirectoryPage() {
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-foreground tracking-tight">
-              {admin ? 'Employees' : settings.name || 'Our People'}
+              {admin ? 'People' : settings.name || 'Our People'}
             </h1>
             <p className="text-muted-foreground mt-1 text-sm sm:text-base">
-              {admin ? 'Manage your employee database' : 'Meet the team'}
+              {admin ? 'Everyone in the company and how they sign in' : 'Meet the team'}
             </p>
             <div className="flex items-center gap-4 mt-3 sm:mt-4">
               <div className="flex items-center gap-2 text-muted-foreground text-sm sm:text-base">
@@ -290,10 +290,10 @@ export function DirectoryPage() {
                 onClick={() => { setEditingEmployeeId(null); setDialogOpen(true); }}
                 className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg hover:shadow-xl transition-all"
                 size="lg"
-                aria-label="Add Employee"
+                aria-label="Add person"
               >
                 <Plus size={20} weight="duotone" className="mr-2" />
-                Add Employee
+                Add Person
               </Button>
             </div>
           )}
@@ -325,7 +325,7 @@ export function DirectoryPage() {
             {admin && (
               <Button className="mt-4" onClick={() => { setEditingEmployeeId(null); setDialogOpen(true); }}>
                 <Plus className="mr-2 h-4 w-4" />
-                Add Employee
+                Add Person
               </Button>
             )}
           </div>
@@ -388,9 +388,9 @@ export function DirectoryPage() {
             open={deleteConfirm.open}
             onClose={() => setDeleteConfirm({ open: false, id: null, name: '' })}
             onConfirm={handleDeleteConfirm}
-            title="Delete Employee"
-            description={`Are you sure you want to delete "${deleteConfirm.name}"? Only possible if they have no submitted appraisals and nobody reports to them. Their pending forms and unused links are removed and any linked login is locked. For people who left, set their status to Resigned or Terminated instead.`}
-            confirmText="Delete Employee"
+            title="Delete person"
+            description={`Delete "${deleteConfirm.name}" and their sign-in? Only possible if they have no submitted appraisals and nobody reports to them. Their pending forms and unused links are removed. For people who left, set their status to Resigned or Terminated instead.`}
+            confirmText="Delete"
             cancelText="Cancel"
             variant="danger"
             loading={deleting}

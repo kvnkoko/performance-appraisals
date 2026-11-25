@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { ProfileCard } from './ProfileCard';
+import { ProfileCard, type SignInSummary } from './ProfileCard';
 import type { Employee, EmployeeProfile, DirectoryFilters } from '@/types';
 import { isDepartmentLeader, LOCKING_STATUSES } from '@/types';
 import { useApp } from '@/contexts/app-context';
@@ -15,7 +15,7 @@ interface DirectoryGridProps {
   onCardClick: (employee: Employee) => void;
   onEditClick: (employee: Employee) => void;
   showAdminActions?: boolean;
-  linkedUsers?: Record<string, { name: string; username: string }>;
+  linkedUsers?: Record<string, SignInSummary>;
   onEditRecord?: (employee: Employee) => void;
   onDelete?: (id: string, name: string) => void;
   /** When provided, show only these employees (no internal filter/sort). Used for sectioned layout. */

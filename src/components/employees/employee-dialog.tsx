@@ -1,23 +1,24 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { X, Info, Copy, Check, Eye, EyeSlash, Crown, Briefcase, Buildings } from 'phosphor-react';
+import { X, Info, Copy, Check, Eye, EyeSlash, Crown, Briefcase, Buildings, UserCircle, Key, ShieldCheck, LockSimple, ArrowsClockwise } from 'phosphor-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { getEmployee, saveEmployee, saveUser, getUserByUsername, getUsers, getUserByEmployeeId } from '@/lib/storage';
-import { generateId } from '@/lib/utils';
+import { getEmployee, saveEmployee, saveUser, getUsers, createPerson, describeError } from '@/lib/storage';
+import { generateId, formatDate } from '@/lib/utils';
 import { getDepartmentLeaderId } from '@/lib/org-chart-utils';
 import type { Employee, User, ExecutiveType, EmploymentStatus } from '@/types';
 import { isDepartmentLeader, LOCKING_STATUSES } from '@/types';
 import { useToast } from '@/contexts/toast-context';
 import { useApp } from '@/contexts/app-context';
-import { LinkSimple, LinkSimpleBreak, UserCircle } from 'phosphor-react';
+import { useUser } from '@/contexts/user-context';
 
 const EMPLOYMENT_STATUS_VALUES = ['permanent', 'temporary', 'contractor', 'probation', 'intern', 'on-leave', 'terminated', 'resigned'] as const;
+const USERNAME_PATTERN = /^[a-z0-9._-]{3,}$/;
 
 const employeeSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -39,15 +40,37 @@ interface EmployeeDialogProps {
   onSuccess: () => void;
 }
 
+/** "Ei Shwe Sin Phyo" -> "eishwesinphyo", the convention existing usernames follow. */
+function suggestUsername(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function generatePassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  const bytes = crypto.getRandomValues(new Uint8Array(10));
+  return Array.from(bytes, (b) => chars[b % chars.length]).join('');
+}
+
+const isLocking = (status: EmploymentStatus | undefined) => LOCKING_STATUSES.includes(status ?? 'permanent');
+
 export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: EmployeeDialogProps) {
   const { toast } = useToast();
   const { teams, employees } = useApp();
+  const { realUser } = useUser();
   const [loading, setLoading] = useState(false);
-  const [linkedUser, setLinkedUser] = useState<User | null>(null);
-  const [availableUsers, setAvailableUsers] = useState<User[]>([]);
-  const [showUserLink, setShowUserLink] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState<string>('');
-  const [autoCreateUser, setAutoCreateUser] = useState(true); // Default to auto-create for new employees
+  const [loaded, setLoaded] = useState(true);
+
+  // Sign-in section
+  const [account, setAccount] = useState<User | null>(null);
+  const [originalStatus, setOriginalStatus] = useState<EmploymentStatus | undefined>(undefined);
+  const [username, setUsername] = useState('');
+  const [usernameEdited, setUsernameEdited] = useState(false);
+  const [adminAccess, setAdminAccess] = useState(false);
+  const [canSignIn, setCanSignIn] = useState(true);
+  const [newPassword, setNewPassword] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [credentials, setCredentials] = useState<{ name: string; username: string; password: string } | null>(null);
+  const [copiedField, setCopiedField] = useState<'username' | 'password' | null>(null);
 
   const {
     register,
@@ -71,12 +94,18 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
 
   const selectedHierarchy = watch('hierarchy');
   const selectedEmploymentStatus = watch('employmentStatus');
+  const watchedName = watch('name');
+  const isSelf = !!account && account.id === realUser?.id;
+  const creatingSignIn = !account;
 
   useEffect(() => {
-    if (open && employeeId) {
-      loadEmployee();
-      setAutoCreateUser(false); // Don't auto-create for existing employees
-    } else if (open && !employeeId) {
+    if (!open) return;
+    setCredentials(null);
+    setShowPassword(false);
+    setUsernameEdited(false);
+    if (employeeId) {
+      loadEmployee(employeeId);
+    } else {
       reset({
         name: '',
         email: '',
@@ -87,195 +116,57 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         reportsTo: '',
         employmentStatus: 'permanent',
       });
-      setLinkedUser(null);
-      setShowUserLink(false);
-      setAutoCreateUser(true); // Auto-create for new employees by default
+      setAccount(null);
+      setLoaded(true);
+      setOriginalStatus(undefined);
+      setUsername('');
+      setAdminAccess(false);
+      setCanSignIn(true);
+      setNewPassword(generatePassword());
     }
-    // Load available users when dialog opens
-    if (open) {
-      loadAvailableUsers();
-    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, employeeId]);
 
-  const loadEmployee = async () => {
-    if (!employeeId) return;
-    try {
-      const employee = await getEmployee(employeeId);
-      if (employee) {
-        const raw = employee.hierarchy as string;
-        const validHierarchy = ['chairman', 'executive', 'leader', 'department-leader', 'member', 'hr'].includes(raw)
-          ? raw
-          : 'member';
-        // Map legacy 'leader' to 'department-leader' for form display (Select has department-leader, not leader)
-        const formHierarchy = validHierarchy === 'leader' ? 'department-leader' : validHierarchy;
-        reset({
-          name: employee.name,
-          email: employee.email || '',
-          role: employee.role,
-          hierarchy: formHierarchy,
-          executiveType: employee.executiveType,
-          teamId: employee.teamId || '',
-          reportsTo: employee.reportsTo || '',
-          employmentStatus: employee.employmentStatus ?? 'permanent',
-        });
-        
-        // Load linked user if exists
-        const user = await getUserByEmployeeId(employeeId);
-        setLinkedUser(user || null);
-      }
-    } catch (error) {
-      console.error('Error loading employee:', error);
-      toast({ title: 'Error', description: 'Failed to load employee.', variant: 'error' });
-    }
-  };
-  
-  const loadAvailableUsers = async () => {
-    try {
-      const users = await getUsers();
-      // Filter out users that are already linked to other employees (except current one)
-      const available = users.filter(u => !u.employeeId || (employeeId && u.employeeId === employeeId));
-      setAvailableUsers(available);
-    } catch (error) {
-      console.error('Error loading users:', error);
-    }
-  };
-  
-  const handleLinkUser = async () => {
-    if (!selectedUserId || !employeeId) return;
-    
-    try {
-      const user = availableUsers.find(u => u.id === selectedUserId);
-      if (!user) return;
-      
-      const updatedUser: User = {
-        ...user,
-        employeeId: employeeId,
-      };
-      
-      await saveUser(updatedUser);
-      
-      // Verify the user was saved correctly by reloading it
-      const { getUser } = await import('@/lib/storage');
-      const savedUser = await getUser(updatedUser.id);
-      if (savedUser && savedUser.employeeId === employeeId) {
-        console.log('User link verified - employeeId persisted:', savedUser.employeeId);
-        setLinkedUser(savedUser);
-      } else {
-        console.warn('User link verification failed - reloading from storage');
-        // Try reloading by employeeId
-        const reloadedUser = await getUserByEmployeeId(employeeId);
-        if (reloadedUser) {
-          setLinkedUser(reloadedUser);
-        } else {
-          setLinkedUser(updatedUser); // Fallback to what we tried to save
-        }
-      }
-      
-      setShowUserLink(false);
-      setSelectedUserId('');
-      await loadAvailableUsers();
-      
-      // Dispatch events to notify both Users and Employees pages to refresh
-      window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: employeeId } }));
-      window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
-      
-      // Also dispatch after delays to ensure pages catch it
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: employeeId } }));
-        window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
-      }, 500);
-      
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: employeeId } }));
-        window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
-      }, 2000);
-      
-      // Refresh employees list
-      onSuccess();
-      
-      toast({ title: 'Success', description: 'User linked to employee successfully.', variant: 'success' });
-    } catch (error) {
-      console.error('Error linking user:', error);
-      toast({ title: 'Error', description: 'Failed to link user.', variant: 'error' });
-    }
-  };
-  
-  const handleUnlinkUser = async () => {
-    if (!linkedUser || !employeeId) return;
-    
-    try {
-      const updatedUser: User = {
-        ...linkedUser,
-        employeeId: undefined,
-      };
-      
-      await saveUser(updatedUser);
-      
-      // Verify the user was saved correctly by reloading it
-      const { getUser } = await import('@/lib/storage');
-      const savedUser = await getUser(updatedUser.id);
-      if (savedUser && !savedUser.employeeId) {
-        console.log('User unlink verified - employeeId removed');
-        setLinkedUser(null);
-      } else {
-        console.warn('User unlink verification failed - reloading from storage');
-        const reloadedUser = await getUser(updatedUser.id);
-        setLinkedUser(reloadedUser?.employeeId === employeeId ? reloadedUser : null);
-      }
-      
-      await loadAvailableUsers();
-      
-      // Dispatch events to notify both Users and Employees pages to refresh
-      window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: undefined } }));
-      window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
-      
-      // Also dispatch after delays to ensure pages catch it
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: undefined } }));
-        window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
-      }, 500);
-      
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id, employeeId: undefined } }));
-        window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: employeeId } }));
-      }, 2000);
-      
-      // Refresh employees list
-      onSuccess();
-      
-      toast({ title: 'Success', description: 'User unlinked from employee successfully.', variant: 'success' });
-    } catch (error) {
-      console.error('Error unlinking user:', error);
-      toast({ title: 'Error', description: 'Failed to unlink user.', variant: 'error' });
-    }
-  };
+  // Suggest a username from the name until the admin types their own.
+  useEffect(() => {
+    if (creatingSignIn && !usernameEdited) setUsername(suggestUsername(watchedName || ''));
+  }, [watchedName, creatingSignIn, usernameEdited]);
 
-  // Generate username from name (e.g., "John Doe" -> "john.doe")
-  const generateUsername = (name: string, email?: string): string => {
-    if (email) {
-      // Use email prefix as username
-      return email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+  const loadEmployee = async (id: string) => {
+    setLoaded(false);
+    try {
+      const [employee, users] = await Promise.all([getEmployee(id), getUsers()]);
+      if (!employee) return;
+      const raw = employee.hierarchy as string;
+      const validHierarchy = ['chairman', 'executive', 'leader', 'department-leader', 'member', 'hr'].includes(raw)
+        ? raw
+        : 'member';
+      // Map legacy 'leader' to 'department-leader' for form display (Select has department-leader, not leader)
+      const formHierarchy = validHierarchy === 'leader' ? 'department-leader' : validHierarchy;
+      reset({
+        name: employee.name,
+        email: employee.email || '',
+        role: employee.role,
+        hierarchy: formHierarchy as EmployeeFormData['hierarchy'],
+        executiveType: employee.executiveType,
+        teamId: employee.teamId || '',
+        reportsTo: employee.reportsTo || '',
+        employmentStatus: employee.employmentStatus ?? 'permanent',
+      });
+      setOriginalStatus(employee.employmentStatus ?? 'permanent');
+      const login = users.find((u) => u.employeeId === id) ?? null;
+      setAccount(login);
+      setUsername(login?.username ?? suggestUsername(employee.name));
+      setUsernameEdited(!!login);
+      setAdminAccess(login?.role === 'admin');
+      setCanSignIn(login ? login.active !== false : true);
+      setNewPassword(login ? null : generatePassword());
+      setLoaded(true);
+    } catch (error) {
+      console.error('Error loading person:', error);
+      toast({ title: 'Error', description: 'Failed to load this person.', variant: 'error' });
     }
-    // Generate from name
-    return name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '');
   };
-
-  // Generate random password
-  const generateRandomPassword = (): string => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-    let password = '';
-    for (let i = 0; i < 8; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return password;
-  };
-
-  const [createdCredentials, setCreatedCredentials] = useState<{ userId: string; username: string; password: string; employeeId: string } | null>(null);
-  const [editableUsername, setEditableUsername] = useState('');
-  const [editablePassword, setEditablePassword] = useState('');
-  const [savingCredentials, setSavingCredentials] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [copiedField, setCopiedField] = useState<'username' | 'password' | null>(null);
 
   const copyToClipboard = async (text: string, field: 'username' | 'password') => {
     try {
@@ -288,29 +179,32 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
   };
 
   const onSubmit = async (data: EmployeeFormData) => {
+    const cleanUsername = username.trim().toLowerCase();
+    if (!USERNAME_PATTERN.test(cleanUsername)) {
+      toast({
+        title: 'Check the username',
+        description: 'Use at least 3 characters: lowercase letters, numbers, dots, dashes or underscores.',
+        variant: 'error',
+      });
+      return;
+    }
     setLoading(true);
-    setCreatedCredentials(null);
-    
     try {
       const existingEmployee = employeeId ? await getEmployee(employeeId) : null;
-      const newEmployeeId = employeeId || generateId();
+      const personId = employeeId || generateId();
       // Auto-set Reports to = department leader when not set (persist to DB)
       let reportsTo = data.reportsTo || undefined;
       if (data.teamId && !reportsTo) {
         const leaderId = getDepartmentLeaderId(data.teamId, employees);
-        if (leaderId && leaderId !== newEmployeeId) reportsTo = leaderId;
+        if (leaderId && leaderId !== personId) reportsTo = leaderId;
       }
-      
       const employmentStatus = (data.employmentStatus ?? 'permanent') as EmploymentStatus;
-      const validHierarchy = ['chairman', 'executive', 'leader', 'department-leader', 'member', 'hr'].includes(data.hierarchy)
-        ? data.hierarchy
-        : 'member';
       const employee: Employee = {
-        id: newEmployeeId,
-        name: data.name,
+        id: personId,
+        name: data.name.trim(),
         email: data.email || undefined,
         role: data.role,
-        hierarchy: validHierarchy,
+        hierarchy: data.hierarchy,
         executiveType: data.executiveType,
         teamId: data.teamId ? data.teamId : undefined,
         reportsTo,
@@ -318,561 +212,140 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         createdAt: existingEmployee?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
+      const role: User['role'] = adminAccess ? 'admin' : 'staff';
 
-      await saveEmployee(employee);
+      if (!employeeId) {
+        await createPerson(employee, { username: cleanUsername, role, password: newPassword! });
+        setCredentials({ name: employee.name, username: cleanUsername, password: newPassword! });
+        toast({ title: 'Person added', description: 'Share their sign-in details below.', variant: 'success' });
+      } else {
+        await saveEmployee(employee);
+        const nowLocked = isLocking(employmentStatus);
+        const wasLocked = isLocking(originalStatus);
 
-      // If status is Terminated or Resigned, lock linked user accounts and broadcast session invalidation
-      let didLockAccounts = false;
-      if (LOCKING_STATUSES.includes(employmentStatus)) {
-        const users = await getUsers();
-        const linkedUsers = users.filter((u) => u.employeeId === newEmployeeId);
-        for (const u of linkedUsers) {
-          const updatedUser: User = { ...u, active: false };
-          await saveUser(updatedUser);
+        if (account) {
+          // The database already locks/unlocks the sign-in when the status changes.
+          const active = nowLocked ? false : wasLocked ? true : canSignIn;
+          const changed =
+            cleanUsername !== account.username || role !== account.role || active !== (account.active !== false) || !!newPassword;
+          if (changed) {
+            await saveUser(
+              {
+                ...account,
+                username: cleanUsername,
+                role,
+                active,
+                mustChangePassword: newPassword ? true : account.mustChangePassword,
+              },
+              { password: newPassword ?? undefined }
+            );
+          }
+        } else if (newPassword) {
+          await saveUser(
+            {
+              id: generateId(),
+              username: cleanUsername,
+              passwordHash: '',
+              name: employee.name,
+              email: employee.email,
+              role,
+              active: !nowLocked,
+              employeeId: personId,
+              mustChangePassword: true,
+              createdAt: new Date().toISOString(),
+            },
+            { password: newPassword }
+          );
         }
-        try {
-          const channel = new BroadcastChannel('appraisals-auth');
-          channel.postMessage({ type: 'employeeTerminatedOrResigned', employeeId: newEmployeeId });
-          channel.close();
-        } catch {
-          // BroadcastChannel not supported
+
+        if (nowLocked && !wasLocked) {
+          try {
+            const channel = new BroadcastChannel('appraisals-auth');
+            channel.postMessage({ type: 'employeeTerminatedOrResigned', employeeId: personId });
+            channel.close();
+          } catch {
+            // BroadcastChannel not supported
+          }
         }
-        toast({
-          title: 'Employee status updated',
-          description: "Linked account(s) have been locked and signed out on all devices.",
-          variant: 'success',
-        });
-        didLockAccounts = true;
-      } else if (existingEmployee?.employmentStatus && LOCKING_STATUSES.includes(existingEmployee.employmentStatus)) {
-        // Rehired / status corrected: re-enable the accounts that were locked by the old status.
-        const linkedUsers = (await getUsers()).filter((u) => u.employeeId === newEmployeeId && !u.active);
-        for (const u of linkedUsers) {
-          await saveUser({ ...u, active: true });
-        }
-        if (linkedUsers.length > 0) {
+
+        if (newPassword) {
+          setCredentials({ name: employee.name, username: cleanUsername, password: newPassword });
+        } else {
           toast({
-            title: 'Account unlocked',
-            description: `${linkedUsers.length} linked login account(s) can sign in again.`,
+            title: 'Saved',
+            description:
+              nowLocked && !wasLocked
+                ? 'Their sign-in has been locked and they are signed out on all devices.'
+                : wasLocked && !nowLocked
+                  ? 'Their sign-in has been unlocked.'
+                  : 'Changes saved.',
             variant: 'success',
           });
-        }
-      }
-
-      // Dispatch event to notify other pages (like Teams) to refresh
-      window.dispatchEvent(new CustomEvent('employeeCreated', { detail: { employeeId: newEmployeeId } }));
-      window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: newEmployeeId } }));
-      
-      // Auto-create user account for new employees (unless user opted out)
-      if (!employeeId && autoCreateUser) {
-        try {
-          console.log('Auto-creating user account for new employee:', { employeeId: newEmployeeId, name: data.name });
-          // Generate base username
-          const baseUsername = generateUsername(data.name, data.email);
-          
-          // Get all existing users to check for duplicates (case-insensitive)
-          const { getUsers, getUserByUsername } = await import('@/lib/storage');
-          const allUsers = await getUsers();
-          const existingUsernames = new Set(allUsers.map(u => u.username.toLowerCase()));
-          
-          // Generate a guaranteed unique username using timestamp + random suffix
-          // This ensures uniqueness even if there are race conditions
-          const timestamp = Date.now().toString().slice(-8);
-          const randomSuffix = Math.random().toString(36).substring(2, 6);
-          let username = `${baseUsername}${timestamp}${randomSuffix}`.toLowerCase();
-          
-          // Verify uniqueness - if it exists, keep trying with new random suffix
-          let uniquenessCheck = await getUserByUsername(username);
-          let uniquenessAttempts = 0;
-          const maxUniquenessAttempts = 10;
-          
-          while (uniquenessCheck && uniquenessAttempts < maxUniquenessAttempts) {
-            const newRandomSuffix = Math.random().toString(36).substring(2, 8);
-            username = `${baseUsername}${Date.now().toString().slice(-8)}${newRandomSuffix}`.toLowerCase();
-            uniquenessCheck = await getUserByUsername(username);
-            uniquenessAttempts++;
-          }
-          
-          // Final fallback: if still not unique, use UUID-like approach
-          if (uniquenessCheck) {
-            username = `${baseUsername}${Date.now()}${Math.random().toString(36).substring(2, 9)}`.toLowerCase();
-          }
-          
-          const password = generateRandomPassword();
-          
-          const user: User = {
-            id: generateId(),
-            username: username.toLowerCase().trim(), // Ensure lowercase and trimmed
-            passwordHash: '',
-            name: data.name,
-            email: data.email || undefined,
-            role: 'staff', // All employees get staff role
-            active: true,
-            employeeId: newEmployeeId,
-            mustChangePassword: true, // Force password change on first login
-            createdAt: new Date().toISOString(),
-          };
-          
-          // Try saving with retry logic for constraint errors
-          let saveAttempts = 0;
-          const maxSaveAttempts = 5;
-          let saveSuccess = false;
-          let finalUsername = username;
-          
-          while (!saveSuccess && saveAttempts < maxSaveAttempts) {
-            try {
-              await saveUser(user, { password });
-              saveSuccess = true;
-              console.log('User saved successfully:', { userId: user.id, username: user.username });
-            } catch (userError: any) {
-              saveAttempts++;
-              console.error(`Error saving user (attempt ${saveAttempts}/${maxSaveAttempts}):`, userError);
-              
-              // If it's a constraint error, generate a new unique username
-              if (userError?.name === 'ConstraintError' || /unique|constraint|by-username|already taken/i.test(String(userError?.message ?? ''))) {
-                // Generate a completely new unique username
-                const newTimestamp = Date.now().toString();
-                const newRandom = Math.random().toString(36).substring(2, 10);
-                finalUsername = `${baseUsername}${newTimestamp}${newRandom}`.toLowerCase().trim();
-                user.username = finalUsername;
-                
-                // Verify this new username doesn't exist
-                const verifyCheck = await getUserByUsername(finalUsername);
-                if (verifyCheck) {
-                  // If it still exists, use a more aggressive approach
-                  finalUsername = `${baseUsername}${Date.now()}${Math.random().toString(36).substring(2, 11)}`.toLowerCase().trim();
-                  user.username = finalUsername;
-                }
-                
-                if (saveAttempts < maxSaveAttempts) {
-                  // Wait a bit before retrying to avoid race conditions
-                  await new Promise(resolve => setTimeout(resolve, 100 * saveAttempts));
-                  continue; // Retry with new username
-                } else {
-                  // Max attempts reached, throw error
-                  throw new Error(`Failed to create user after ${maxSaveAttempts} attempts due to username conflicts. Please try again or create user manually.`);
-                }
-              } else {
-                // Different error, throw it
-                throw userError;
-              }
-            }
-          }
-          
-          // Update username variable for credentials display
-          username = finalUsername;
-          
-          // Wait a moment to ensure the user is fully saved (especially for Supabase)
-          await new Promise(resolve => setTimeout(resolve, 300));
-          
-          // Verify the user was saved correctly by reloading it
-          let savedUser = await getUserByEmployeeId(newEmployeeId);
-          let retries = 0;
-          const maxRetries = 5;
-          
-          // Retry loading the user if not found (for Supabase async operations)
-          while (!savedUser && retries < maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-            savedUser = await getUserByEmployeeId(newEmployeeId);
-            retries++;
-          }
-          
-          // If still not found by employeeId, try loading by user ID
-          if (!savedUser) {
-            const { getUser } = await import('@/lib/storage');
-            savedUser = await getUser(user.id);
-          }
-          
-          if (savedUser) {
-            setLinkedUser(savedUser);
-            // Use the saved username from the database
-            username = savedUser.username;
-            
-            console.log('User created successfully:', { userId: savedUser.id, username: savedUser.username, employeeId: newEmployeeId });
-            
-            // Verify user exists in database by fetching all users
-            const { getUsers } = await import('@/lib/storage');
-            const allUsers = await getUsers();
-            const userExists = allUsers.some(u => u.id === savedUser.id);
-            console.log('User verification:', { userId: savedUser.id, exists: userExists, totalUsers: allUsers.length });
-            
-            // Dispatch custom event to notify Users page to refresh (multiple times to ensure it's caught)
-            window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: savedUser.id, employeeId: newEmployeeId } }));
-            
-            // Also dispatch after delays to catch Users page if it wasn't ready
-            setTimeout(() => {
-              window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: savedUser.id, employeeId: newEmployeeId } }));
-              // Also trigger a storage event as backup
-              window.dispatchEvent(new StorageEvent('storage', { key: 'users-updated' }));
-            }, 1000);
-            
-            setTimeout(() => {
-              window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: savedUser.id, employeeId: newEmployeeId } }));
-            }, 3000);
-            
-            setTimeout(() => {
-              window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: savedUser.id, employeeId: newEmployeeId } }));
-            }, 5000);
-            
-            // Show credentials to admin with editable fields
-            setCreatedCredentials({ 
-              userId: savedUser.id, 
-              username: savedUser.username, 
-              password: password,
-              employeeId: newEmployeeId
-            });
-            setEditableUsername(savedUser.username);
-            setEditablePassword(password);
-            
-            toast({ 
-              title: 'Employee & Login Created', 
-              description: 'A login account has been created. You can edit the username and password before saving.', 
-              variant: 'success' 
-            });
-          } else {
-            // Last resort - use the user object we created (shouldn't happen, but handle gracefully)
-            console.warn('User not found after creation, using created user object', { userId: user.id, username: user.username });
-            setLinkedUser(user);
-            
-            // Dispatch custom event to notify Users page to refresh (multiple times to ensure it's caught)
-            window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: user.id, employeeId: newEmployeeId } }));
-            
-            // Also dispatch after delays to catch Users page if it wasn't ready
-            setTimeout(() => {
-              window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: user.id, employeeId: newEmployeeId } }));
-            }, 1000);
-            
-            setTimeout(() => {
-              window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: user.id, employeeId: newEmployeeId } }));
-            }, 3000);
-            
-            // Show credentials to admin with editable fields
-            setCreatedCredentials({ 
-              userId: user.id, 
-              username: user.username, 
-              password: password,
-              employeeId: newEmployeeId
-            });
-            setEditableUsername(user.username);
-            setEditablePassword(password);
-            
-            toast({ 
-              title: 'Employee & Login Created', 
-              description: 'A login account has been created. You can edit the username and password before saving.', 
-              variant: 'success' 
-            });
-          }
-        } catch (userCreationError: any) {
-          // If user creation fails, still save the employee but show a warning
-          console.error('Failed to auto-create user account:', userCreationError);
-          toast({ 
-            title: 'Employee Created', 
-            description: 'Employee saved successfully, but user account creation failed. You can manually link a user account later.', 
-            variant: 'default' 
-          });
-          // Refresh employees list
-          onSuccess();
           onOpenChange(false);
         }
-      } else {
-        // Editing existing employee OR new employee with auto-create disabled
-        if (!employeeId && !autoCreateUser) {
-          // New employee but auto-create disabled - just save employee
-          toast({ 
-            title: 'Employee Created', 
-            description: 'Employee saved successfully. You can link a user account manually.', 
-            variant: 'success' 
-          });
-        } else {
-          // Editing existing employee - refresh and close (skip generic toast if we already showed lock toast)
-          if (!didLockAccounts) {
-            toast({ title: 'Success', description: 'Employee updated successfully.', variant: 'success' });
-          }
-        }
-
-        // Dispatch event to notify other pages (like Teams) to refresh
-        window.dispatchEvent(new CustomEvent('employeeCreated', { detail: { employeeId: newEmployeeId } }));
-        window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: newEmployeeId } }));
-
-        // Also dispatch after delays to catch pages if they weren't ready
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('employeeCreated', { detail: { employeeId: newEmployeeId } }));
-          window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: newEmployeeId } }));
-        }, 500);
-
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('employeeCreated', { detail: { employeeId: newEmployeeId } }));
-          window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: newEmployeeId } }));
-        }, 2000);
-
-        onSuccess();
-        onOpenChange(false);
-        // Reload linked user in case it changed
-        if (employeeId) {
-          const user = await getUserByEmployeeId(employeeId);
-          setLinkedUser(user || null);
-        }
       }
+
+      window.dispatchEvent(new CustomEvent('employeeUpdated', { detail: { employeeId: personId } }));
+      window.dispatchEvent(new CustomEvent('userUpdated', { detail: { employeeId: personId } }));
+      onSuccess();
     } catch (error) {
-      console.error('Error saving employee:', error);
-      // Provide more specific error messages
-      if (error instanceof Error) {
-        if (error.name === 'ConstraintError' || error.message.includes('unique') || error.message.includes('constraint')) {
-          toast({ 
-            title: 'Error', 
-            description: 'A user with a similar username already exists. Please try again or manually link an existing user.', 
-            variant: 'error' 
-          });
-        } else {
-          toast({ title: 'Error', description: `Failed to save employee: ${error.message}`, variant: 'error' });
-        }
-      } else {
-        toast({ title: 'Error', description: 'Failed to save employee. Please try again.', variant: 'error' });
-      }
+      console.error('Error saving person:', error);
+      toast({ title: 'Could not save', description: describeError(error, 'Something went wrong. Please try again.'), variant: 'error' });
     } finally {
       setLoading(false);
     }
   };
-  
+
   const handleClose = () => {
-    setCreatedCredentials(null);
-    setEditableUsername('');
-    setEditablePassword('');
+    setCredentials(null);
+    setNewPassword(null);
     setShowPassword(false);
     onOpenChange(false);
-  };
-  
-  const handleDone = async () => {
-    // Dispatch final event to ensure Users page refreshes (multiple times)
-    if (createdCredentials) {
-      window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: createdCredentials.userId, employeeId: createdCredentials.employeeId } }));
-      
-      // Dispatch again after delays to ensure Users page catches it
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: createdCredentials.userId, employeeId: createdCredentials.employeeId } }));
-      }, 500);
-      
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: createdCredentials.userId, employeeId: createdCredentials.employeeId } }));
-      }, 2000);
-    }
-    
-    // Refresh employees list
-    onSuccess();
-    
-    // Refresh available users list in case we need to link more
-    await loadAvailableUsers();
-    
-    setCreatedCredentials(null);
-    setEditableUsername('');
-    setEditablePassword('');
-    setShowPassword(false);
-    onOpenChange(false);
-  };
-  
-  const handleSaveCredentials = async () => {
-    if (!createdCredentials) return;
-    
-    setSavingCredentials(true);
-    try {
-      // Get the current user (Supabase first, then IndexedDB for read-your-writes)
-      const { getUser } = await import('@/lib/storage');
-      let currentUser = await getUser(createdCredentials.userId);
-      // If just created, linkedUser may hold the user before it's visible from storage
-      if (!currentUser && linkedUser?.id === createdCredentials.userId) {
-        currentUser = linkedUser;
-      }
-      if (!currentUser) {
-        toast({ title: 'Error', description: 'User not found.', variant: 'error' });
-        setSavingCredentials(false);
-        return;
-      }
-      
-      // Check if username changed and if new username is available
-      if (editableUsername.toLowerCase().trim() !== currentUser.username.toLowerCase()) {
-        const { getUserByUsername } = await import('@/lib/storage');
-        const existingUser = await getUserByUsername(editableUsername.toLowerCase().trim());
-        if (existingUser && existingUser.id !== currentUser.id) {
-          toast({ title: 'Error', description: 'Username already exists. Please choose a different one.', variant: 'error' });
-          setSavingCredentials(false);
-          return;
-        }
-      }
-      
-      // Update user with new username and/or password
-      const updatedUser: User = {
-        ...currentUser,
-        username: editableUsername.toLowerCase().trim(),
-      };
-      
-      const passwordChanged = !!editablePassword.trim() && editablePassword !== createdCredentials.password;
-      if (passwordChanged) {
-        updatedUser.mustChangePassword = true;
-      }
-      
-      try {
-        await saveUser(updatedUser, { password: passwordChanged ? editablePassword : undefined });
-      } catch (saveError: any) {
-        const message = String(saveError?.message ?? '');
-        const isUniqueViolation =
-          saveError?.code === '23505' ||
-          saveError?.name === 'ConstraintError' ||
-          /unique|duplicate|by-username|already taken/i.test(message);
-        if (isUniqueViolation) {
-          toast({
-            title: 'Username taken',
-            description: `"${updatedUser.username}" is already used by another account. Please choose a different username.`,
-            variant: 'error',
-          });
-          setSavingCredentials(false);
-          return;
-        }
-        throw saveError;
-      }
-      
-      // Reload the user to get the latest data (reuse getUser from above)
-      const reloadedUser = await getUser(updatedUser.id);
-      
-      if (reloadedUser) {
-        // Update credentials display with saved values
-        const finalPassword = editablePassword.trim() || createdCredentials.password;
-        setCreatedCredentials({
-          ...createdCredentials,
-          username: reloadedUser.username,
-          password: finalPassword,
-        });
-        setEditableUsername(reloadedUser.username);
-        setEditablePassword(finalPassword);
-        setLinkedUser(reloadedUser);
-      }
-      
-      // Dispatch event to refresh Users page (multiple times to ensure it's caught)
-      window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id } }));
-      window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: updatedUser.id, employeeId: createdCredentials.employeeId } }));
-      
-      // Also dispatch after delays to catch Users page if it wasn't ready
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id } }));
-        window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: updatedUser.id, employeeId: createdCredentials.employeeId } }));
-      }, 500);
-      
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('userUpdated', { detail: { userId: updatedUser.id } }));
-        window.dispatchEvent(new CustomEvent('userCreated', { detail: { userId: updatedUser.id, employeeId: createdCredentials.employeeId } }));
-      }, 2000);
-      
-      // Refresh employees list to show linked user
-      onSuccess();
-      
-      toast({ title: 'Success', description: 'Credentials updated successfully.', variant: 'success' });
-    } catch (error) {
-      console.error('Error saving credentials:', error);
-      toast({ title: 'Error', description: 'Failed to save credentials.', variant: 'error' });
-    } finally {
-      setSavingCredentials(false);
-    }
   };
 
   if (!open) return null;
 
-  // Show credentials screen after creating new employee
-  if (createdCredentials) {
+  if (credentials) {
     return createPortal(
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
         <div className="bg-background rounded-lg border shadow-lg w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
           <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
-            <h2 className="text-2xl font-bold text-green-600">Employee Created</h2>
-            <Button type="button" variant="ghost" size="sm" onClick={handleClose}>
+            <h2 className="text-xl font-bold">Sign-in details for {credentials.name}</h2>
+            <Button type="button" variant="ghost" size="sm" onClick={handleClose} aria-label="Close">
               <X size={18} weight="duotone" />
             </Button>
           </div>
-          
           <div className="flex-1 overflow-y-auto min-h-0 p-6 space-y-4">
             <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
               <Info size={20} weight="duotone" className="text-amber-600 mt-0.5 flex-shrink-0" />
               <div className="text-sm text-amber-800 dark:text-amber-200">
-                <p className="font-semibold">Important: Save these credentials!</p>
-                <p className="mt-1">Share these login details with the employee. They will be required to change their password on first login.</p>
+                <p className="font-semibold">This password is shown only once.</p>
+                <p className="mt-1">Share it with them privately. They will be asked to choose their own password when they first sign in.</p>
               </div>
             </div>
-            
-            <div className="space-y-3">
-              {(editableUsername !== createdCredentials.username || editablePassword !== createdCredentials.password) && (
-                <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-600 dark:text-blue-400">
-                  You have unsaved changes. Click "Save Credentials" to apply them.
-                </div>
-              )}
-              
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Username</Label>
+            {(['username', 'password'] as const).map((field) => (
+              <div key={field} className="space-y-1">
+                <Label className="text-xs text-muted-foreground uppercase tracking-wide">
+                  {field === 'username' ? 'Username' : 'Temporary password'}
+                </Label>
                 <div className="flex gap-2">
-                  <Input 
-                    value={editableUsername} 
-                    onChange={(e) => setEditableUsername(e.target.value)}
-                    className="font-mono"
-                    placeholder="Enter username"
-                  />
-                  <Button 
-                    type="button" 
-                    variant="outline" 
+                  <Input readOnly value={credentials[field]} className="font-mono" />
+                  <Button
+                    type="button"
+                    variant="outline"
                     size="sm"
-                    onClick={() => copyToClipboard(editableUsername, 'username')}
-                    title="Copy username"
+                    onClick={() => copyToClipboard(credentials[field], field)}
+                    aria-label={`Copy ${field}`}
                   >
-                    {copiedField === 'username' ? <Check size={16} /> : <Copy size={16} />}
+                    {copiedField === field ? <Check size={16} /> : <Copy size={16} />}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">You can edit the username before saving</p>
               </div>
-              
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground uppercase tracking-wide">Temporary Password</Label>
-                <div className="flex gap-2">
-                  <Input 
-                    type={showPassword ? "text" : "password"}
-                    value={editablePassword} 
-                    onChange={(e) => setEditablePassword(e.target.value)}
-                    className="font-mono"
-                    placeholder="Enter password (min 6 characters)"
-                  />
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => setShowPassword(!showPassword)}
-                    title={showPassword ? "Hide password" : "Show password"}
-                  >
-                    {showPassword ? <EyeSlash size={16} /> : <Eye size={16} />}
-                  </Button>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => copyToClipboard(editablePassword, 'password')}
-                    title="Copy password"
-                  >
-                    {copiedField === 'password' ? <Check size={16} /> : <Copy size={16} />}
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">You can edit the password before saving (minimum 6 characters)</p>
-              </div>
-            </div>
+            ))}
           </div>
-          
           <div className="flex justify-end gap-3 p-6 pt-4 border-t flex-shrink-0 bg-background">
-            <Button 
-              type="button" 
-              variant="outline"
-              onClick={handleDone}
-              disabled={savingCredentials}
-            >
-              Skip & Done
-            </Button>
-            <Button 
-              type="button" 
-              onClick={handleSaveCredentials}
-              disabled={savingCredentials || !editableUsername.trim() || editablePassword.trim().length < 6}
-            >
-              {savingCredentials ? 'Saving...' : 'Save Credentials'}
+            <Button type="button" onClick={handleClose}>
+              Done
             </Button>
           </div>
         </div>
@@ -881,14 +354,16 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
     );
   }
 
+  const statusLocks = isLocking(selectedEmploymentStatus as EmploymentStatus);
+
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-background rounded-lg border shadow-lg w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between p-6 border-b flex-shrink-0">
           <h2 className="text-2xl font-bold">
-            {employeeId ? 'Edit Employee' : 'Add Employee'}
+            {employeeId ? 'Edit Person' : 'Add Person'}
           </h2>
-          <Button type="button" variant="ghost" size="sm" onClick={handleClose}>
+          <Button type="button" variant="ghost" size="sm" onClick={handleClose} aria-label="Close">
             <X size={18} weight="duotone" />
           </Button>
         </div>
@@ -1082,172 +557,150 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
               <option value="terminated">Terminated</option>
               <option value="resigned">Resigned</option>
             </Select>
-            {selectedEmploymentStatus === 'terminated' || selectedEmploymentStatus === 'resigned' ? (
+            {statusLocks ? (
               <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-                This will lock the employee's account and sign them out on all devices.
+                Their sign-in will be locked and they will be signed out on all devices.
               </p>
             ) : null}
             {errors.employmentStatus && <p className="text-sm text-destructive">{errors.employmentStatus.message}</p>}
           </div>
 
-          {/* User Account Section - Different UI for new vs existing employees */}
+          {/* Sign-in */}
+          {!loaded ? (
+            <p className="pt-4 border-t text-sm text-muted-foreground">Loading sign-in…</p>
+          ) : (
           <div className="space-y-3 pt-4 border-t">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <Label className="text-sm font-semibold flex items-center gap-2">
-                <UserCircle size={18} weight="duotone" />
-                User Account
+                <Key size={18} weight="duotone" />
+                Sign-in
               </Label>
+              {account && (
+                <span className="text-xs text-muted-foreground">
+                  {account.lastLoginAt ? `Last signed in ${formatDate(account.lastLoginAt)}` : 'Never signed in'}
+                </span>
+              )}
             </div>
-            
-            {employeeId ? (
-              // Existing employee - show linking options
-              <>
-                {linkedUser ? (
-                  <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="p-1.5 rounded bg-green-500/20">
-                          <UserCircle size={16} weight="duotone" className="text-green-600" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium">{linkedUser.name}</div>
-                          <div className="text-xs text-muted-foreground">@{linkedUser.username}</div>
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleUnlinkUser}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-500/10"
-                      >
-                        <LinkSimpleBreak size={16} />
-                      </Button>
-                    </div>
-                  </div>
-                ) : showUserLink ? (
-                  <div className="space-y-2 p-3 rounded-lg bg-muted/50 border">
-                    <Select
-                      value={selectedUserId}
-                      onChange={(e) => setSelectedUserId(e.target.value)}
-                    >
-                      <option value="">Select a user to link...</option>
-                      {availableUsers.map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.name} (@{user.username})
-                        </option>
-                      ))}
-                    </Select>
-                    {availableUsers.length === 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        No available users to link. Create a user account first.
-                      </p>
-                    )}
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setShowUserLink(false);
-                          setSelectedUserId('');
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={handleLinkUser}
-                        disabled={!selectedUserId}
-                      >
-                        Link User
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs text-muted-foreground">
-                      No user account linked. Link an existing user below.
-                    </p>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowUserLink(true)}
-                    >
-                      <LinkSimple size={16} className="mr-1.5" />
-                      Link User
-                    </Button>
-                  </div>
-                )}
-              </>
+
+            {employeeId && !account && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                This person has no sign-in yet. One will be created when you save.
+              </p>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="signin-username" className="text-xs">Username</Label>
+              <Input
+                id="signin-username"
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value.toLowerCase());
+                  setUsernameEdited(true);
+                }}
+                className="font-mono"
+                autoComplete="off"
+                placeholder="username"
+              />
+            </div>
+
+            <label className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-70">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4 accent-primary"
+                checked={adminAccess}
+                disabled={isSelf}
+                onChange={(e) => setAdminAccess(e.target.checked)}
+              />
+              <span>
+                <span className="flex items-center gap-1.5 text-sm font-medium">
+                  <ShieldCheck size={16} weight="duotone" /> Admin access
+                </span>
+                <span className="block text-xs text-muted-foreground mt-0.5">
+                  {isSelf
+                    ? 'You cannot remove your own admin access. Ask another administrator.'
+                    : 'Can manage people, forms, periods and settings, and see everyone’s results.'}
+                </span>
+              </span>
+            </label>
+
+            {account && (
+              <label className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-70">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 accent-primary"
+                  checked={statusLocks ? false : isLocking(originalStatus) ? true : canSignIn}
+                  disabled={statusLocks || isSelf || isLocking(originalStatus)}
+                  onChange={(e) => setCanSignIn(e.target.checked)}
+                />
+                <span>
+                  <span className="flex items-center gap-1.5 text-sm font-medium">
+                    <LockSimple size={16} weight="duotone" /> Can sign in
+                  </span>
+                  <span className="block text-xs text-muted-foreground mt-0.5">
+                    {statusLocks
+                      ? 'Locked because they have left.'
+                      : isLocking(originalStatus)
+                        ? 'Will be unlocked because their status changes back.'
+                        : 'Untick to lock their sign-in without changing their employment status.'}
+                  </span>
+                </span>
+              </label>
+            )}
+
+            {account && newPassword === null ? (
+              <Button type="button" variant="outline" size="sm" onClick={() => setNewPassword(generatePassword())}>
+                <ArrowsClockwise size={16} className="mr-1.5" />
+                Reset password
+              </Button>
             ) : (
-              // New employee - show auto-create option
-              <div className="space-y-3 p-4 rounded-lg bg-blue-500/5 border border-blue-500/20">
-                <div className="flex items-start gap-3">
-                  <div className="p-1.5 rounded bg-blue-500/20 mt-0.5">
-                    <UserCircle size={18} weight="duotone" className="text-blue-600" />
-                  </div>
-                  <div className="flex-1 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-semibold text-blue-900 dark:text-blue-100">
-                          Auto-create Login Account
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          A user account will be automatically created with login credentials
-                        </div>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={autoCreateUser}
-                          onChange={(e) => setAutoCreateUser(e.target.checked)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-                    {autoCreateUser && (
-                      <div className="mt-2 p-2 rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-                        <div className="flex items-start gap-2">
-                          <Info size={16} weight="duotone" className="text-blue-600 mt-0.5 flex-shrink-0" />
-                          <div className="text-xs text-blue-800 dark:text-blue-200">
-                            <p className="font-medium">What happens:</p>
-                            <ul className="mt-1 space-y-0.5 list-disc list-inside">
-                              <li>Username will be auto-generated from name/email</li>
-                              <li>A secure temporary password will be created</li>
-                              <li>You'll be able to edit credentials before saving</li>
-                              <li>Employee will be required to change password on first login</li>
-                            </ul>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    {!autoCreateUser && (
-                      <div className="mt-2 p-2 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
-                        <div className="flex items-start gap-2">
-                          <Info size={16} weight="duotone" className="text-amber-600 mt-0.5 flex-shrink-0" />
-                          <p className="text-xs text-amber-800 dark:text-amber-200">
-                            You can manually link a user account after creating the employee.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">{account ? 'New temporary password' : 'Temporary password'}</Label>
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    type={showPassword ? 'text' : 'password'}
+                    value={newPassword ?? ''}
+                    className="font-mono"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeSlash size={16} /> : <Eye size={16} />}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setNewPassword(generatePassword())}
+                    aria-label="Generate another password"
+                  >
+                    <ArrowsClockwise size={16} />
+                  </Button>
+                  {account && (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setNewPassword(null)}>
+                      Cancel
+                    </Button>
+                  )}
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Shown again after saving so you can share it. They must choose their own password at first sign-in.
+                </p>
               </div>
             )}
           </div>
+          )}
           </div>
 
           <div className="flex justify-end gap-3 pt-4 px-6 pb-6 border-t flex-shrink-0 bg-background">
             <Button type="button" variant="ghost" onClick={handleClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Saving...' : employeeId ? 'Update Employee' : 'Add Employee'}
+            <Button type="submit" disabled={loading || !loaded}>
+              {loading ? 'Saving...' : employeeId ? 'Save' : 'Add Person'}
             </Button>
           </div>
         </form>

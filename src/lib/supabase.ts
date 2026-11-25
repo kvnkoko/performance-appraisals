@@ -230,8 +230,23 @@ export async function saveUserToSupabase(user: User, options: SaveUserOptions = 
   return mapUser(result.user);
 }
 
-export async function deleteUserFromSupabase(id: string): Promise<void> {
-  await callFunction('admin-users', { action: 'delete', id });
+/** Create a person and their sign-in in one step (admin-users server function). */
+export async function createPersonInSupabase(
+  employeeRow: Record<string, unknown>,
+  login: User,
+  password: string
+): Promise<User> {
+  const result = await callFunction<{ user: any }>('admin-users', {
+    action: 'create_person',
+    employee: employeeRow,
+    user: { id: login.id, username: login.username.toLowerCase(), name: login.name, role: login.role, mustChangePassword: true },
+    password,
+  });
+  return mapUser(result.user);
+}
+
+export async function deletePersonFromSupabase(employeeId: string): Promise<void> {
+  await callFunction('admin-users', { action: 'delete_person', id: employeeId });
 }
 
 /** Change the signed-in person's username and email. Throws an Error with a user-facing message. */

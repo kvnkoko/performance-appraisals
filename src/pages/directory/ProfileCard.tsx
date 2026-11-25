@@ -11,6 +11,25 @@ import { cn } from '@/lib/utils';
 
 const MAX_SKILLS = 3;
 
+export interface SignInSummary {
+  username: string;
+  admin: boolean;
+  active: boolean;
+}
+
+function SignInBadge({ signIn, className }: { signIn: SignInSummary | null | undefined; className?: string }) {
+  if (!signIn) {
+    return <span className={cn('text-amber-600 dark:text-amber-400', className)}>No sign-in</span>;
+  }
+  return (
+    <span className={cn('inline-flex items-center gap-1 text-muted-foreground', className)}>
+      <span className="font-mono">@{signIn.username}</span>
+      {signIn.admin && <span className="rounded bg-primary/10 px-1 text-[10px] font-medium text-primary">Admin</span>}
+      {!signIn.active && <span className="rounded bg-muted px-1 text-[10px] font-medium">Locked</span>}
+    </span>
+  );
+}
+
 interface ProfileCardProps {
   employee: Employee;
   profile?: EmployeeProfile | null;
@@ -19,7 +38,7 @@ interface ProfileCardProps {
   variant?: 'grid' | 'list' | 'compact';
   index?: number;
   showAdminActions?: boolean;
-  linkedUser?: { name: string; username: string } | null;
+  linkedUser?: SignInSummary | null;
   onEditRecord?: () => void;
   onDelete?: () => void;
 }
@@ -82,9 +101,7 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
                 <Trash size={14} className="shrink-0" /> Delete
               </button>
             )}
-            <span className="text-[11px] text-muted-foreground ml-auto shrink-0">
-              {linkedUser ? `Linked: @${linkedUser.username}` : 'Not linked'}
-            </span>
+            <SignInBadge signIn={linkedUser} className="text-[11px] ml-auto shrink-0" />
           </div>
         )}
       </div>
@@ -147,9 +164,7 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
                     <Trash size={18} />
                   </Button>
                 )}
-                <span className="text-xs text-muted-foreground px-2 py-1 rounded bg-muted/60">
-                  {linkedUser ? `@${linkedUser.username}` : 'Not linked'}
-                </span>
+                <SignInBadge signIn={linkedUser} className="text-xs px-2 py-1 rounded bg-muted/60" />
               </>
             )}
             {canEdit && onEdit && (
@@ -245,9 +260,7 @@ export function ProfileCard({ employee, profile, onClick, onEdit, variant = 'gri
                 <Trash size={14} /> Delete
               </button>
             )}
-            <span className="text-[11px] text-muted-foreground ml-auto">
-              {linkedUser ? `Linked: @${linkedUser.username}` : 'Not linked'}
-            </span>
+            <SignInBadge signIn={linkedUser} className="text-[11px] ml-auto" />
           </div>
         )}
       </div>

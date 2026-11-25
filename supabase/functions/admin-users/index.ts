@@ -1,4 +1,5 @@
-// Admin-only management of login accounts (create, edit, reset password, delete).
+// Admin-only management of people and their sign-ins: create a person with their login, edit a
+// login (username, admin access, locked, password reset), and delete a person with their login.
 // Password hashes and Supabase Auth users are only ever touched here, never from the browser.
 import { corsHeaders, ensureAuthUser, json, serviceClient } from '../_shared/common.ts';
 
@@ -35,7 +36,14 @@ Deno.serve(async (req) => {
     return json({ error: 'forbidden', message: 'Only administrators can manage accounts.' }, 403);
   }
 
-  let body: { action?: string; user?: UserInput; password?: string; legacyPasswordHash?: string; id?: string };
+  let body: {
+    action?: string;
+    user?: UserInput;
+    employee?: Record<string, unknown>;
+    password?: string;
+    legacyPasswordHash?: string;
+    id?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -46,8 +54,11 @@ Deno.serve(async (req) => {
     if (body.action === 'save' && body.user) {
       return await saveUser(admin, caller.id, body.user, body.password, body.legacyPasswordHash);
     }
-    if (body.action === 'delete' && body.id) {
-      return await deleteUser(admin, caller.id, body.id);
+    if (body.action === 'create_person' && body.employee && body.user) {
+      return await createPerson(admin, caller.id, body.employee, body.user, body.password);
+    }
+    if (body.action === 'delete_person' && body.id) {
+      return await deletePerson(admin, caller.id, body.id);
     }
     return json({ error: 'bad_request' }, 400);
   } catch (e) {
@@ -147,34 +158,74 @@ async function saveUser(
   return json({ user: saved });
 }
 
-async function deleteUser(admin: ReturnType<typeof serviceClient>, callerId: string, id: string): Promise<Response> {
-  if (id === callerId) {
-    return json({ error: 'self_delete', message: 'You cannot delete your own account.' }, 409);
+/** Creates the person and their login in one database transaction, then their Supabase Auth user. */
+async function createPerson(
+  admin: ReturnType<typeof serviceClient>,
+  callerId: string,
+  employee: Record<string, unknown>,
+  login: UserInput,
+  password: string | undefined
+): Promise<Response> {
+  const username = String(login.username ?? '').trim().toLowerCase();
+  if (!login.id || !employee.id || !username || !String(employee.name ?? '').trim()) {
+    return json({ error: 'bad_request', message: 'Name and username are required.' }, 400);
   }
-  const { data: existing, error: readError } = await admin
-    .from('users')
-    .select('id, role, active, auth_user_id')
-    .eq('id', id)
-    .maybeSingle();
-  if (readError) throw readError;
-  if (!existing) return json({ ok: true });
-
-  if (existing.role === 'admin' && existing.active !== false && (await countOtherActiveAdmins(admin, id)) === 0) {
-    return json({ error: 'last_admin', message: 'This is the only active administrator account.' }, 409);
+  if (!password || password.length < 6) {
+    return json({ error: 'weak_password', message: 'Password must be at least 6 characters.' }, 400);
   }
 
-  const { error } = await admin.from('users').delete().eq('id', id);
+  const { error: createError } = await admin.rpc('admin_create_person', {
+    p_actor: callerId,
+    p_employee: employee,
+    p_login: { id: login.id, username, role: login.role, mustChangePassword: login.mustChangePassword ?? true },
+  });
+  if (createError) return dbError(createError);
+
+  try {
+    const authUserId = await ensureAuthUser(admin, login.id, password);
+    const { error } = await admin.from('users').update({ auth_user_id: authUserId }).eq('id', login.id);
+    if (error) throw error;
+  } catch (e) {
+    console.error('create_person: auth setup failed, undoing', e);
+    await admin.rpc('admin_delete_person', { p_actor: callerId, p_employee_id: employee.id });
+    throw e;
+  }
+
+  const { data: saved, error } = await admin.from('users').select(USER_COLUMNS).eq('id', login.id).single();
   if (error) throw error;
-  if (existing.auth_user_id) {
-    const { error: authError } = await admin.auth.admin.deleteUser(existing.auth_user_id);
+  return json({ user: saved });
+}
+
+/** Deletes a person who has no submitted appraisals, together with their login and Auth user. */
+async function deletePerson(admin: ReturnType<typeof serviceClient>, callerId: string, employeeId: string): Promise<Response> {
+  const { data: authUserId, error } = await admin.rpc('admin_delete_person', {
+    p_actor: callerId,
+    p_employee_id: employeeId,
+  });
+  if (error) return dbError(error);
+  if (authUserId) {
+    const { error: authError } = await admin.auth.admin.deleteUser(String(authUserId));
     if (authError) console.error('Auth user delete failed', authError);
   }
   return json({ ok: true });
 }
 
 function dbError(error: { code?: string; message?: string }): Response {
+  const message = error.message ?? '';
+  if (error.code === '23505' && /employee_id/.test(message)) {
+    return json({ error: 'has_login', message: 'This person already has a sign-in.' }, 409);
+  }
   if (error.code === '23505') {
     return json({ error: 'username_taken', message: 'That username is already taken.' }, 409);
   }
-  return json({ error: 'server_error', message: error.message ?? 'Database error' }, 500);
+  if (error.code === '23514' && /users_active_needs_person/.test(message)) {
+    return json({ error: 'needs_person', message: 'A sign-in must belong to a person before it can be active.' }, 409);
+  }
+  if (error.code === '23503') {
+    return json({ error: 'unknown_person', message: 'That person no longer exists.' }, 409);
+  }
+  if (error.code === 'P0001' || error.code === '22023') {
+    return json({ error: 'refused', message }, 409);
+  }
+  return json({ error: 'server_error', message: message || 'Database error' }, 500);
 }
