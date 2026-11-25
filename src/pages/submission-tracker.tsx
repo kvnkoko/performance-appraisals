@@ -162,7 +162,7 @@ export function SubmissionTrackerPage() {
     setReopeningId(row.assignmentId);
     try {
       await reopenAssignment(row.assignmentId);
-      await refresh();
+      await refresh(['work']);
       toast({
         title: 'Form reopened',
         description: `${row.appraiserName} can submit it for the next ${GRACE_DAYS} days. It will be marked late.`,
@@ -282,7 +282,7 @@ export function SubmissionTrackerPage() {
     try {
       if (deleteRow.appraisalId) await deleteAppraisal(deleteRow.appraisalId);
       await deleteAppraisalAssignment(deleteRow.assignmentId);
-      await refresh();
+      await refresh(['work']);
       setDeleteRow(null);
       toast({ title: 'Form removed', description: 'Assignment and any submitted form have been deleted.', variant: 'success' });
     } catch (e) {

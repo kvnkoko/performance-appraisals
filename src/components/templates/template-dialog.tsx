@@ -16,6 +16,7 @@ import { generateId } from '@/lib/utils';
 import type { Template, Category, QuestionType } from '@/types';
 import { APPRAISAL_TYPE_LABELS } from '@/types';
 import { useToast } from '@/contexts/toast-context';
+import { useDialogRecord } from '@/hooks/use-dialog-record';
 
 interface CategoryEditorProps {
   categoryIndex: number;
@@ -311,9 +312,7 @@ export function TemplateDialog({ open, onOpenChange, templateId, onSuccess }: Te
   const isWeightValid = Math.abs(totalWeight - 100) < 0.01;
 
   useEffect(() => {
-    if (open && templateId) {
-      loadTemplate();
-    } else if (open && !templateId) {
+    if (open && !templateId) {
       reset({
         name: '',
         subtitle: '',
@@ -338,10 +337,8 @@ export function TemplateDialog({ open, onOpenChange, templateId, onSuccess }: Te
     }
   }, [open, templateId]);
 
-  const loadTemplate = async () => {
-    if (!templateId) return;
-    try {
-      const template = await getTemplate(templateId);
+  const applyTemplate = (template: Template | undefined) => {
+    {
       if (template) {
         let categoriesData: Category[] = [];
         if (template.categories && template.categories.length > 0) {
@@ -400,10 +397,13 @@ export function TemplateDialog({ open, onOpenChange, templateId, onSuccess }: Te
         });
         setExpandedCategories(new Set(categoriesData.map(c => c.id)));
       }
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to load template.', variant: 'error' });
     }
   };
+
+  const loadingRecord = useDialogRecord(open, templateId, getTemplate, applyTemplate, () => {
+    toast({ title: 'Error', description: 'Failed to load template.', variant: 'error' });
+    onOpenChange(false);
+  });
 
   const onSubmit = async (data: TemplateFormData) => {
     setLoading(true);
@@ -428,7 +428,7 @@ export function TemplateDialog({ open, onOpenChange, templateId, onSuccess }: Te
       };
 
       await saveTemplate(template);
-      await refresh();
+      await refresh(['work']);
       onSuccess();
       onOpenChange(false);
       toast({ title: 'Success', description: 'Template saved successfully.', variant: 'success' });
@@ -548,7 +548,8 @@ export function TemplateDialog({ open, onOpenChange, templateId, onSuccess }: Te
           }
         })} className="flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="flex-1 overflow-y-auto min-h-0">
-          <div className="p-6 space-y-6">
+          {loadingRecord && <p className="py-10 text-center text-sm text-muted-foreground">Loading…</p>}
+          <div className={loadingRecord ? 'hidden' : 'p-6 space-y-6'}>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="name" className="text-sm font-medium">Template Name</Label>
@@ -669,7 +670,7 @@ export function TemplateDialog({ open, onOpenChange, templateId, onSuccess }: Te
             </Button>
             <Button 
               type="submit" 
-              disabled={loading || !isWeightValid} 
+              disabled={loading || loadingRecord || !isWeightValid} 
               className="h-9"
               onClick={(e) => {
                 if (!isWeightValid) {

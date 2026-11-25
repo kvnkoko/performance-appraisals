@@ -180,25 +180,18 @@ export function SettingsPage() {
     try {
       const profile = getOrCreateProfile(employee.id);
       const now = new Date().toISOString();
+      // Only the picture changes; every other profile field is kept as saved.
       await saveProfile({
+        ...profile,
         id: profile.id || employee.id,
         employeeId: employee.id,
         profilePicture: dataUrl ?? undefined,
-        coverPhoto: (profile as any).coverPhoto,
-        bio: (profile as any).bio,
-        headline: (profile as any).headline,
-        location: (profile as any).location,
-        skills: (profile as any).skills ?? [],
-        funFacts: (profile as any).funFacts ?? [],
-        achievements: (profile as any).achievements ?? [],
-        socialLinks: (profile as any).socialLinks ?? {},
-        createdAt: (profile as any).createdAt ?? now,
+        createdAt: profile.createdAt ?? now,
         updatedAt: now,
       });
-      window.dispatchEvent(new CustomEvent('employeeProfileUpdated'));
       toast({ title: 'Profile picture updated', variant: 'success' });
     } catch (e) {
-      toast({ title: 'Error', description: 'Failed to update profile picture.', variant: 'error' });
+      toast({ title: 'Error', description: describeError(e, 'Failed to update profile picture.'), variant: 'error' });
     }
   };
 

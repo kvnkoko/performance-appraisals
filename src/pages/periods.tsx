@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,17 +10,20 @@ import { Plus, Pencil, Trash, Calendar, Trophy, FileText, Eye, X } from 'phospho
 import { PeriodDialog } from '@/components/periods/period-dialog';
 import { PeriodBadge } from '@/components/periods/period-badge';
 import { CompletedFormViewModal } from '@/components/shared/completed-form-view-modal';
-import { getReviewPeriods, deleteReviewPeriod, saveReviewPeriod, describeError } from '@/lib/storage';
+import { deleteReviewPeriod, saveReviewPeriod, describeError } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { formatDateRange, getDaysRemaining } from '@/lib/period-utils';
 import { RANKING_BOARD_LABELS, type ReviewPeriod } from '@/types';
 import { AwardsPanel, BOARDS, boardList, usePeriodRankings } from '@/components/reviews/rankings';
 
 export function PeriodsPage() {
-  const { appraisals, assignments, employees, templates, refresh } = useApp();
+  const { appraisals, assignments, employees, templates, reviewPeriods, refresh } = useApp();
   const { toast } = useToast();
   const { people } = usePeriodRankings('all');
-  const [periods, setPeriods] = useState<ReviewPeriod[]>([]);
+  const periods = useMemo(
+    () => [...reviewPeriods].sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()),
+    [reviewPeriods]
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPeriod, setEditingPeriod] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -35,20 +38,6 @@ export function PeriodsPage() {
   const [periodFormsPeriodId, setPeriodFormsPeriodId] = useState<string | null>(null);
   const [viewAppraisalId, setViewAppraisalId] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadPeriods();
-  }, []);
-
-  const loadPeriods = async () => {
-    try {
-      const data = await getReviewPeriods();
-      setPeriods(data.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()));
-    } catch (error) {
-      console.error('Failed to load periods:', error);
-      toast({ title: 'Error', description: 'Failed to load review periods.', variant: 'error' });
-    }
-  };
-
   const handleDeleteClick = (id: string, name: string) => {
     setDeleteConfirm({ open: true, id, name });
   };
@@ -58,8 +47,7 @@ export function PeriodsPage() {
     setDeleting(true);
     try {
       await deleteReviewPeriod(deleteConfirm.id);
-      await loadPeriods();
-      await refresh();
+      await refresh(['work']);
       toast({ title: 'Success', description: 'Review period deleted successfully', variant: 'success' });
       setDeleteConfirm({ open: false, id: null, name: '' });
     } catch (error) {
@@ -73,8 +61,7 @@ export function PeriodsPage() {
   const handleStatusChange = async (period: ReviewPeriod, newStatus: ReviewPeriod['status']) => {
     try {
       await saveReviewPeriod({ ...period, status: newStatus });
-      await loadPeriods();
-      await refresh();
+      await refresh(['work']);
       toast({ title: 'Status updated', variant: 'success' });
     } catch {
       toast({ title: 'Error', description: 'Failed to update status.', variant: 'error' });
@@ -304,8 +291,7 @@ export function PeriodsPage() {
         onOpenChange={setDialogOpen}
         periodId={editingPeriod}
         onSuccess={async () => {
-          await loadPeriods();
-          refresh();
+          refresh(['work']);
         }}
       />
 

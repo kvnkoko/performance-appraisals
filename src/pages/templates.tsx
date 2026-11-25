@@ -33,7 +33,7 @@ export function TemplatesPage() {
     setDeleting(true);
     try {
       await deleteTemplate(deleteConfirm.id);
-      await refresh();
+      await refresh(['work']);
       toast({ title: 'Success', description: 'Template deleted successfully', variant: 'success' });
       setDeleteConfirm({ open: false, id: null, name: '' });
     } catch (error) {
@@ -100,7 +100,7 @@ export function TemplatesPage() {
         }
         
         await saveTemplate(newTemplate);
-        await refresh();
+        await refresh(['work']);
         toast({ title: 'Template duplicated', variant: 'success' });
       } catch (error) {
         toast({ title: 'Error', description: 'Failed to duplicate template.', variant: 'error' });
@@ -244,7 +244,7 @@ export function TemplatesPage() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         templateId={editingTemplate}
-        onSuccess={refresh}
+        onSuccess={() => refresh(['work'])}
       />
 
       <ConfirmDialog

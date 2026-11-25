@@ -1,36 +1,65 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState, type ComponentType } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from '@/contexts/app-context';
 import { UserProvider } from '@/contexts/user-context';
 import { ToastProvider } from '@/contexts/toast-context';
 import { ThemeProvider } from '@/components/theme-provider';
 import { MainLayout } from '@/components/layout/main-layout';
-import { AuthPage } from '@/pages/auth';
-import { Dashboard } from '@/pages/dashboard';
 import { initDB } from '@/lib/storage';
-import { sampleEmployees, sampleTemplates } from '@/lib/sample-data';
 import { getEmployees, getTemplates, saveEmployee, saveTemplate } from '@/lib/storage';
 import { isSupabaseConfigured } from '@/lib/supabase';
-
-// Import pages directly for now (can be lazy loaded later if needed)
-import { TemplatesPage } from '@/pages/templates';
-import { LinksPage } from '@/pages/links';
-import { PeriodsPage } from '@/pages/periods';
-import { ReviewsPage } from '@/pages/reviews';
-import { SubmissionTrackerPage } from '@/pages/submission-tracker';
-import { SettingsPage } from '@/pages/settings';
-import { AppraisalFormPage } from '@/pages/appraisal-form';
-import { AppraisalFormByAssignmentPage } from '@/pages/appraisal-form-by-assignment';
-import { TeamsPage } from '@/pages/teams';
-import { EmployeeDashboardPage } from '@/pages/employee-dashboard';
-import { MyAppraisalsPage } from '@/pages/my-appraisals';
-import { MyPerformancePage } from '@/pages/my-performance';
-import { DirectoryPage } from '@/pages/directory/DirectoryPage';
-import { OrgChartPage } from '@/pages/org-chart/OrgChartPage';
-import { ProfilePage } from '@/pages/profile/ProfilePage';
-import { OrganizationAnalyticsPage } from '@/pages/organization-analytics/OrganizationAnalyticsPage';
 import { useUser } from '@/contexts/user-context';
 import { ViewAsProvider } from '@/components/view-as/view-as';
+
+const RELOADED_FOR_UPDATE = 'reloadedForUpdate';
+
+/**
+ * Load a page only when it is first opened. A tab left open across a deploy asks for files that
+ * no longer exist; reloading once picks up the new version instead of showing a blank page.
+ */
+function lazyPage<K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) {
+  return lazy(async () => {
+    try {
+      const page = (await load())[name];
+      sessionStorage.removeItem(RELOADED_FOR_UPDATE);
+      return { default: page };
+    } catch (error) {
+      if (!sessionStorage.getItem(RELOADED_FOR_UPDATE)) {
+        sessionStorage.setItem(RELOADED_FOR_UPDATE, '1');
+        window.location.reload();
+        return new Promise<never>(() => {});
+      }
+      throw error;
+    }
+  });
+}
+
+const AuthPage = lazyPage(() => import('@/pages/auth'), 'AuthPage');
+const Dashboard = lazyPage(() => import('@/pages/dashboard'), 'Dashboard');
+const TemplatesPage = lazyPage(() => import('@/pages/templates'), 'TemplatesPage');
+const LinksPage = lazyPage(() => import('@/pages/links'), 'LinksPage');
+const PeriodsPage = lazyPage(() => import('@/pages/periods'), 'PeriodsPage');
+const ReviewsPage = lazyPage(() => import('@/pages/reviews'), 'ReviewsPage');
+const SubmissionTrackerPage = lazyPage(() => import('@/pages/submission-tracker'), 'SubmissionTrackerPage');
+const SettingsPage = lazyPage(() => import('@/pages/settings'), 'SettingsPage');
+const AppraisalFormPage = lazyPage(() => import('@/pages/appraisal-form'), 'AppraisalFormPage');
+const AppraisalFormByAssignmentPage = lazyPage(() => import('@/pages/appraisal-form-by-assignment'), 'AppraisalFormByAssignmentPage');
+const TeamsPage = lazyPage(() => import('@/pages/teams'), 'TeamsPage');
+const EmployeeDashboardPage = lazyPage(() => import('@/pages/employee-dashboard'), 'EmployeeDashboardPage');
+const MyAppraisalsPage = lazyPage(() => import('@/pages/my-appraisals'), 'MyAppraisalsPage');
+const MyPerformancePage = lazyPage(() => import('@/pages/my-performance'), 'MyPerformancePage');
+const DirectoryPage = lazyPage(() => import('@/pages/directory/DirectoryPage'), 'DirectoryPage');
+const OrgChartPage = lazyPage(() => import('@/pages/org-chart/OrgChartPage'), 'OrgChartPage');
+const ProfilePage = lazyPage(() => import('@/pages/profile/ProfilePage'), 'ProfilePage');
+const OrganizationAnalyticsPage = lazyPage(() => import('@/pages/organization-analytics/OrganizationAnalyticsPage'), 'OrganizationAnalyticsPage');
+
+function PageLoading() {
+  return (
+    <div className="flex items-center justify-center min-h-[320px]">
+      <p className="text-muted-foreground text-sm font-medium">Loading…</p>
+    </div>
+  );
+}
 
 function PrivateRoute({ children }: { children: React.ReactElement }) {
   const { user, loading } = useUser();
@@ -86,6 +115,7 @@ function App() {
         
         // Demo data is only for local use; never write fake people into the real database.
         if (!isSupabaseConfigured()) {
+          const { sampleEmployees, sampleTemplates } = await import('@/lib/sample-data');
           const existingEmployees = await getEmployees();
           const existingTemplates = await getTemplates();
 
@@ -123,6 +153,7 @@ function App() {
             <AppProvider>
               <ViewAsProvider>
               <div className="flex-1 min-h-0 flex flex-col min-w-0 overflow-x-hidden w-full max-w-full">
+                <Suspense fallback={<PageLoading />}>
                 <Routes>
               <Route path="/auth" element={<AuthPage />} />
               <Route path="/appraisal/assignment/:assignmentId" element={<PrivateRoute><AppraisalFormByAssignmentPage /></PrivateRoute>} />
@@ -132,6 +163,7 @@ function App() {
                 element={
                   <PrivateRoute>
                     <MainLayout>
+                      <Suspense fallback={<PageLoading />}>
                       <Routes>
                         {/* Admin routes */}
                         <Route path="/dashboard" element={<AdminRoute><Dashboard /></AdminRoute>} />
@@ -165,11 +197,13 @@ function App() {
                         {/* Catch-all route for unmatched paths */}
                         <Route path="*" element={<RoleBasedRedirect />} />
                       </Routes>
+                      </Suspense>
                     </MainLayout>
                   </PrivateRoute>
                 }
               />
                 </Routes>
+                </Suspense>
               </div>
               </ViewAsProvider>
             </AppProvider>

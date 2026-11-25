@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/components/ui/select';
-import { getEmployee, saveEmployee, saveUser, getUsers, createPerson, describeError } from '@/lib/storage';
+import { getEmployee, saveEmployee, saveUser, getUserByEmployeeId, createPerson, describeError } from '@/lib/storage';
 import { generateId, formatDate } from '@/lib/utils';
 import { getDepartmentLeaderId } from '@/lib/org-chart-utils';
 import type { Employee, User, ExecutiveType, EmploymentStatus } from '@/types';
@@ -16,6 +16,7 @@ import { isDepartmentLeader, LOCKING_STATUSES } from '@/types';
 import { useToast } from '@/contexts/toast-context';
 import { useApp } from '@/contexts/app-context';
 import { useUser } from '@/contexts/user-context';
+import { useDialogRecord } from '@/hooks/use-dialog-record';
 
 const EMPLOYMENT_STATUS_VALUES = ['permanent', 'temporary', 'contractor', 'probation', 'intern', 'on-leave', 'terminated', 'resigned'] as const;
 const USERNAME_PATTERN = /^[a-z0-9._-]{3,}$/;
@@ -58,7 +59,6 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
   const { teams, employees } = useApp();
   const { realUser } = useUser();
   const [loading, setLoading] = useState(false);
-  const [loaded, setLoaded] = useState(true);
 
   // Sign-in section
   const [account, setAccount] = useState<User | null>(null);
@@ -98,45 +98,20 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
   const isSelf = !!account && account.id === realUser?.id;
   const creatingSignIn = !account;
 
-  useEffect(() => {
-    if (!open) return;
-    setCredentials(null);
-    setShowPassword(false);
-    setUsernameEdited(false);
-    if (employeeId) {
-      loadEmployee(employeeId);
-    } else {
-      reset({
-        name: '',
-        email: '',
-        role: '',
-        hierarchy: 'member',
-        executiveType: undefined,
-        teamId: '',
-        reportsTo: '',
-        employmentStatus: 'permanent',
-      });
-      setAccount(null);
-      setLoaded(true);
-      setOriginalStatus(undefined);
-      setUsername('');
-      setAdminAccess(false);
-      setCanSignIn(true);
-      setNewPassword(generatePassword());
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, employeeId]);
-
-  // Suggest a username from the name until the admin types their own.
-  useEffect(() => {
-    if (creatingSignIn && !usernameEdited) setUsername(suggestUsername(watchedName || ''));
-  }, [watchedName, creatingSignIn, usernameEdited]);
-
-  const loadEmployee = async (id: string) => {
-    setLoaded(false);
-    try {
-      const [employee, users] = await Promise.all([getEmployee(id), getUsers()]);
-      if (!employee) return;
+  const loadingRecord = useDialogRecord(
+    open,
+    employeeId,
+    async (id) => {
+      const [employee, login] = await Promise.all([getEmployee(id), getUserByEmployeeId(id)]);
+      return employee ? { employee, login: login ?? null } : undefined;
+    },
+    (record) => {
+      if (!record) {
+        toast({ title: 'Not found', description: 'This person no longer exists.', variant: 'error' });
+        onOpenChange(false);
+        return;
+      }
+      const { employee, login } = record;
       const raw = employee.hierarchy as string;
       const validHierarchy = ['chairman', 'executive', 'leader', 'department-leader', 'member', 'hr'].includes(raw)
         ? raw
@@ -154,19 +129,51 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         employmentStatus: employee.employmentStatus ?? 'permanent',
       });
       setOriginalStatus(employee.employmentStatus ?? 'permanent');
-      const login = users.find((u) => u.employeeId === id) ?? null;
       setAccount(login);
       setUsername(login?.username ?? suggestUsername(employee.name));
       setUsernameEdited(!!login);
       setAdminAccess(login?.role === 'admin');
       setCanSignIn(login ? login.active !== false : true);
       setNewPassword(login ? null : generatePassword());
-      setLoaded(true);
-    } catch (error) {
+    },
+    (error) => {
       console.error('Error loading person:', error);
       toast({ title: 'Error', description: 'Failed to load this person.', variant: 'error' });
+      onOpenChange(false);
     }
-  };
+  );
+  const loaded = !loadingRecord;
+
+  useEffect(() => {
+    if (!open) return;
+    setCredentials(null);
+    setShowPassword(false);
+    setUsernameEdited(false);
+    if (!employeeId) {
+      reset({
+        name: '',
+        email: '',
+        role: '',
+        hierarchy: 'member',
+        executiveType: undefined,
+        teamId: '',
+        reportsTo: '',
+        employmentStatus: 'permanent',
+      });
+      setAccount(null);
+      setOriginalStatus(undefined);
+      setUsername('');
+      setAdminAccess(false);
+      setCanSignIn(true);
+      setNewPassword(generatePassword());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, employeeId]);
+
+  // Suggest a username from the name until the admin types their own.
+  useEffect(() => {
+    if (creatingSignIn && !usernameEdited) setUsername(suggestUsername(watchedName || ''));
+  }, [watchedName, creatingSignIn, usernameEdited]);
 
   const copyToClipboard = async (text: string, field: 'username' | 'password') => {
     try {
@@ -369,7 +376,9 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0">
+          <div className="flex-1 overflow-y-auto p-6 min-h-0">
+          {!loaded && <p className="py-10 text-center text-sm text-muted-foreground">Loading…</p>}
+          <div className={loaded ? 'space-y-4' : 'hidden'}>
           <div className="space-y-2">
             <Label htmlFor="name">Full Name</Label>
             <Input id="name" {...register('name')} placeholder="John Doe" />
@@ -566,9 +575,6 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
           </div>
 
           {/* Sign-in */}
-          {!loaded ? (
-            <p className="pt-4 border-t text-sm text-muted-foreground">Loading sign-in…</p>
-          ) : (
           <div className="space-y-3 pt-4 border-t">
             <div className="flex items-center justify-between gap-2">
               <Label className="text-sm font-semibold flex items-center gap-2">
@@ -692,7 +698,7 @@ export function EmployeeDialog({ open, onOpenChange, employeeId, onSuccess }: Em
               </div>
             )}
           </div>
-          )}
+          </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-4 px-6 pb-6 border-t flex-shrink-0 bg-background">

@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import { Calendar } from 'phosphor-react';
 import { Select } from '@/components/ui/select';
-import { getReviewPeriods, getActiveReviewPeriods } from '@/lib/storage';
-import type { ReviewPeriod } from '@/types';
+import { useApp } from '@/contexts/app-context';
 import { PeriodBadge } from './period-badge';
 
 interface PeriodSelectorProps {
@@ -22,24 +21,14 @@ export function PeriodSelector({
   onCreateNew,
   className,
 }: PeriodSelectorProps) {
-  const [periods, setPeriods] = useState<ReviewPeriod[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadPeriods();
-  }, [showActiveOnly]);
-
-  const loadPeriods = async () => {
-    try {
-      const data = showActiveOnly ? await getActiveReviewPeriods() : await getReviewPeriods();
-      const sorted = data.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
-      setPeriods(sorted);
-    } catch (error) {
-      console.error('Failed to load periods:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { reviewPeriods, loading } = useApp();
+  const periods = useMemo(
+    () =>
+      reviewPeriods
+        .filter((p) => !showActiveOnly || p.status === 'active')
+        .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()),
+    [reviewPeriods, showActiveOnly]
+  );
 
   const selectedPeriod = periods.find((p) => p.id === value);
 

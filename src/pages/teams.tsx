@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useApp } from '@/contexts/app-context';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,49 +21,8 @@ export function TeamsPage() {
     name: '',
   });
   const [deleting, setDeleting] = useState(false);
-  const wasHiddenRef = useRef(false);
   const { toast } = useToast();
-
-  useEffect(() => {
-    const handleTeamEvent = () => {
-      if (import.meta.env.DEV) console.log('Team event received, refreshing teams list...');
-      refresh();
-    };
-    
-    const handleEmployeeEvent = () => {
-      if (import.meta.env.DEV) console.log('Employee event received, refreshing teams list...');
-      refresh();
-    };
-    
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        wasHiddenRef.current = true;
-      } else if (document.visibilityState === 'visible' && wasHiddenRef.current) {
-        wasHiddenRef.current = false;
-        if (import.meta.env.DEV) console.log('Tab visible, refreshing teams list...');
-        refresh();
-      }
-    };
-    
-    const pollInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') refresh();
-    }, 60000);
-    
-    window.addEventListener('teamCreated', handleTeamEvent);
-    window.addEventListener('teamUpdated', handleTeamEvent);
-    window.addEventListener('employeeCreated', handleEmployeeEvent);
-    window.addEventListener('employeeUpdated', handleEmployeeEvent);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      window.removeEventListener('teamCreated', handleTeamEvent);
-      window.removeEventListener('teamUpdated', handleTeamEvent);
-      window.removeEventListener('employeeCreated', handleEmployeeEvent);
-      window.removeEventListener('employeeUpdated', handleEmployeeEvent);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      clearInterval(pollInterval);
-    };
-  }, [refresh]);
+  const refreshPeople = () => refresh(['people']);
 
   const handleDeleteClick = (id: string, name: string) => {
     setDeleteConfirm({ open: true, id, name });
@@ -75,7 +34,7 @@ export function TeamsPage() {
     setDeleting(true);
     try {
       await deleteTeam(deleteConfirm.id);
-      await refresh();
+      await refreshPeople();
       toast({ title: 'Success', description: 'Team deleted successfully', variant: 'success' });
       setDeleteConfirm({ open: false, id: null, name: '' });
     } catch (error) {
@@ -87,7 +46,7 @@ export function TeamsPage() {
   };
 
   const handleDialogSuccess = async () => {
-    await refresh();
+    await refreshPeople();
   };
 
   const filteredTeams = teams.filter((team) =>
@@ -123,7 +82,7 @@ export function TeamsPage() {
         <div className="flex gap-3">
           <Button 
             type="button" 
-            onClick={refresh}
+            onClick={refreshPeople}
             variant="outline"
             size="lg"
             title="Refresh teams list"

@@ -279,7 +279,7 @@ function AwardDialog({
     try {
       if (useTop) await setPeriodAward(periodId, board, null, null);
       else await setPeriodAward(periodId, board, employeeId, needsReason ? reason.trim() : null);
-      await refresh();
+      await refresh(['settings']);
       toast({ title: 'Award saved', variant: 'success' });
       onClose();
     } catch (error) {

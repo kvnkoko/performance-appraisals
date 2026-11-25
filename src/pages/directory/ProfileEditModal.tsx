@@ -1,15 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'phosphor-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { ImageUploader, recompressDataUrl } from '@/components/ui/image-uploader';
+import { ImageUploader, recompressDataUrl, PROFILE_PHOTO, COVER_PHOTO } from '@/components/ui/image-uploader';
 import { useEmployeeProfiles } from '@/hooks/use-employee-profiles';
 import type { Employee, EmployeeProfile } from '@/types';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/contexts/toast-context';
+import { describeError } from '@/lib/storage';
 
 interface ProfileEditModalProps {
   employee: Employee;
@@ -18,7 +19,7 @@ interface ProfileEditModalProps {
 }
 
 export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModalProps) {
-  const { getOrCreateProfile, saveProfile } = useEmployeeProfiles();
+  const { getOrCreateProfile, saveProfile, profilesLoaded } = useEmployeeProfiles();
   const [form, setForm] = useState<Partial<EmployeeProfile> & { employeeId: string }>(() => getOrCreateProfile(employee.id));
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
@@ -27,7 +28,11 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
   const [funFactsRaw, setFunFactsRaw] = useState('');
   const [achievementsRaw, setAchievementsRaw] = useState('');
 
+  // Fill the form once per person; background reloads must not wipe what is being typed.
+  const filledFor = useRef<string | null>(null);
   useEffect(() => {
+    if (!profilesLoaded || filledFor.current === employee.id) return;
+    filledFor.current = employee.id;
     const next = getOrCreateProfile(employee.id);
     setForm(next);
     setSkillsRaw((next.skills ?? []).join(', '));
@@ -38,8 +43,8 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
     const cover = next.coverPhoto?.startsWith('data:') ? next.coverPhoto : null;
     if (profilePic || cover) {
       Promise.all([
-        profilePic ? recompressDataUrl(profilePic, 1200, 0.88) : null,
-        cover ? recompressDataUrl(cover, 1400, 0.88) : null,
+        profilePic ? recompressDataUrl(profilePic, PROFILE_PHOTO.maxDimension, PROFILE_PHOTO.jpegQuality) : null,
+        cover ? recompressDataUrl(cover, COVER_PHOTO.maxDimension, COVER_PHOTO.jpegQuality) : null,
       ]).then(([newProfile, newCover]) => {
         setForm((prev) => ({
           ...prev,
@@ -48,7 +53,7 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
         }));
       }).catch(() => { /* keep existing data on recompress failure */ });
     }
-  }, [employee.id, getOrCreateProfile]);
+  }, [employee.id, getOrCreateProfile, profilesLoaded]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -57,7 +62,9 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
       const skills = skillsRaw ? skillsRaw.split(',').map((x) => x.trim()).filter(Boolean) : [];
       const funFacts = funFactsRaw ? funFactsRaw.split('\n').map((x) => x.trim()).filter(Boolean) : [];
       const achievements = achievementsRaw ? achievementsRaw.split('\n').map((x) => x.trim()).filter(Boolean) : [];
+      // Start from the full saved profile so fields this form does not show are kept.
       await saveProfile({
+        ...form,
         id: form.id || form.employeeId,
         employeeId: form.employeeId,
         profilePicture: form.profilePicture,
@@ -81,7 +88,7 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
       onClose();
     } catch (e) {
       console.error(e);
-      toast({ title: 'Profile not saved', description: 'Your changes could not be saved. Please try again.', variant: 'error' });
+      toast({ title: 'Profile not saved', description: describeError(e, 'Your changes could not be saved. Please try again.'), variant: 'error' });
     } finally {
       setSaving(false);
     }
@@ -109,8 +116,8 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
                 onChange={(v) => setForm((prev) => ({ ...prev, profilePicture: v ?? undefined }))}
                 shape="square"
                 size="md"
-                maxDimension={1200}
-                jpegQuality={0.88}
+                maxDimension={PROFILE_PHOTO.maxDimension}
+                jpegQuality={PROFILE_PHOTO.jpegQuality}
               />
             </div>
             {form.profilePicture && (
@@ -197,8 +204,8 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
                 onChange={(v) => setForm((prev) => ({ ...prev, coverPhoto: v ?? undefined }))}
                 shape="square"
                 size="lg"
-                maxDimension={1400}
-                jpegQuality={0.88}
+                maxDimension={COVER_PHOTO.maxDimension}
+                jpegQuality={COVER_PHOTO.jpegQuality}
               />
             </div>
             {form.coverPhoto && (
@@ -331,7 +338,7 @@ export function ProfileEditModal({ employee, onClose, onSaved }: ProfileEditModa
           <Button variant="outline" onClick={onClose} className="flex-1">
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={saving} className="flex-1">
+          <Button onClick={handleSave} disabled={saving || !profilesLoaded} className="flex-1">
             {saving ? 'Saving...' : 'Save'}
           </Button>
         </div>

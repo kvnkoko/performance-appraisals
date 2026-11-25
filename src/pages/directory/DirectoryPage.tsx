@@ -65,14 +65,17 @@ export function DirectoryPage() {
   });
   const [deleting, setDeleting] = useState(false);
 
+  const usersRequest = useRef(0);
   const loadLinkedUsers = useMemo(
     () => async () => {
+      const request = ++usersRequest.current;
       try {
         const usersMap: Record<string, SignInSummary> = {};
         for (const u of await getUsers()) {
           if (u.employeeId) usersMap[u.employeeId] = { username: u.username, admin: u.role === 'admin', active: u.active !== false };
         }
-        setLinkedUsers(usersMap);
+        // An older request finishing late must not overwrite a newer one.
+        if (request === usersRequest.current) setLinkedUsers(usersMap);
       } catch {
         /* keep what is shown */
       }
@@ -88,22 +91,16 @@ export function DirectoryPage() {
     });
   }, [loading, employees.length, refresh]);
 
+  const hasEmployees = employees.length > 0;
   useEffect(() => {
-    if (!admin || employees.length === 0) {
-      if (admin && employees.length === 0) setLinkedUsers({});
-      return;
-    }
-    loadLinkedUsers();
-  }, [admin, employees, loadLinkedUsers]);
+    if (admin && hasEmployees) loadLinkedUsers();
+  }, [admin, hasEmployees, loadLinkedUsers]);
 
+  // People and teams are reloaded by the app; only the sign-in badges are loaded here.
   useEffect(() => {
     if (!admin) return;
-    const handleUserEvent = () => {
+    const handleChange = () => {
       loadLinkedUsers();
-    };
-    const handleEmployeeEvent = () => {
-      refresh();
-      setTimeout(() => loadLinkedUsers(), 300);
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') wasHiddenRef.current = true;
@@ -112,23 +109,14 @@ export function DirectoryPage() {
         loadLinkedUsers();
       }
     };
-    const pollInterval = setInterval(() => {
-      if (document.visibilityState === 'visible') loadLinkedUsers();
-    }, 60000);
-    window.addEventListener('userCreated', handleUserEvent);
-    window.addEventListener('userUpdated', handleUserEvent);
-    window.addEventListener('employeeCreated', handleEmployeeEvent);
-    window.addEventListener('employeeUpdated', handleEmployeeEvent);
+    const events = ['userCreated', 'userUpdated', 'employeeCreated', 'employeeUpdated'];
+    for (const event of events) window.addEventListener(event, handleChange);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
-      window.removeEventListener('userCreated', handleUserEvent);
-      window.removeEventListener('userUpdated', handleUserEvent);
-      window.removeEventListener('employeeCreated', handleEmployeeEvent);
-      window.removeEventListener('employeeUpdated', handleEmployeeEvent);
+      for (const event of events) window.removeEventListener(event, handleChange);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      clearInterval(pollInterval);
     };
-  }, [admin, refresh, loadLinkedUsers]);
+  }, [admin, loadLinkedUsers]);
 
   const filteredForSections = useMemo(() => {
     let list = filterByEmploymentStatus(employees, admin ? (filters.employmentStatus ?? 'active') : 'active');
@@ -213,7 +201,7 @@ export function DirectoryPage() {
     setDeleting(true);
     try {
       await deletePerson(deleteConfirm.id);
-      await refresh();
+      await refresh(['people', 'work']);
       if (admin) loadLinkedUsers();
       toast({ title: 'Deleted', description: `${deleteConfirm.name} and their sign-in were deleted.`, variant: 'success' });
       setDeleteConfirm({ open: false, id: null, name: '' });
@@ -231,8 +219,7 @@ export function DirectoryPage() {
   };
 
   const onDialogSuccess = () => {
-    refresh();
-    setTimeout(() => loadLinkedUsers(), 500);
+    loadLinkedUsers();
   };
 
   const showSectioned = admin && groupBy !== 'none' && groups && groups.length > 0;

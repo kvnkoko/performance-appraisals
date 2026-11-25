@@ -153,9 +153,18 @@ async function cacheReplace(store: StoreName, values: unknown[]): Promise<void> 
     clear: () => Promise<void>;
     put: (value: unknown) => Promise<unknown>;
   };
-  await objectStore.clear();
-  for (const value of values) await objectStore.put(value);
-  await tx.done;
+  await Promise.all([objectStore.clear(), ...values.map((value) => objectStore.put(value)), tx.done]);
+}
+
+const cacheWrites = new Map<StoreName, Promise<void>>();
+
+/** The offline copy is only a fallback, so it is written without holding up the screen; writes per store stay in order. */
+function cacheReplaceInBackground(store: StoreName, values: unknown[]): void {
+  const previous = cacheWrites.get(store) ?? Promise.resolve();
+  const next = previous
+    .then(() => cacheReplace(store, values))
+    .catch((error) => console.warn(`Could not update the offline copy of ${store}:`, error));
+  cacheWrites.set(store, next);
 }
 
 /** Tell the UI it is looking at a cached copy because the server could not be reached. */
@@ -173,7 +182,7 @@ async function readList<T>(store: StoreName, entity: string, fetchRemote: () => 
   if (await cloudEnabled()) {
     try {
       const items = await fetchRemote();
-      await cacheReplace(store, items);
+      cacheReplaceInBackground(store, items);
       return items;
     } catch (error) {
       notifyCloudReadFailure(entity, error);

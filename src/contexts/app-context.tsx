@@ -1,10 +1,21 @@
-import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { useUser } from '@/contexts/user-context';
 import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, ReviewPeriod, Team, AppraisalAssignment, EmployeeProfile, MyPeriodResult } from '@/types';
-import { getTemplates, getEmployees, getAppraisals, getLinks, getSettings, getReviewPeriods, getActiveReviewPeriods, getTeams, getAppraisalAssignments, getEmployeeProfiles, getMyResults } from '@/lib/storage';
+import { getTemplates, getEmployees, getAppraisals, getLinks, getSettings, getReviewPeriods, getTeams, getAppraisalAssignments, getEmployeeProfiles, getMyResults } from '@/lib/storage';
 import { getDepartmentLeaderId } from '@/lib/org-chart-utils';
 import { effectiveAssignments, isLinkDone } from '@/lib/appraisal-status';
 import { applyAccentColor } from '@/lib/utils';
+
+/**
+ * Data is reloaded in groups so a change only re-downloads what it affects:
+ * people = employees and teams, profiles = directory profiles (with photos),
+ * work = templates, periods, forms, links and appraisals, settings = company settings.
+ */
+export type DataGroup = 'people' | 'profiles' | 'work' | 'settings';
+const ALL_GROUPS: DataGroup[] = ['people', 'profiles', 'work', 'settings'];
+
+/** Coming back to the tab reloads data only if it is at least this old. */
+const STALE_AFTER_MS = 60_000;
 
 interface AppContextType {
   templates: Template[];
@@ -19,11 +30,21 @@ interface AppContextType {
   activePeriods: ReviewPeriod[];
   teams: Team[];
   employeeProfiles: EmployeeProfile[];
+  /** False until profiles have been loaded once; editing a profile before that would start from a blank copy. */
+  profilesLoaded: boolean;
   loading: boolean;
-  refresh: () => Promise<void>;
+  /** Reload the given groups (all by default). Calls made while a reload runs are combined into one follow-up. */
+  refresh: (groups?: DataGroup[]) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+function settle<T>(promise: Promise<T>, label: string): Promise<T | undefined> {
+  return promise.catch((error) => {
+    console.error(`Error loading ${label}:`, error);
+    return undefined;
+  });
+}
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -37,106 +58,132 @@ export function AppProvider({ children }: { children: ReactNode }) {
     theme: 'system',
   });
   const [reviewPeriods, setReviewPeriods] = useState<ReviewPeriod[]>([]);
-  const [activePeriods, setActivePeriods] = useState<ReviewPeriod[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [assignments, setAssignments] = useState<AppraisalAssignment[]>([]);
   const [employeeProfiles, setEmployeeProfiles] = useState<EmployeeProfile[]>([]);
+  const [profilesLoaded, setProfilesLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
+  const lastLoadedAt = useRef(0);
 
-  const refresh = useCallback(async () => {
-    try {
-      // Load data with individual error handling to prevent one failure from breaking everything
-      const results = await Promise.allSettled([
-        getTemplates(),
-        getEmployees(),
-        getAppraisals(),
-        getLinks(),
-        getSettings(),
-        getReviewPeriods(),
-        getActiveReviewPeriods(),
-        getTeams(),
-        getAppraisalAssignments(),
-        getEmployeeProfiles(),
-      ]);
-      
-      if (results[0].status === 'fulfilled') setTemplates(results[0].value);
-      if (results[1].status === 'fulfilled') {
-        const next = results[1].value;
-        // Auto-set Reports to = department leader when not set (in memory for app state)
-        const normalized = next.map((e) => {
-          if (e.teamId && !e.reportsTo) {
-            const leaderId = getDepartmentLeaderId(e.teamId, next);
-            if (leaderId && leaderId !== e.id) return { ...e, reportsTo: leaderId };
-          }
-          return e;
-        });
-        setEmployees((prev) => (normalized.length > 0 ? normalized : prev.length > 0 ? prev : normalized));
-      }
-      if (results[2].status === 'fulfilled') setAppraisals(results[2].value);
-      const loadedAppraisals = results[2].status === 'fulfilled' ? results[2].value : [];
-      if (results[3].status === 'fulfilled') {
-        const appraisalIds = new Set(loadedAppraisals.map((a) => a.id));
-        setLinks(results[3].value.map((l) => (isLinkDone(l, appraisalIds) ? { ...l, used: true } : l)));
-      }
-      if (results[4].status === 'fulfilled') {
-        const loadedSettings = results[4].value;
-        setSettings(loadedSettings);
-        // Apply accent color when settings are loaded
-        if (loadedSettings.accentColor) {
-          applyAccentColor(loadedSettings.accentColor);
-        }
-      }
-      if (results[5].status === 'fulfilled') setReviewPeriods(results[5].value);
-      if (results[6].status === 'fulfilled') setActivePeriods(results[6].value);
-      if (results[7].status === 'fulfilled') setTeams(results[7].value);
-      if (results[8].status === 'fulfilled') setAssignments(effectiveAssignments(results[8].value, loadedAppraisals));
-      if (results[9].status === 'fulfilled') {
-        const next = results[9].value;
-        // Never replace with empty when we already have profiles (keeps directory visible)
-        setEmployeeProfiles((prev) => (next.length > 0 ? next : prev.length > 0 ? prev : next));
-      }
-      
-      // Log any failures for debugging
-      results.forEach((result, index) => {
-        if (result.status === 'rejected') {
-          console.error(`Error loading data at index ${index}:`, result.reason);
-        }
-      });
-    } catch (error) {
-      console.error('Error refreshing data:', error);
-    } finally {
-      setLoading(false);
+  const load = useCallback(async (groups: Set<DataGroup>) => {
+    const tasks: Promise<void>[] = [];
+    // Photos fill in after the page is shown; they are the largest download.
+    let profiles: Promise<void> = Promise.resolve();
+
+    if (groups.has('people')) {
+      tasks.push(
+        settle(getEmployees(), 'employees').then((next) => {
+          if (!next) return;
+          // Auto-set Reports to = department leader when not set (in memory for app state)
+          const normalized = next.map((e) => {
+            if (e.teamId && !e.reportsTo) {
+              const leaderId = getDepartmentLeaderId(e.teamId, next);
+              if (leaderId && leaderId !== e.id) return { ...e, reportsTo: leaderId };
+            }
+            return e;
+          });
+          setEmployees((prev) => (normalized.length > 0 ? normalized : prev.length > 0 ? prev : normalized));
+        }),
+        settle(getTeams(), 'teams').then((next) => next && setTeams(next))
+      );
     }
+
+    if (groups.has('profiles')) {
+      profiles = settle(getEmployeeProfiles(), 'employee profiles').then((next) => {
+        // Never replace with empty when we already have profiles (keeps directory visible)
+        if (!next) return;
+        setEmployeeProfiles((prev) => (next.length > 0 ? next : prev.length > 0 ? prev : next));
+        setProfilesLoaded(true);
+      });
+    }
+
+    if (groups.has('work')) {
+      tasks.push(
+        settle(getTemplates(), 'templates').then((next) => next && setTemplates(next)),
+        settle(getReviewPeriods(), 'review periods').then((next) => next && setReviewPeriods(next)),
+        Promise.all([
+          settle(getAppraisals(), 'appraisals'),
+          settle(getLinks(), 'appraisal links'),
+          settle(getAppraisalAssignments(), 'appraisal forms'),
+        ]).then(([loadedAppraisals, loadedLinks, loadedAssignments]) => {
+          if (loadedAppraisals) setAppraisals(loadedAppraisals);
+          const known = loadedAppraisals ?? [];
+          if (loadedLinks) {
+            const appraisalIds = new Set(known.map((a) => a.id));
+            setLinks(loadedLinks.map((l) => (isLinkDone(l, appraisalIds) ? { ...l, used: true } : l)));
+          }
+          if (loadedAssignments) setAssignments(effectiveAssignments(loadedAssignments, known));
+        })
+      );
+    }
+
+    if (groups.has('settings')) {
+      tasks.push(
+        settle(getSettings(), 'settings').then((loadedSettings) => {
+          if (!loadedSettings) return;
+          setSettings(loadedSettings);
+          if (loadedSettings.accentColor) applyAccentColor(loadedSettings.accentColor);
+        })
+      );
+    }
+
+    await Promise.all(tasks);
+    setLoading(false);
+    await profiles;
+    if (groups.size === ALL_GROUPS.length) lastLoadedAt.current = Date.now();
   }, []);
+
+  const pending = useRef(new Set<DataGroup>());
+  const scheduled = useRef<Promise<void> | null>(null);
+  const running = useRef<Promise<void>>(Promise.resolve());
+
+  const refresh = useCallback(
+    (groups?: DataGroup[]) => {
+      for (const group of Array.isArray(groups) ? groups : ALL_GROUPS) pending.current.add(group);
+      if (scheduled.current) return scheduled.current;
+      const next = running.current.then(async () => {
+        scheduled.current = null;
+        const batch = new Set(pending.current);
+        pending.current.clear();
+        await load(batch);
+      });
+      scheduled.current = next;
+      running.current = next.catch(() => {});
+      return next;
+    },
+    [load]
+  );
 
   useEffect(() => {
     refresh();
-    
-    // Listen for data change events to refresh context
-    const handleDataChange = () => {
-      console.log('Data change event received, refreshing app context...');
-      refresh();
+
+    const on = (groups: DataGroup[]) => () => {
+      refresh(groups);
     };
-    
-    // Listen for specific entity events
-    window.addEventListener('employeeCreated', handleDataChange);
-    window.addEventListener('employeeUpdated', handleDataChange);
-    window.addEventListener('userCreated', handleDataChange);
-    window.addEventListener('userUpdated', handleDataChange);
-    window.addEventListener('teamCreated', handleDataChange);
-    window.addEventListener('teamUpdated', handleDataChange);
-    window.addEventListener('employeeProfileUpdated', handleDataChange);
-    
+    // Renaming a person also renames them on their forms, so employee changes reload work data too.
+    const listeners: Array<[string, () => void]> = [
+      ['employeeCreated', on(['people', 'work'])],
+      ['employeeUpdated', on(['people', 'work'])],
+      ['userCreated', on(['people'])],
+      ['userUpdated', on(['people'])],
+      ['teamCreated', on(['people'])],
+      ['teamUpdated', on(['people'])],
+      ['employeeProfileUpdated', on(['profiles'])],
+    ];
+    for (const [event, handler] of listeners) window.addEventListener(event, handler);
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastLoadedAt.current > STALE_AFTER_MS) refresh();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
     return () => {
-      window.removeEventListener('employeeCreated', handleDataChange);
-      window.removeEventListener('employeeUpdated', handleDataChange);
-      window.removeEventListener('userCreated', handleDataChange);
-      window.removeEventListener('userUpdated', handleDataChange);
-      window.removeEventListener('teamCreated', handleDataChange);
-      window.removeEventListener('teamUpdated', handleDataChange);
-      window.removeEventListener('employeeProfileUpdated', handleDataChange);
+      for (const [event, handler] of listeners) window.removeEventListener(event, handler);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [refresh]);
+
+  const activePeriods = useMemo(() => reviewPeriods.filter((p) => p.status === 'active'), [reviewPeriods]);
 
   // "View as" a staff member: show only the rows the database would return to them (mirrors the RLS policies).
   const { user, viewAs } = useUser();
@@ -167,11 +214,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [resultsFor, appraisals]);
 
-  return (
-    <AppContext.Provider value={{ templates, employees, ...scoped, myResults, settings, reviewPeriods, activePeriods, teams, employeeProfiles, loading, refresh }}>
-      {children}
-    </AppContext.Provider>
+  const value = useMemo(
+    () => ({ templates, employees, ...scoped, myResults, settings, reviewPeriods, activePeriods, teams, employeeProfiles, profilesLoaded, loading, refresh }),
+    [templates, employees, scoped, myResults, settings, reviewPeriods, activePeriods, teams, employeeProfiles, profilesLoaded, loading, refresh]
   );
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
 export function useApp() {

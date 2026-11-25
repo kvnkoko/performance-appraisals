@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { MagnifyingGlass, UsersThree, Buildings, List } from 'phosphor-react';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -43,16 +42,10 @@ export function DirectoryFilters({
   showEmploymentFilter = true,
 }: DirectoryFiltersProps) {
   const { teams } = useApp();
-  const [searchLocal, setSearchLocal] = useState(filters.search);
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onFiltersChange({ ...filters, search: searchLocal.trim() });
-  };
 
   return (
     <div className={cn('space-y-4', className)}>
-      <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-stretch gap-3">
+      <form onSubmit={(e) => e.preventDefault()} className="flex flex-wrap items-stretch gap-3">
         <div className="relative flex-1 w-full min-w-0 sm:min-w-[200px]">
           <MagnifyingGlass
             className="absolute left-3 top-1/2 z-10 -translate-y-1/2 text-foreground/70 pointer-events-none"
@@ -63,9 +56,8 @@ export function DirectoryFilters({
           <Input
             type="search"
             placeholder="Search by name, role, department..."
-            value={searchLocal}
-            onChange={(e) => setSearchLocal(e.target.value)}
-            onBlur={() => onFiltersChange({ ...filters, search: searchLocal.trim() })}
+            value={filters.search}
+            onChange={(e) => onFiltersChange({ ...filters, search: e.target.value })}
             className="pl-10 bg-card/80 border-border/60 backdrop-blur-sm"
           />
         </div>

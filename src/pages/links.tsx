@@ -166,7 +166,7 @@ export function LinksPage() {
       );
       const result = await createAssignmentsSkippingExisting(selectedPeriod, built);
       const skipped = result.skippedExisting + result.skippedAlreadySubmitted;
-      await refresh();
+      await refresh(['work']);
       setAutoDoneCount(result.created.length);
       setAutoSkippedCount(skipped);
       setAutoStep(3);
@@ -222,7 +222,7 @@ export function LinksPage() {
       };
 
       await saveLink(link);
-      await refresh();
+      await refresh(['work']);
       setDialogOpen(false);
       setSelectedEmployee('');
       setSelectedAppraiser('');
@@ -248,7 +248,7 @@ export function LinksPage() {
     setDeleting(true);
     try {
       await deleteLink(deleteConfirm.id);
-      await refresh();
+      await refresh(['work']);
       toast({ title: 'Success', description: 'Link deleted successfully', variant: 'success' });
       setDeleteConfirm({ open: false, id: null });
     } catch (error) {
@@ -264,7 +264,7 @@ export function LinksPage() {
     setBulkRemoving(true);
     try {
       const { removed, kept } = await deleteAssignmentsByPeriod(bulkRemoveConfirm.periodId);
-      await refresh();
+      await refresh(['work']);
       toast({
         title: 'Success',
         description: `${removed} unsubmitted form(s) removed.${kept > 0 ? ` ${kept} already-submitted form(s) were kept for the audit record.` : ''}`,
@@ -293,7 +293,7 @@ export function LinksPage() {
       );
       if (matchingAppraisal) await deleteAppraisal(matchingAppraisal.id);
       await deleteAppraisalAssignment(deleteFormAssignment.id);
-      await refresh();
+      await refresh(['work']);
       setDeleteFormAssignment(null);
       toast({ title: 'Form removed', description: 'Assignment and any submitted form have been deleted.', variant: 'success' });
     } catch (error) {

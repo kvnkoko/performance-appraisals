@@ -7,7 +7,6 @@ import { PeriodSelector } from '@/components/periods/period-selector';
 import { Button } from '@/components/ui/button';
 import { TrendUp, Trophy, Target, Lightning, TrendDown, Users, ChartBar, Calendar, FileText, Eye, X } from 'phosphor-react';
 import { generatePerformanceSummary } from '@/lib/ai-summary';
-import { getAppraisals } from '@/lib/storage';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import type { PerformanceInsight } from '@/lib/ai-summary';
 import { CompletedFormViewModal } from '@/components/shared/completed-form-view-modal';
@@ -73,41 +72,38 @@ export function ReviewsPage() {
   }, [reviewPeriods, selectedPeriodId]);
 
   useEffect(() => {
-    if (selectedEmployee && selectedPeriodId) {
-      loadSummary();
-    } else {
+    if (!selectedEmployee || !selectedPeriodId) {
       setSummary(null);
       if (!selectedPeriodId) setError(null);
+      return;
     }
-  }, [selectedEmployee, selectedPeriodId, appraisals, selectedRanking?.overallPct]);
-
-  const loadSummary = async () => {
-    if (!selectedEmployee || !selectedPeriodId) return;
+    // A summary that finishes after another person or period was picked is dropped.
+    let current = true;
+    const employeeAppraisals = appraisals.filter(
+      (a) => a.employeeId === selectedEmployee && a.reviewPeriodId === selectedPeriodId && a.completedAt
+    );
+    if (employeeAppraisals.length === 0) {
+      setError(`No completed appraisals for this employee in ${periodLabel}.`);
+      setSummary(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
-    try {
-      const allAppraisals = await getAppraisals();
-      const employeeAppraisals = allAppraisals.filter(
-        (a) =>
-          a.employeeId === selectedEmployee &&
-          a.reviewPeriodId === selectedPeriodId &&
-          a.completedAt
-      );
-      if (employeeAppraisals.length === 0) {
-        setError(`No completed appraisals for this employee in ${periodLabel}.`);
+    generatePerformanceSummary(selectedEmployee, employeeAppraisals, selectedRanking?.overallPct)
+      .then((insight) => current && setSummary(insight))
+      .catch((err) => {
+        if (!current) return;
+        console.error('Failed to generate summary:', err);
+        setError('Failed to generate performance summary. Please try again.');
         setSummary(null);
-        return;
-      }
-      const insight = await generatePerformanceSummary(selectedEmployee, employeeAppraisals, selectedRanking?.overallPct);
-      setSummary(insight);
-    } catch (err) {
-      console.error('Failed to generate summary:', err);
-      setError('Failed to generate performance summary. Please try again.');
-      setSummary(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+      })
+      .finally(() => current && setLoading(false));
+    return () => {
+      current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEmployee, selectedPeriodId, appraisals, selectedRanking?.overallPct]);
 
   const employeeIds = new Set(employees.map((e) => e.id));
   const validAppraisals = useMemo(

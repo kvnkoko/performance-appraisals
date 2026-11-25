@@ -239,11 +239,11 @@ export function AppraisalFormByAssignmentPage() {
       });
       setCompleted('just-submitted');
       toast({ title: 'Success', description: 'Appraisal submitted successfully!', variant: 'success' });
-      refresh().catch(() => {});
+      refresh(['work']).catch(() => {});
     } catch (e) {
       if (e instanceof AlreadySubmittedError) {
         setCompleted('already-submitted');
-        refresh().catch(() => {});
+        refresh(['work']).catch(() => {});
       } else {
         const description = e instanceof UserFacingError
           ? e.message

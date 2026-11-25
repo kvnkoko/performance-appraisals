@@ -15,6 +15,7 @@ import type { Team } from '@/types';
 import { useToast } from '@/contexts/toast-context';
 import { useApp } from '@/contexts/app-context';
 import { HIERARCHY_LABELS } from '@/types';
+import { useDialogRecord } from '@/hooks/use-dialog-record';
 
 const teamSchema = z.object({
   name: z.string().min(1, 'Team name is required').max(100, 'Name too long'),
@@ -106,31 +107,27 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
     },
   });
 
+  const loadingRecord = useDialogRecord(
+    open,
+    teamId,
+    getTeam,
+    (team) => {
+      if (team) reset({ name: team.name, description: team.description || '' });
+    },
+    () => {
+      toast({ title: 'Error', description: 'Failed to load team.', variant: 'error' });
+      onOpenChange(false);
+    }
+  );
+
   useEffect(() => {
-    if (open && teamId) {
-      loadTeam();
-    } else if (open && !teamId) {
+    if (open && !teamId) {
       reset({
         name: '',
         description: '',
       });
     }
   }, [open, teamId]);
-
-  const loadTeam = async () => {
-    if (!teamId) return;
-    try {
-      const team = await getTeam(teamId);
-      if (team) {
-        reset({
-          name: team.name,
-          description: team.description || '',
-        });
-      }
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to load team.', variant: 'error' });
-    }
-  };
 
   const onSubmit = async (data: TeamFormData) => {
     setLoading(true);
@@ -145,21 +142,7 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
 
       await saveTeam(team);
       
-      // Dispatch custom event to notify Teams page to refresh
-      window.dispatchEvent(new CustomEvent('teamCreated', { detail: { teamId: team.id } }));
-      window.dispatchEvent(new CustomEvent('teamUpdated', { detail: { teamId: team.id } }));
-      
-      // Also dispatch after delays to catch Teams page if it wasn't ready
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('teamCreated', { detail: { teamId: team.id } }));
-        window.dispatchEvent(new CustomEvent('teamUpdated', { detail: { teamId: team.id } }));
-      }, 500);
-      
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('teamCreated', { detail: { teamId: team.id } }));
-        window.dispatchEvent(new CustomEvent('teamUpdated', { detail: { teamId: team.id } }));
-      }, 2000);
-      
+      window.dispatchEvent(new CustomEvent(teamId ? 'teamUpdated' : 'teamCreated', { detail: { teamId: team.id } }));
       onSuccess();
       onOpenChange(false);
       toast({ title: 'Success', description: 'Team saved successfully.', variant: 'success' });
@@ -185,7 +168,9 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-6 space-y-5 min-h-0">
+          <div className="flex-1 overflow-y-auto p-6 min-h-0">
+          {loadingRecord && <p className="py-10 text-center text-sm text-muted-foreground">Loading…</p>}
+          <div className={loadingRecord ? 'hidden' : 'space-y-5'}>
           <div className="space-y-2">
             <Label htmlFor="name">Team Name</Label>
             <Input 
@@ -277,12 +262,13 @@ export function TeamDialog({ open, onOpenChange, teamId, onSuccess }: TeamDialog
             </div>
           )}
           </div>
+          </div>
 
           <div className="flex justify-end gap-3 pt-4 px-6 pb-6 border-t flex-shrink-0 bg-background">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || loadingRecord}>
               {loading ? 'Saving...' : teamId ? 'Update Team' : 'Create Team'}
             </Button>
           </div>

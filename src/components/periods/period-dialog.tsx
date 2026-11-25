@@ -14,6 +14,7 @@ import { generateId } from '@/lib/utils';
 import { getCurrentQuarter, getCurrentMonth, getQuarterDates as getQDates, getHalfDates as getHDates, getMonthDates, MONTH_NAMES, generatePeriodName as genPeriodName } from '@/lib/period-utils';
 import type { ReviewPeriod } from '@/types';
 import { useToast } from '@/contexts/toast-context';
+import { useDialogRecord } from '@/hooks/use-dialog-record';
 
 const periodSchema = z.object({
   name: z.string().min(1, 'Period name is required'),
@@ -68,10 +69,32 @@ export function PeriodDialog({ open, onOpenChange, periodId, onSuccess }: Period
   const year = watch('year');
   const month = watch('month');
 
+  const loadingRecord = useDialogRecord(
+    open,
+    periodId,
+    getReviewPeriod,
+    (period) => {
+      if (!period) return;
+      const startMonth = period.type === 'Monthly' ? new Date(period.startDate).getMonth() + 1 : undefined;
+      reset({
+        name: period.name,
+        type: period.type,
+        year: period.year,
+        month: startMonth ?? getCurrentMonth(),
+        startDate: period.startDate.split('T')[0],
+        endDate: period.endDate.split('T')[0],
+        status: period.status,
+        description: period.description || '',
+      });
+    },
+    () => {
+      toast({ title: 'Error', description: 'Failed to load period.', variant: 'error' });
+      onOpenChange(false);
+    }
+  );
+
   useEffect(() => {
-    if (open && periodId) {
-      loadPeriod();
-    } else if (open && !periodId) {
+    if (open && !periodId) {
       const currentYr = currentYear;
       const currentMonthNum = getCurrentMonth();
       reset({
@@ -119,28 +142,6 @@ export function PeriodDialog({ open, onOpenChange, periodId, onSuccess }: Period
     setValue('endDate', toDateInput(dates.end));
   };
 
-  const loadPeriod = async () => {
-    if (!periodId) return;
-    try {
-      const period = await getReviewPeriod(periodId);
-      if (period) {
-        const startMonth = period.type === 'Monthly' ? new Date(period.startDate).getMonth() + 1 : undefined;
-        reset({
-          name: period.name,
-          type: period.type,
-          year: period.year,
-          month: startMonth ?? getCurrentMonth(),
-          startDate: period.startDate.split('T')[0],
-          endDate: period.endDate.split('T')[0],
-          status: period.status,
-          description: period.description || '',
-        });
-      }
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to load period.', variant: 'error' });
-    }
-  };
-
   const onSubmit = async (data: PeriodFormData) => {
     setLoading(true);
     try {
@@ -182,7 +183,9 @@ export function PeriodDialog({ open, onOpenChange, periodId, onSuccess }: Period
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-6 space-y-4 min-h-0">
+          <div className="flex-1 overflow-y-auto p-6 min-h-0">
+          {loadingRecord && <p className="py-10 text-center text-sm text-muted-foreground">Loading…</p>}
+          <div className={loadingRecord ? 'hidden' : 'space-y-4'}>
           <div className="space-y-2">
             <Label htmlFor="name">Period Name</Label>
             <Input id="name" {...register('name')} placeholder="Q1 2025" />
@@ -266,12 +269,13 @@ export function PeriodDialog({ open, onOpenChange, periodId, onSuccess }: Period
             />
           </div>
           </div>
+          </div>
 
           <div className="flex justify-end gap-3 pt-4 px-6 pb-6 border-t flex-shrink-0 bg-background">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || loadingRecord}>
               {loading ? 'Saving...' : periodId ? 'Update Period' : 'Create Period'}
             </Button>
           </div>
