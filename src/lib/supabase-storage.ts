@@ -17,6 +17,7 @@ import type {
   EmployeeProfile,
   PeriodRanking,
   MyPeriodResult,
+  AwardType,
 } from '@/types';
 import { isSupabaseConfigured, getSupabaseClient, mapUser } from './supabase';
 
@@ -358,6 +359,9 @@ export async function getPeriodRankingsFromSupabase(periodId?: string): Promise<
     hrPct: numOrNull(r.hr_pct),
     groups: r.groups ?? {},
     rank: numOrNull(r.rank),
+    scoringVersion: num(r.scoring_version) || 1,
+    improvement: numOrNull(r.improvement),
+    improvedRank: numOrNull(r.improved_rank),
   }));
 }
 
@@ -381,13 +385,14 @@ export async function getMyResultsFromSupabase(employeeId?: string): Promise<MyP
 
 export async function setPeriodAwardInSupabase(
   periodId: string,
+  award: AwardType,
   employeeId: string | null,
   reason: string | null
 ): Promise<void> {
   const supabase = await requireClient();
   const { error } = await supabase.rpc('set_period_award', {
     p_period_id: periodId,
-    p_board: 'overall',
+    p_board: award,
     p_employee_id: employeeId,
     p_reason: reason,
   });

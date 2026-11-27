@@ -221,8 +221,9 @@ export interface CompanySettings {
   /** Legacy single award per period (no longer used). Key = reviewPeriodId, value = employeeId. */
   employeeOfPeriodOverrides?: Record<string, string>;
   /**
-   * Employee of the Period per period, under 'overall'. 'members'/'leaders' are earlier
-   * separate awards, kept read-only. Set only through setPeriodAward (server checks the reason).
+   * Awards per period: 'overall' (Employee of the Period) and 'improved' (Most Improved).
+   * 'members'/'leaders' are earlier separate awards, kept read-only. Set only through
+   * setPeriodAward (server checks the reason).
    */
   periodAwards?: Record<string, Partial<Record<AwardKey, PeriodAward>>>;
 }
@@ -230,7 +231,9 @@ export interface CompanySettings {
 /** Whether a ranked person is a member or a leader. Everyone is ranked in one list. */
 export type RankingBoard = 'members' | 'leaders';
 
-export type AwardKey = 'overall' | RankingBoard;
+export type AwardType = 'overall' | 'improved';
+
+export type AwardKey = AwardType | RankingBoard;
 
 export const RANKING_BOARD_LABELS: Record<RankingBoard, { person: string; award: string }> = {
   members: { person: 'Member', award: 'Member of the Period' },
@@ -272,6 +275,11 @@ export interface PeriodRanking {
   hrPct: number | null;
   groups: Partial<Record<ReviewGroup, { count: number; pct: number }>>;
   rank: number | null;
+  /** 1 = original scoring; 2 = reviewer-calibrated with the manager cap (December 2026 on). */
+  scoringVersion: number;
+  /** Points above the person's average of their previous 3 periods (version 2, 2+ earlier periods). */
+  improvement: number | null;
+  improvedRank: number | null;
 }
 
 /** A person's own results for a period, as staff see them (no reviewers, no individual forms). */

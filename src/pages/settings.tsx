@@ -621,9 +621,14 @@ export function SettingsPage() {
                   className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-teal-500"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Each person's reviews are averaged per reviewer group (managers, peers, their team), and each group counts
-                  equally, however many reviewers it has. That makes up {100 - formData.hrScoreWeight}% of the score; the HR
-                  review makes up the other {formData.hrScoreWeight}%. Someone with only an HR review is not ranked.
+                  Each person's reviews are averaged per reviewer group (managers, peers, their team). That makes up{' '}
+                  {100 - formData.hrScoreWeight}% of the score; the HR review makes up the other {formData.hrScoreWeight}%.
+                  Someone with only an HR review is not ranked.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  From December 2026, each reviewer's habit of scoring higher or lower than others is measured over the last
+                  6 months and removed, and manager reviews count for at most a third of the non-HR part. Earlier periods
+                  keep the original method: every group counts equally.
                 </p>
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
