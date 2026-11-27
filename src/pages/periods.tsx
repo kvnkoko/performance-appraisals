@@ -13,8 +13,8 @@ import { CompletedFormViewModal } from '@/components/shared/completed-form-view-
 import { deleteReviewPeriod, saveReviewPeriod, describeError } from '@/lib/storage';
 import { useToast } from '@/contexts/toast-context';
 import { formatDateRange, getDaysRemaining } from '@/lib/period-utils';
-import { RANKING_BOARD_LABELS, type ReviewPeriod } from '@/types';
-import { AwardsPanel, BOARDS, boardList, usePeriodRankings } from '@/components/reviews/rankings';
+import { type ReviewPeriod } from '@/types';
+import { AwardsPanel, rankedList, usePeriodRankings } from '@/components/reviews/rankings';
 
 export function PeriodsPage() {
   const { appraisals, assignments, employees, templates, reviewPeriods, refresh } = useApp();
@@ -98,14 +98,14 @@ export function PeriodsPage() {
     const avgScore = periodPeople.length > 0
       ? periodPeople.reduce((sum, p) => sum + p.ranking.overallPct, 0) / periodPeople.length
       : 0;
-    const boardLeaders = BOARDS.map((board) => ({ board, top: boardList(people, period.id, board)[0] }));
+    const top = rankedList(people, period.id)[0];
 
     return {
       totalToComplete,
       completedCount,
       completionRate,
       avgScore: Math.round(avgScore),
-      boardLeaders,
+      top,
     };
   };
 
@@ -266,15 +266,10 @@ export function PeriodsPage() {
                     </div>
                     <div className="rounded-lg bg-muted/40 dark:bg-muted/20 p-3 min-w-0">
                       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Ranked #1</div>
-                      <div className="space-y-1">
-                        {stats.boardLeaders.map(({ board, top }) => (
-                          <div key={board} className="flex items-center gap-2 text-sm truncate">
-                            <Trophy size={14} weight="duotone" className="text-amber-500 shrink-0" />
-                            <span className="text-muted-foreground shrink-0">{RANKING_BOARD_LABELS[board].board}:</span>
-                            <span className="font-medium truncate">{top ? top.employee.name.trim() : '—'}</span>
-                            {top && <span className="text-muted-foreground shrink-0">({Math.round(top.ranking.overallPct)}%)</span>}
-                          </div>
-                        ))}
+                      <div className="flex items-center gap-2 text-sm truncate">
+                        <Trophy size={14} weight="duotone" className="text-amber-500 shrink-0" />
+                        <span className="font-medium truncate">{stats.top ? stats.top.employee.name.trim() : '—'}</span>
+                        {stats.top && <span className="text-muted-foreground shrink-0">({Math.round(stats.top.ranking.overallPct)}%)</span>}
                       </div>
                     </div>
                   </div>

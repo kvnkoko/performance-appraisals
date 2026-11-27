@@ -1,5 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, PerformanceSummary, ReviewPeriod, User, Team, AppraisalAssignment, EmployeeProfile, PeriodRanking, MyPeriodResult, RankingBoard } from '@/types';
+import type { Template, Employee, Appraisal, AppraisalLink, CompanySettings, PerformanceSummary, ReviewPeriod, User, Team, AppraisalAssignment, EmployeeProfile, PeriodRanking, MyPeriodResult } from '@/types';
 import {
   appraisalIdForAssignment,
   appraisalIdForLink,
@@ -253,16 +253,11 @@ export async function getMyResults(employeeId?: string): Promise<MyPeriodResult[
   return withRuleErrors(async () => (await remote()).getMyResultsFromSupabase(employeeId));
 }
 
-/** Give a period award. Choosing anyone other than the board's #1 needs a reason (checked by the server). */
-export async function setPeriodAward(
-  periodId: string,
-  board: RankingBoard,
-  employeeId: string | null,
-  reason: string | null
-): Promise<void> {
+/** Set Employee of the Period. Choosing anyone other than #1 needs a reason (checked by the server). */
+export async function setPeriodAward(periodId: string, employeeId: string | null, reason: string | null): Promise<void> {
   assertWritable();
   if (!(await cloudEnabled())) throw new UserFacingError('Awards can only be set when connected to the database.');
-  await withRuleErrors(async () => (await remote()).setPeriodAwardInSupabase(periodId, board, employeeId, reason));
+  await withRuleErrors(async () => (await remote()).setPeriodAwardInSupabase(periodId, employeeId, reason));
 }
 
 /** Give the reviewer 7 more days to submit a form whose deadline has passed (admins). */

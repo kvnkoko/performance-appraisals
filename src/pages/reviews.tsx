@@ -10,8 +10,8 @@ import { generatePerformanceSummary } from '@/lib/ai-summary';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import type { PerformanceInsight } from '@/lib/ai-summary';
 import { CompletedFormViewModal } from '@/components/shared/completed-form-view-modal';
-import { RATING_LABELS, type RankingBoard } from '@/types';
-import { AwardsPanel, BoardsCard, FullRankingsModal, GroupChips, usePeriodRankings } from '@/components/reviews/rankings';
+import { RATING_LABELS } from '@/types';
+import { AwardsPanel, RankingsCard, FullRankingsModal, GroupChips, usePeriodRankings } from '@/components/reviews/rankings';
 import { describeLate } from '@/lib/deadline';
 
 /** Map overall score percentage to a 1–5 band for bar chart color. */
@@ -34,7 +34,7 @@ const RATING_BAND_COLORS: Record<1 | 2 | 3 | 4 | 5, string> = {
 export function ReviewsPage() {
   const { employees, appraisals, templates, reviewPeriods } = useApp();
   const [viewAppraisalId, setViewAppraisalId] = useState<string | null>(null);
-  const [showAllBoard, setShowAllBoard] = useState<RankingBoard | null>(null);
+  const [showAllRankings, setShowAllRankings] = useState(false);
   const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [summary, setSummary] = useState<PerformanceInsight | null>(null);
@@ -386,7 +386,7 @@ export function ReviewsPage() {
                   <GroupChips ranking={selectedRanking} />
                   <p className="text-xs text-muted-foreground">
                     {selectedRanking.eligible
-                      ? `Rank #${selectedRanking.rank} on the ${selectedRanking.board === 'leaders' ? 'leaders' : 'members'} board`
+                      ? `Rank #${selectedRanking.rank} of everyone ranked this period`
                       : selectedRanking.notRankedReason}
                   </p>
                 </div>
@@ -527,7 +527,7 @@ export function ReviewsPage() {
       {/* Analytics grid – compact */}
       {sortedScores.length > 0 && (
         <div className="grid gap-3 lg:grid-cols-2">
-          <BoardsCard periodId={selectedPeriodId} periodName={periodLabel} people={people} onShowAll={setShowAllBoard} />
+          <RankingsCard periodId={selectedPeriodId} periodName={periodLabel} people={people} onShowAll={() => setShowAllRankings(true)} />
 
           <Card className="border">
             <CardHeader className="p-3 pb-2">
@@ -630,13 +630,12 @@ export function ReviewsPage() {
         </>
       )}
 
-      {showAllBoard && selectedPeriodId && (
+      {showAllRankings && selectedPeriodId && (
         <FullRankingsModal
           periodId={selectedPeriodId}
           periodName={periodLabel}
-          board={showAllBoard}
           people={people}
-          onClose={() => setShowAllBoard(null)}
+          onClose={() => setShowAllRankings(false)}
         />
       )}
 

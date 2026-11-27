@@ -606,7 +606,7 @@ export function SettingsPage() {
                 <Buildings size={20} weight="duotone" className="text-teal-500" />
                 Rankings and awards
               </CardTitle>
-              <CardDescription>How the Member and Leader of the Period rankings are scored</CardDescription>
+              <CardDescription>How the Employee of the Period ranking is scored</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">

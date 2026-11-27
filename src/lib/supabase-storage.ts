@@ -17,7 +17,6 @@ import type {
   EmployeeProfile,
   PeriodRanking,
   MyPeriodResult,
-  RankingBoard,
 } from '@/types';
 import { isSupabaseConfigured, getSupabaseClient, mapUser } from './supabase';
 
@@ -382,14 +381,13 @@ export async function getMyResultsFromSupabase(employeeId?: string): Promise<MyP
 
 export async function setPeriodAwardInSupabase(
   periodId: string,
-  board: RankingBoard,
   employeeId: string | null,
   reason: string | null
 ): Promise<void> {
   const supabase = await requireClient();
   const { error } = await supabase.rpc('set_period_award', {
     p_period_id: periodId,
-    p_board: board,
+    p_board: 'overall',
     p_employee_id: employeeId,
     p_reason: reason,
   });

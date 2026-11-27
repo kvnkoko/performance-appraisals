@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import {
   RANKING_BOARD_LABELS,
   REVIEW_GROUP_LABELS,
+  type AwardKey,
   type Employee,
   type PeriodAward,
   type PeriodRanking,
@@ -20,7 +21,8 @@ import {
   type ReviewGroup,
 } from '@/types';
 
-export const BOARDS: RankingBoard[] = ['members', 'leaders'];
+const AWARD_TITLE = 'Employee of the Period';
+const REASON_MAX = 500;
 
 export interface RankedPerson {
   employee: Employee;
@@ -59,10 +61,10 @@ export function usePeriodRankings(periodId: string | null | 'all') {
   return { people, loading };
 }
 
-/** Ranked people on one board for one period, best first. */
-export function boardList(people: RankedPerson[], periodId: string, board: RankingBoard): RankedPerson[] {
+/** Ranked people (members and leaders together) for one period, best first. */
+export function rankedList(people: RankedPerson[], periodId: string): RankedPerson[] {
   return people
-    .filter((p) => p.ranking.reviewPeriodId === periodId && p.ranking.board === board && p.ranking.eligible)
+    .filter((p) => p.ranking.reviewPeriodId === periodId && p.ranking.eligible)
     .sort((a, b) => (a.ranking.rank ?? 999) - (b.ranking.rank ?? 999) || a.employee.name.localeCompare(b.employee.name));
 }
 
@@ -73,20 +75,28 @@ export function notRankedList(people: RankedPerson[], periodId: string): RankedP
     .sort((a, b) => a.employee.name.localeCompare(b.employee.name));
 }
 
-/** The award for a board: the admin's choice if one was made, otherwise the board's #1. */
+/** Employee of the Period: the admin's choice if one was made, otherwise #1. */
 export function effectiveAward(
-  awards: Partial<Record<RankingBoard, PeriodAward>> | undefined,
-  board: RankingBoard,
+  awards: Partial<Record<AwardKey, PeriodAward>> | undefined,
   ranked: RankedPerson[],
   employees: Employee[]
 ): { employee: Employee; award?: PeriodAward; isTop: boolean } | null {
-  const chosen = awards?.[board];
+  const chosen = awards?.overall;
   const top = ranked[0];
   if (chosen) {
     const employee = employees.find((e) => e.id === chosen.employeeId);
-    if (employee) return { employee, award: chosen, isTop: top?.employee.id === employee.id };
+    const rank = ranked.find((p) => p.employee.id === chosen.employeeId)?.ranking.rank;
+    if (employee) return { employee, award: chosen, isTop: rank === 1 };
   }
   return top ? { employee: top.employee, isTop: true } : null;
+}
+
+/** Earlier separate Member/Leader awards that were not carried over into the single award. */
+function earlierAwards(awards: Partial<Record<AwardKey, PeriodAward>> | undefined): [RankingBoard, PeriodAward][] {
+  const boards: RankingBoard[] = ['members', 'leaders'];
+  return boards
+    .filter((b) => awards?.[b] && awards.overall?.migratedFrom !== b)
+    .map((b) => [b, awards![b]!]);
 }
 
 export function pctTone(pct: number): string {
@@ -149,7 +159,14 @@ export function RankingRow({ person, showGroups = true }: { person: RankedPerson
       <div className="flex items-center gap-3 flex-1 min-w-0">
         {ranking.rank !== null && <RankBadge rank={ranking.rank} />}
         <div className="min-w-0 flex-1">
-          <div className="font-semibold text-sm truncate">{employee.name.trim()}</div>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="font-semibold text-sm truncate">{employee.name.trim()}</span>
+            {ranking.board && (
+              <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {RANKING_BOARD_LABELS[ranking.board].person}
+              </span>
+            )}
+          </div>
           <div className="text-xs text-muted-foreground truncate">{employee.role}</div>
           {showGroups && <div className="mt-1"><GroupChips ranking={ranking} /></div>}
         </div>
@@ -162,90 +179,87 @@ export function RankingRow({ person, showGroups = true }: { person: RankedPerson
   );
 }
 
-/** Member and Leader of the Period for one period, each with its top-3 shortlist. */
+/** Employee of the Period for one period, with the top-3 shortlist. */
 export function AwardsPanel({ periodId, periodName, people }: { periodId: string; periodName: string; people: RankedPerson[] }) {
   const { settings, employees } = useApp();
-  const [editing, setEditing] = useState<RankingBoard | null>(null);
+  const [editing, setEditing] = useState(false);
   const awards = settings.periodAwards?.[periodId];
+  const ranked = useMemo(() => rankedList(people, periodId), [people, periodId]);
+  const winner = effectiveAward(awards, ranked, employees);
+  const earlier = earlierAwards(awards);
+  const nameOf = (id: string) => employees.find((e) => e.id === id)?.name.trim() ?? 'Former employee';
 
   return (
     <Card className="border overflow-hidden bg-gradient-to-br from-muted/30 via-background to-muted/20 dark:from-muted/20 dark:to-muted/10">
       <CardHeader className="pb-2 pt-4 px-4">
         <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
           <Trophy size={16} weight="duotone" className="text-amber-500/80" />
-          Awards · {periodName}
+          Award · {periodName}
         </CardTitle>
       </CardHeader>
-      <CardContent className="px-4 pb-4 pt-0 grid gap-4 md:grid-cols-2">
-        {BOARDS.map((board) => {
-          const ranked = boardList(people, periodId, board);
-          const winner = effectiveAward(awards, board, ranked, employees);
-          return (
-            <div
-              key={board}
-              className="rounded-xl border bg-card p-4 shadow-sm border-amber-200/60 dark:border-amber-700/40 bg-gradient-to-br from-amber-50/50 to-transparent dark:from-amber-950/30 dark:to-transparent"
-            >
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-amber-700/90 dark:text-amber-300/90">
-                  {RANKING_BOARD_LABELS[board].award}
-                </span>
-                {ranked.length > 0 && (
-                  <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEditing(board)}>
-                    <PencilSimple size={14} className="mr-1" />
-                    Change
-                  </Button>
+      <CardContent className="px-4 pb-4 pt-0">
+        <div className="rounded-xl border bg-card p-4 shadow-sm border-amber-200/60 dark:border-amber-700/40 bg-gradient-to-br from-amber-50/50 to-transparent dark:from-amber-950/30 dark:to-transparent">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-amber-700/90 dark:text-amber-300/90">{AWARD_TITLE}</span>
+            {ranked.length > 0 && (
+              <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEditing(true)}>
+                <PencilSimple size={14} className="mr-1" />
+                Change
+              </Button>
+            )}
+          </div>
+          {winner ? (
+            <>
+              <p className="font-semibold text-foreground">{winner.employee.name.trim()}</p>
+              <p className="text-xs text-muted-foreground">{winner.employee.role}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {winner.isTop ? (
+                  <span className="rounded-md bg-emerald-100 dark:bg-emerald-900/40 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:text-emerald-200">
+                    Top-ranked
+                  </span>
+                ) : (
+                  <span className="rounded-md bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">
+                    Chosen by admin
+                  </span>
                 )}
               </div>
-              {winner ? (
-                <>
-                  <p className="font-semibold text-foreground">{winner.employee.name.trim()}</p>
-                  <p className="text-xs text-muted-foreground">{winner.employee.role}</p>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    {winner.isTop ? (
-                      <span className="rounded-md bg-emerald-100 dark:bg-emerald-900/40 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:text-emerald-200">
-                        Top-ranked
-                      </span>
-                    ) : (
-                      <span className="rounded-md bg-amber-100 dark:bg-amber-900/40 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200">
-                        Chosen by admin
-                      </span>
-                    )}
-                  </div>
-                  {winner.award?.reason && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">Reason:</span> {winner.award.reason}
-                    </p>
-                  )}
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">No one is ranked on this board yet.</p>
+              {winner.award?.reason && (
+                <p className="mt-2 text-xs text-muted-foreground break-words">
+                  <span className="font-medium text-foreground">Reason:</span> {winner.award.reason}
+                </p>
               )}
-              {ranked.length > 0 && (
-                <div className="mt-3 space-y-1">
-                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Shortlist</p>
-                  {ranked.slice(0, 3).map((p) => (
-                    <div key={p.employee.id} className="flex items-center justify-between text-sm">
-                      <span className="truncate">
-                        {p.ranking.rank}. {p.employee.name.trim()}
-                      </span>
-                      <span className={cn('font-semibold', pctTone(p.ranking.overallPct))}>{Math.round(p.ranking.overallPct)}%</span>
-                    </div>
-                  ))}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">No one is ranked for this period yet.</p>
+          )}
+          {ranked.length > 0 && (
+            <div className="mt-3 space-y-1">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Shortlist</p>
+              {ranked.slice(0, 3).map((p) => (
+                <div key={p.employee.id} className="flex items-center justify-between text-sm">
+                  <span className="truncate">
+                    {p.ranking.rank}. {p.employee.name.trim()}
+                  </span>
+                  <span className={cn('font-semibold', pctTone(p.ranking.overallPct))}>{Math.round(p.ranking.overallPct)}%</span>
                 </div>
-              )}
+              ))}
             </div>
-          );
-        })}
+          )}
+          {earlier.length > 0 && (
+            <div className="mt-3 border-t pt-3 space-y-1">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Earlier separate awards</p>
+              {earlier.map(([board, award]) => (
+                <p key={board} className="text-xs text-muted-foreground break-words">
+                  <span className="font-medium text-foreground">{RANKING_BOARD_LABELS[board].award}:</span> {nameOf(award.employeeId)}
+                  {award.reason ? ` · ${award.reason}` : ''}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
       </CardContent>
       {editing && (
-        <AwardDialog
-          periodId={periodId}
-          periodName={periodName}
-          board={editing}
-          ranked={boardList(people, periodId, editing)}
-          current={awards?.[editing]}
-          onClose={() => setEditing(null)}
-        />
+        <AwardDialog periodId={periodId} periodName={periodName} ranked={ranked} current={awards?.overall} onClose={() => setEditing(false)} />
       )}
     </Card>
   );
@@ -254,31 +268,29 @@ export function AwardsPanel({ periodId, periodName, people }: { periodId: string
 function AwardDialog({
   periodId,
   periodName,
-  board,
   ranked,
   current,
   onClose,
 }: {
   periodId: string;
   periodName: string;
-  board: RankingBoard;
   ranked: RankedPerson[];
   current?: PeriodAward;
   onClose: () => void;
 }) {
   const { refresh } = useApp();
   const { toast } = useToast();
-  const top = ranked[0];
-  const [employeeId, setEmployeeId] = useState(current?.employeeId ?? top?.employee.id ?? '');
+  const [employeeId, setEmployeeId] = useState(current?.employeeId ?? ranked[0]?.employee.id ?? '');
   const [reason, setReason] = useState(current?.reason ?? '');
   const [saving, setSaving] = useState(false);
-  const needsReason = !!employeeId && employeeId !== top?.employee.id;
+  const chosenRank = ranked.find((p) => p.employee.id === employeeId)?.ranking.rank;
+  const needsReason = !!employeeId && chosenRank !== 1;
 
   const save = async (useTop: boolean) => {
     setSaving(true);
     try {
-      if (useTop) await setPeriodAward(periodId, board, null, null);
-      else await setPeriodAward(periodId, board, employeeId, needsReason ? reason.trim() : null);
+      if (useTop) await setPeriodAward(periodId, null, null);
+      else await setPeriodAward(periodId, employeeId, needsReason ? reason.trim() : null);
       await refresh(['settings']);
       toast({ title: 'Award saved', variant: 'success' });
       onClose();
@@ -294,7 +306,7 @@ function AwardDialog({
       <div className="w-full max-w-md rounded-xl border bg-card shadow-xl" role="dialog" aria-modal aria-labelledby="award-title">
         <div className="flex items-center justify-between border-b px-5 py-4">
           <h2 id="award-title" className="font-semibold">
-            {RANKING_BOARD_LABELS[board].award} · {periodName}
+            {AWARD_TITLE} · {periodName}
           </h2>
           <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted" aria-label="Close">
             <X size={18} />
@@ -306,7 +318,8 @@ function AwardDialog({
             <Select id="award-employee" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
               {ranked.map((p) => (
                 <option key={p.employee.id} value={p.employee.id}>
-                  {p.ranking.rank}. {p.employee.name.trim()} ({Math.round(p.ranking.overallPct)}%)
+                  {p.ranking.rank}. {p.employee.name.trim()}
+                  {p.ranking.board ? ` · ${RANKING_BOARD_LABELS[p.ranking.board].person}` : ''} ({Math.round(p.ranking.overallPct)}%)
                 </option>
               ))}
             </Select>
@@ -317,6 +330,7 @@ function AwardDialog({
               <Textarea
                 id="award-reason"
                 value={reason}
+                maxLength={REASON_MAX}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="e.g. Led the product launch; #1 already won last month"
                 className="min-h-[80px]"
@@ -347,8 +361,8 @@ function AwardDialog({
   );
 }
 
-/** Ranking list per board, with a tab for each board. */
-export function BoardsCard({
+/** Top of the single ranking for one period. */
+export function RankingsCard({
   periodId,
   periodName,
   people,
@@ -357,45 +371,23 @@ export function BoardsCard({
   periodId: string;
   periodName: string;
   people: RankedPerson[];
-  onShowAll: (board: RankingBoard) => void;
+  onShowAll: () => void;
 }) {
-  const [board, setBoard] = useState<RankingBoard>('members');
-  const ranked = boardList(people, periodId, board);
+  const ranked = useMemo(() => rankedList(people, periodId), [people, periodId]);
   return (
     <Card className="border">
       <CardHeader className="p-3 pb-2">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div>
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <Trophy size={18} weight="duotone" className="text-amber-600/80" />
-              Rankings
-            </CardTitle>
-            <CardDescription className="text-xs">
-              {periodName} · each reviewer group counts equally, HR at its set weight
-            </CardDescription>
-          </div>
-          <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1" role="tablist">
-            {BOARDS.map((b) => (
-              <button
-                key={b}
-                type="button"
-                role="tab"
-                aria-selected={board === b}
-                onClick={() => setBoard(b)}
-                className={cn(
-                  'rounded-md px-3 py-1 text-xs font-medium',
-                  board === b ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                {RANKING_BOARD_LABELS[b].board}
-              </button>
-            ))}
-          </div>
-        </div>
+        <CardTitle className="text-base font-semibold flex items-center gap-2">
+          <Trophy size={18} weight="duotone" className="text-amber-600/80" />
+          Rankings
+        </CardTitle>
+        <CardDescription className="text-xs">
+          {periodName} · members and leaders together · each reviewer group counts equally, HR at its set weight
+        </CardDescription>
       </CardHeader>
       <CardContent className="p-3 pt-0">
         {ranked.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">No one is ranked on this board for this period.</p>
+          <p className="py-6 text-center text-sm text-muted-foreground">No one is ranked for this period.</p>
         ) : (
           <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-1 scrollbar-thin">
             {ranked.slice(0, 10).map((p) => (
@@ -403,14 +395,8 @@ export function BoardsCard({
             ))}
           </div>
         )}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="w-full mt-2 text-muted-foreground hover:text-foreground"
-          onClick={() => onShowAll(board)}
-        >
-          Full {RANKING_BOARD_LABELS[board].board.toLowerCase()} ranking ({ranked.length}) and who isn't ranked
+        <Button type="button" variant="ghost" size="sm" className="w-full mt-2 text-muted-foreground hover:text-foreground" onClick={onShowAll}>
+          Full ranking ({ranked.length}) and who isn't ranked
         </Button>
       </CardContent>
     </Card>
@@ -420,25 +406,23 @@ export function BoardsCard({
 export function FullRankingsModal({
   periodId,
   periodName,
-  board,
   people,
   onClose,
 }: {
   periodId: string;
   periodName: string;
-  board: RankingBoard;
   people: RankedPerson[];
   onClose: () => void;
 }) {
-  const ranked = boardList(people, periodId, board);
-  const notRanked = notRankedList(people, periodId).filter((p) => !p.ranking.board || p.ranking.board === board);
+  const ranked = rankedList(people, periodId);
+  const notRanked = notRankedList(people, periodId);
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" role="dialog" aria-modal onClick={onClose}>
       <div className="bg-card border rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b shrink-0">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Trophy size={20} weight="duotone" className="text-amber-600/80" />
-            {RANKING_BOARD_LABELS[board].board} · {periodName}
+            Rankings · {periodName}
           </h2>
           <button type="button" onClick={onClose} className="p-2 rounded-lg text-muted-foreground hover:bg-muted" aria-label="Close">
             <X size={20} weight="bold" />

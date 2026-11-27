@@ -220,23 +220,31 @@ export interface CompanySettings {
   requireHrForRanking?: boolean;
   /** Legacy single award per period (no longer used). Key = reviewPeriodId, value = employeeId. */
   employeeOfPeriodOverrides?: Record<string, string>;
-  /** Member and Leader of the Period awards. Set only through setPeriodAward (server checks the reason). */
-  periodAwards?: Record<string, Partial<Record<RankingBoard, PeriodAward>>>;
+  /**
+   * Employee of the Period per period, under 'overall'. 'members'/'leaders' are earlier
+   * separate awards, kept read-only. Set only through setPeriodAward (server checks the reason).
+   */
+  periodAwards?: Record<string, Partial<Record<AwardKey, PeriodAward>>>;
 }
 
+/** Whether a ranked person is a member or a leader. Everyone is ranked in one list. */
 export type RankingBoard = 'members' | 'leaders';
 
-export const RANKING_BOARD_LABELS: Record<RankingBoard, { board: string; award: string }> = {
-  members: { board: 'Members', award: 'Member of the Period' },
-  leaders: { board: 'Leaders', award: 'Leader of the Period' },
+export type AwardKey = 'overall' | RankingBoard;
+
+export const RANKING_BOARD_LABELS: Record<RankingBoard, { person: string; award: string }> = {
+  members: { person: 'Member', award: 'Member of the Period' },
+  leaders: { person: 'Leader', award: 'Leader of the Period' },
 };
 
 export interface PeriodAward {
   employeeId: string;
-  /** Required when the award does not go to the board's #1. */
+  /** Required when the award does not go to the #1. */
   reason?: string | null;
   setBy?: string;
   setAt?: string;
+  /** Set when an earlier members/leaders award was carried over. */
+  migratedFrom?: RankingBoard;
 }
 
 /** Who wrote a group of reviews, relative to the person reviewed. */
